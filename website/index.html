@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cute Agents Desk</title>
+<meta name="description" content="Panel local para despachar agentes de línea de comandos (claude, agy) sobre los repos de la máquina y ver gráficamente en qué va cada uno.">
+<link rel="icon" href="../assets/icon.png">
+<link rel="stylesheet" href="../ui/app.css">
+<style>
+  body {
+    padding: 0 20px;
+  }
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+  }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 0;
+  }
+  .site-nav img { width: 30px; height: 30px; border-radius: var(--radius-sm); }
+  .site-nav .name { font: 600 14px var(--font-display); }
+  .site-nav .name span { color: var(--color-lilac); }
+  .site-nav a.btn-ghost { margin-left: auto; }
+
+  .hero {
+    padding: var(--space-10) 0 var(--space-12);
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-dark-border);
+    background: var(--color-dark-surface);
+    color: var(--color-dark-text-2);
+    font: 500 11px var(--font-body);
+    margin-bottom: var(--space-5);
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--state-thinking);
+    box-shadow: 0 0 8px var(--state-thinking);
+  }
+  h1.hero-title {
+    font: 600 40px/1.15 var(--font-display);
+    letter-spacing: -0.01em;
+    margin: 0 0 var(--space-5);
+  }
+  h1.hero-title span { color: var(--color-lilac); }
+  .hero-tagline {
+    font: 400 15.5px/1.65 var(--font-body);
+    color: var(--color-dark-text-2);
+    max-width: 52ch;
+    margin: 0 0 var(--space-8);
+  }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: var(--space-8); }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badges img { display: block; height: 20px; }
+
+  /* Same shape as the app's own Configuración tab: a panel of label/value rows. */
+  .props-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 20px;
+  }
+
+  section { padding: var(--space-12) 0; }
+  section.tight { padding-top: 0; }
+  h2.section-title {
+    font: 600 22px var(--font-display);
+    margin: 0 0 var(--space-3);
+  }
+  .section-lead {
+    color: var(--color-dark-text-2);
+    font: 400 14px/1.65 var(--font-body);
+    max-width: 68ch;
+    margin: 0 0 var(--space-8);
+  }
+
+  .grid-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-4);
+  }
+  .feature {
+    padding: var(--space-5);
+  }
+  .feature .icon {
+    width: 34px; height: 34px;
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    background: var(--color-dark-bg);
+    color: var(--color-lilac);
+    font: 600 14px var(--font-mono);
+    margin-bottom: var(--space-4);
+  }
+  .feature h3 { font: 600 14.5px var(--font-body); margin: 0 0 6px; }
+  .feature p { font: 400 12.5px/1.6 var(--font-body); color: var(--color-dark-text-3); margin: 0; }
+
+  .motion-demo {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+  .motion-card {
+    flex: 1 1 140px;
+    padding: var(--space-5) var(--space-3);
+    text-align: center;
+  }
+  .motion-card svg { display: block; margin: 0 auto; }
+  .motion-card .label {
+    margin-top: var(--space-3);
+    font: 500 11.5px var(--font-body);
+  }
+  .motion-card.blocked { border: 1px dashed var(--state-blocked); }
+  .motion-card.thinking { animation: breathe 2.6s var(--ease-soft) infinite; }
+
+  .install pre {
+    margin: 0;
+    padding: var(--space-5);
+    background: var(--app-surface-terminal);
+    border: 1px solid var(--color-dark-border);
+    border-radius: var(--radius-lg);
+    font: 400 13px/1.9 var(--font-mono);
+    color: var(--color-mint);
+    overflow-x: auto;
+  }
+  .install pre .cmt { color: var(--color-dark-text-3); }
+
+  footer {
+    padding: var(--space-8) 0 var(--space-12);
+    border-top: 1px solid var(--color-dark-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    color: var(--color-dark-text-3);
+    font: 400 12px var(--font-body);
+  }
+  footer a { color: var(--color-dark-text-2); }
+
+  @media (max-width: 560px) {
+    .props-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="site-nav">
+    <img src="../assets/icon.png" alt="">
+    <span class="name">Cute Agents <span>Desk</span></span>
+    <a class="btn-ghost" href="https://github.com/AnaCataVC/cute-agents-desk">Código en GitHub</a>
+  </nav>
+
+  <header class="hero">
+    <span class="eyebrow"><span class="dot"></span> panel local · claude + agy</span>
+    <h1 class="hero-title">Un escritorio para tus agentes de <span>línea de comandos</span></h1>
+    <p class="hero-tagline">Panel local para despachar agentes de línea de comandos sobre los repos de la
+      máquina y ver gráficamente en qué va cada uno. Cada petición nueva levanta un
+      <b style="color:var(--color-dark-text-1)">coordinador</b> — un agente CLI de verdad, no código de
+      servidor — que decide en cuántas sesiones se divide el trabajo y delega por archivo, nunca por red.</p>
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#instalar">Instalar y correr</a>
+      <a class="btn-ghost" href="https://github.com/AnaCataVC/cute-agents-desk">Ver el código</a>
+    </div>
+    <div class="badges">
+      <img src="https://img.shields.io/badge/platform-windows-0078D6?logo=windows11&logoColor=white" alt="platform: windows">
+      <img src="https://img.shields.io/badge/electron-44-47848F?logo=electron&logoColor=white" alt="electron 44">
+      <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license: MIT">
+    </div>
+  </header>
+
+  <section class="tight">
+    <h2 class="section-title">Propiedades</h2>
+    <p class="section-lead">Lo que el harness impone hoy, sin adornos:</p>
+    <div class="panel" style="padding:16px">
+      <div class="props-grid">
+        <div class="settings-row"><span>Motores</span><span style="margin-left:auto" class="value-pill mono">claude · agy</span></div>
+        <div class="settings-row"><span>Delegación</span><span style="margin-left:auto" class="value-pill mono">coordinador CLI, por archivo</span></div>
+        <div class="settings-row"><span>Aislamiento de escritura</span><span style="margin-left:auto" class="value-pill mono">git worktree por tarea</span></div>
+        <div class="settings-row"><span>Paralelismo</span><span style="margin-left:auto" class="value-pill mono">tope global + por conversación</span></div>
+        <div class="settings-row"><span>Modo lectura</span><span style="margin-left:auto" class="value-pill mono">niega Edit/Write/NotebookEdit</span></div>
+        <div class="settings-row"><span>Tope de tokens</span><span style="margin-left:auto" class="value-pill mono">aviso 80% · corte 100%</span></div>
+        <div class="settings-row"><span>Plataforma</span><span style="margin-left:auto" class="value-pill mono">Windows</span></div>
+        <div class="settings-row"><span>Licencia</span><span style="margin-left:auto" class="value-pill mono">MIT</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight">
+    <h2 class="section-title">Cómo funciona</h2>
+    <p class="section-lead">Cuatro piezas hacen todo el trabajo: un coordinador que delega, dos motores de
+      CLI soportados, aislamiento por worktree para cada tarea de escritura, y un scheduler que impone el
+      cupo antes de que cualquier proceso nazca.</p>
+    <div class="grid-features">
+      <div class="panel feature">
+        <div class="icon">Σ</div>
+        <h3>Coordinador de verdad</h3>
+        <p>Un agente CLI real decide en cuántas sesiones paralelas se divide el trabajo y delega escribiendo
+          un archivo — no hay lógica de servidor decidiendo por él.</p>
+      </div>
+      <div class="panel feature">
+        <div class="icon">⌥</div>
+        <h3>Dos motores</h3>
+        <p><code class="mono">claude</code> (Claude Code) y <code class="mono">agy</code> (Antigravity CLI),
+          cada uno con sus propios hooks — la tarjeta nunca adivina el estado leyendo la terminal.</p>
+      </div>
+      <div class="panel feature">
+        <div class="icon">⑂</div>
+        <h3>Aislado por worktree</h3>
+        <p>Una tarea en modo escritura corre en su propio <code class="mono">git worktree</code>, fuera del
+          repo, nunca mutando el checkout compartido.</p>
+      </div>
+      <div class="panel feature">
+        <div class="icon">▣</div>
+        <h3>Cupo antes que nada</h3>
+        <p>El scheduler impone el tope de paralelismo global y por conversación antes de cualquier spawn —
+          un coordinador sólo puede pedir, nunca lanzar.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">El movimiento significa algo</h2>
+    <p class="section-lead">El estado de un agente se lee por color <b style="color:var(--color-dark-text-1)">y</b>
+      por movimiento, a propósito: lo que se mueve está avanzando, lo que está quieto está detenido. Estos
+      cuatro robots son el mismo componente que dibuja cada tarjeta real, en vivo, ahora mismo:</p>
+    <div class="motion-demo" id="motion-demo"></div>
+  </section>
+
+  <section class="install" id="instalar">
+    <h2 class="section-title">Instalar y correr</h2>
+    <p class="section-lead">Sin paso de compilación. Windows, con <code class="mono">claude</code> y/o
+      <code class="mono">agy</code> disponibles en el PATH.</p>
+    <pre><span class="cmt"># npm bloquea los scripts de postinstalación de electron por defecto</span>
+npm install
+node node_modules/electron/install.js
+npm start</pre>
+  </section>
+
+  <footer>
+    <span>MIT · Electron 44 + node-pty</span>
+    <a href="https://github.com/AnaCataVC/cute-agents-desk">github.com/AnaCataVC/cute-agents-desk</a>
+  </footer>
+
+</div>
+
+<script type="module">
+  import { robot, STATE_ROBOT } from '../ui/robot.js';
+
+  const demo = [
+    ['thinking', 'pensando'],
+    ['tool', 'usando una herramienta'],
+    ['blocked', 'bloqueado'],
+    ['done', 'entregado'],
+  ];
+  document.getElementById('motion-demo').innerHTML = demo.map(([state, label]) => {
+    const r = STATE_ROBOT[state];
+    const svg = robot({ x: 38, y: 40, scale: 1.4, variant: r.variant, color: r.color })
+      .replace('<g transform', '<svg width="76" height="76" viewBox="0 0 76 76"><g transform') + '</svg>';
+    const cls = state === 'blocked' ? 'blocked' : state === 'thinking' ? 'thinking' : '';
+    return `<div class="panel motion-card ${cls}">${svg}<div class="label">${label}</div></div>`;
+  }).join('');
+</script>
+</body>
+</html>

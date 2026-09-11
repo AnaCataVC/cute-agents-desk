@@ -58,41 +58,62 @@ la frase "sale como rama y PR" describe la intención del diseño, no algo que h
 | Tokens / costo | statusLine en vivo | sin equivalente conocido — no hay tope de tokens para agy |
 | Modo lectura | niega `Edit\|Write\|NotebookEdit` (lista negra) | permite sólo tools confirmadas de sólo lectura (lista blanca) — más estricto a propósito, porque la superficie completa de tools de agy nunca se enumeró |
 
-## Correr
+## Prerrequisitos
 
-```
+- **Windows 10 u 11 (64-bit)**
+- **Node.js 20+** y **npm**
+- **Git** configurado en el `PATH`
+- **GitHub CLI (`gh`)** autenticado (`gh auth status`)
+- Motores CLI (al menos uno instalado y disponible en el `PATH`):
+  - **Claude Code (`claude`)**
+  - **Antigravity CLI (`agy`)**
+
+## Correr y Empaquetar
+
+```bash
 npm install
 node node_modules/electron/install.js
 npm start
 ```
 
 La segunda línea hace falta porque npm bloquea los scripts de postinstalación, así que `npm install`
-deja el paquete de Electron sin su binario. `npm run dev` abre además las DevTools.
+deja el paquete de Electron sin su binario.
+
+Otros comandos disponibles:
+- `npm run dev`: Inicia la aplicación con las herramientas de desarrollo (DevTools) abiertas.
+- `npm run smoke`: Prueba de humo headless sobre la ventana (valida renderizado de 6 pestañas y 0 errores).
+- `npm run dist`: Compila el ejecutable portable de Windows (`CuteAgentsDesk-0.1.0-portable.exe`) y el instalador NSIS en `dist/`.
+- `npm run icon`: Compila el archivo de ícono para Windows (`assets/icon.ico`) a partir de `assets/icon.png`.
+- `npm run rebuild`: Reconstruye dependencias nativas (`node-pty`) contra los headers internos de Electron.
 
 ## Verificar
 
-No hay suite de test única: cada pieza de plomería tiene su propio `tools/verify-*.js`, con la
-misma convención en todos — corridas en vivo contra un `claude`/`agy` real sólo donde hace falta
-probar algo que un mock no puede (fase 1, aislamiento de hooks, modo lectura, el motor `agy`
-completo), y pruebas unitarias puras de `node:assert` para lógica de máquina de estados (tope de
-tokens, scheduler, conversaciones, el drenado del buzón).
+Cada pieza de plomería tiene su propio `tools/verify-*.js`, con la misma convención en todos —
+corridas en vivo contra un `claude`/`agy` real sólo donde hace falta probar algo que un mock no
+puede (fase 1, aislamiento de hooks, modo lectura, el motor `agy` completo), y pruebas unitarias
+puras de `node:assert` para lógica de máquina de estados (tope de tokens, scheduler,
+conversaciones, el drenado del buzón).
 
-```
-npm run smoke                          # la ventana entera, sin agentes: 5 pestañas, 0 errores
-node tools/verify-phase1.js            # requiere `electron`: un agente claude real de punta a punta
-node tools/verify-agy-phase1.js        # lo mismo, con agy
-node tools/verify-worktree-isolation.js
-node tools/verify-worker-outbox.js
-node tools/verify-forced-kill.js       # taskkill externo + aislamiento entre conversaciones
-node tools/verify-trust-dialog.js
-node tools/verify-scheduler.js
-node tools/verify-conversations.js
-node tools/verify-token-cap.js
-node tools/verify-coordinator-status.js
-node tools/verify-discovery.js         # lee los repos reales de la máquina
+```bash
+npm test        # corre de un tiro los 12 que son rápidos y no necesitan un CLI real ni ventana
+npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm run verify` corre sólo `verify-phase1.js`, el más antiguo del grupo — no es la suite completa.
+`npm test` (`tools/verify-all.js`) corre los 12 `verify-*.js` que MEDIDO tardan segundos bajo
+`node` puro. Los que quedan afuera necesitan un turno real de CLI y/o una ventana de Electron —
+son lentos, tienen costo real de API, y los que abren ventana no terminan nunca en una shell sin
+GUI (`app.whenReady()` no resuelve ahí). Esos se corren aparte, uno a la vez:
+
+```bash
+node tools/verify-phase1.js                                          # agente claude real, de punta a punta
+node tools/verify-agy-phase1.js                                      # lo mismo, con agy
+npx electron tools/verify-read-mode.js
+npx electron tools/verify-hook-isolation.js
+npx electron tools/verify-coordinator-e2e.js
+```
+
+`npm run verify` sigue siendo sólo `verify-phase1.js`, el más antiguo del grupo — no es la suite
+completa, `npm test` sí lo es en su mitad rápida.
 
 ## Cómo está armado
 
@@ -111,30 +132,40 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `hook.js` | Lo que la CLI invoca en cada evento; distingue el payload de cada motor y decide si negar una tool en modo lectura |
 | `pty-env.js` | El entorno saneado — la razón por la que lanzar el harness desde dentro de una sesión de Claude no rompe `--resume` |
 | `paths.js` | Dónde vive cada archivo del harness — un editor de texto es la primera herramienta de debug |
+| `git.js` | Envoltorio con llamadas Git síncronas y asíncronas (`gitAsync`), evitando bloquear el hilo de Node durante escaneos |
+| `json-queue.js` | Mecánica central de colas basadas en archivos JSON (`drainJsonQueue`, `watchJsonQueue`) para inboxes y peticiones |
+| `tool-name.js` | Normalizador de nombres de herramientas entre Claude Code (`snake_case`) y Antigravity (`camelCase`) |
 | `events.js` | `Registry`: hook → estado, el buzón worker↔coordinador, `status.json`, el tope de tokens |
 | `worktree.js` | Aislamiento por `git worktree` para tareas de escritura (sólo `claude` por ahora) |
 | `scheduler.js` | El tope de paralelismo, global y por conversación, impuesto antes de cualquier spawn |
 | `conversations.js` | Una conversación es una carpeta: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | El prompt del coordinador y el drenado de sus `spawn-requests` |
 | `discovery.js`, `accounts.js` | Escaneo real de repos por cuenta de GitHub, con detección de desajuste |
+| `scheduled-tasks.js` | Descubre, solo lectura, las tareas programadas de Claude Desktop y de Antigravity en esta máquina |
 | `toy-repo.js` | El repo de juguete que usan los `tools/verify-*.js` en vivo |
 
 ### Frontend (`ui/`)
 
 | Archivo | Qué es |
 |---|---|
-| `app.js` | Estado, las cinco pestañas y un único manejador de eventos por delegación |
+| `app.js` | Estado, las seis pestañas y un único manejador de eventos por delegación |
 | `data.js` | La costura de datos: por campo, mocks hasta que existe una fuente real — nunca los dos a la vez |
 | `sidebar.js` | La barra de conversaciones reales |
 | `tokens/` | Tokens del design system Pastel-Tech, más `app.css` con los que sólo usa esta aplicación |
 | `app.css` | Reset, animaciones y los controles compartidos |
+| `esc.js` | Utilidad pura para escape seguro de cadenas contra inyecciones HTML en plantillas |
 | `robot.js` | El robot, definido una sola vez y parametrizado por estado |
 | `ring.js` | El anillo de tokens y los formateadores |
 | `repo-tree.js`, `agent-card.js`, `terminal.js` | Pestaña «Control de agentes» |
 | `boss-graph.js`, `timeline.js` | Pestaña «Flujos de trabajo» |
 | `editor.js` | Pestaña «Editor»: el árbol de cambios y el diff |
 | `tokens-view.js` | Pestaña «Uso» |
+| `scheduled-tasks-view.js` | Pestaña «Tareas programadas»: lo que Claude Desktop y Antigravity tienen agendado, fuera de este harness |
 | `config.js`, `dialogs.js`, `chat.js` | Pestaña «Configuración» y los diálogos, incluido el panel Ficha/Hilo/Diff de un agente |
+
+### Vitrina Web (`website/`)
+
+El proyecto incluye una landing page independiente en `website/index.html` con estética Pastel-Tech y una demostración interactiva de los autómatas y estados de los agentes en SVG puro.
 
 Dos convenciones que conviene respetar al editar:
 
@@ -153,3 +184,11 @@ propósito: lo que se mueve está avanzando y lo que está quieto está detenido
 tiene borde rojo punteado y no anima; una arista del grafo con las líneas corriendo es una sesión
 trabajando. Con `prefers-reduced-motion` el panel queda entero quieto y el color y las etiquetas
 siguen contando lo mismo.
+
+## Aprendizajes Clave de Arquitectura
+
+1. **Saneamiento ConPTY en Windows:** En entornos Windows, invocar el harness dentro de una sesión de terminal hereda variables de entorno residuales (`CLAUDE_*`). Limpiar estas variables antes de `pty.spawn()` es imprescindible para evitar corrupciones de estado y fallos silenciosos en banderas como `--resume`.
+2. **Operaciones Git asíncronas no bloqueantes:** Delegar comandos de introspección de repositorios a funciones asíncronas (`gitAsync`) preserva la tasa de refresco a 60 FPS en Electron, evitando que repositorios extensos congelen el hilo principal de Node.
+3. **Buzón IPC desacoplado por archivos:** La arquitectura de mensajería entre agentes obreros y el coordinador opera mediante colas JSON en disco (`events/` y `outbox/`). Esto prescinde de sockets de red y puertos locales expuestos, eliminando vectores de ataque y garantizando persistencia ante reinicios.
+4. **Listas blancas vs. listas negras en agentes de IA:** Para el modo de sólo lectura, una lista negra (`Edit|Write`) es suficiente en motores con herramientas cerradas (Claude Code), pero resulta insuficiente en motores con ejecución de comandos arbitrarios (`agy`). Para estos últimos, la única aproximación segura es invertir la validación a una lista blanca estricta (`view_file`, `list_dir`, `grep_search`, `find_by_name`).
+5. **Aislamiento por Git Worktree:** En tareas con permisos de escritura, la mutación directa del checkout de trabajo del usuario es inaceptable. Cada tarea crea un worktree temporal y rama propia (`agent/<id>`) en una ruta de trabajo dedicada, manteniendo el checkout base intacto hasta que los cambios sean revisados formalmente.
