@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * The phase-1 gate: launch a real agent on the toy repo and prove the plumbing works, without
+ * The live agent gate: launch a real agent on the toy repo and prove the plumbing works, without
  * a window and without anyone watching a screen.
  *
  * What it has to prove, from the plan:
@@ -134,7 +134,7 @@ app.whenReady().then(() => {
       && kinds.includes('Stop')
       && readme.includes('probado')
       && after > before;
-    console.log(ok ? '\nfase 1 OK' : '\nfase 1 NO cumple');
+    console.log(ok ? '\nverify-agent OK' : '\nverify-agent NO cumple');
     app.exit(ok ? 0 : 1);
   }
 });

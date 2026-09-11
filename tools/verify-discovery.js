@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * Verifies discovery against the real machine: whatever accounts and folders are declared in
- * your own `~/.cute-agents-desk/accounts.json` (the Configuracion tab writes it, phase 2+),
+ * your own `~/.cute-agents-desk/accounts.json` (the Configuracion tab writes it),
  * scanned for real. No mocks -- if this finds zero repos, or misreads this very repo's own
  * account, the scanner is wrong, not the fixture.
  *

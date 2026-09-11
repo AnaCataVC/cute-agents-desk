@@ -69,7 +69,7 @@ async function main() {
   const hooksFile = JSON.parse(fs.readFileSync(paths.agent(id).agyHooks, 'utf8'));
   assert.ok(hooksFile['cad-hooks']?.PreToolUse, 'el schema debe ser el de agy (nombre de hook arbitrario, no {"hooks": ...})');
 
-  console.log(`agy fase 1 OK: ${events.length} eventos reales (${[...new Set(kinds)].join(', ')}), `
+  console.log(`agy verify OK: ${events.length} eventos reales (${[...new Set(kinds)].join(', ')}), `
     + 'toolCall.name en camelCase, cwd efectivo es el directorio del harness, hooks.json con el schema correcto');
 
   fs.rmSync(repo, { recursive: true, force: true });

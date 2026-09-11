@@ -3,7 +3,7 @@
  * Turns hook reports into the state the window draws.
  *
  * Two responsibilities, kept apart on purpose: `events.jsonl` is the append-only truth of what
- * happened (and the debugging tool for every phase after this one), while the derived state is
+ * happened (and the central debugging tool for inspections), while the derived state is
  * a small object that can be rebuilt from that log at any time. Nothing reads the terminal
  * output to decide what an agent is doing.
  */

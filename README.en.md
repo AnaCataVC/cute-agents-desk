@@ -21,28 +21,14 @@ the network), receives their reports and keeps global control of the task. Two e
 **`claude`** (Claude Code) and **`agy`** (Antigravity CLI), each with its own hooks — the card never
 guesses status by reading the terminal.
 
-## Status
+## Key Features
 
-Phases 0 through 4 of the plan are done and verified live (not just with mocks):
-
-- **Phase 0** — the full interface, a port of the approved design (`Despacho Local B`), no stray
-  colors and no network requests.
-- **Phase 1** — a real agent over PTY (`node-pty`), with a sanitized environment, hooks reporting
-  every event, and the workspace trust dialog answered automatically only for folders the account
-  registered — never one a coordinator handed it.
-- **Phase 2** — real repo discovery by GitHub account, a global and per-conversation parallelism
-  cap, conversations as a folder with its own coordinator.
-- **Phase 3** — the full mailbox: the coordinator delegates by writing a `spawn-request`, and the
-  worker reports back at three automatic moments (born, blocked, done) plus a fourth channel for
-  free-form messages — all typed into the coordinator's own terminal, the only way back a session
-  has.
-- **Phase 4** — a write-mode task runs in its own `git worktree`, outside the repo, instead of
-  mutating the shared checkout. No automatic deletion: reaping is manual, with its own card in
-  Settings.
-
-**Not built yet**: phase 5 (branch + draft PR + correct account on delivery) — so the phrase
-"comes out as a branch and a PR" describes the design intent, not something that happens on its own
-today.
+- **Concurrency & Isolation via Git Worktrees:** Write-mode tasks never mutate the developer's primary working tree. Each worker (`claude` or `agy`) executes in an isolated, ephemeral `git worktree` with its dedicated semantic branch (`<engine>/<task>-<id>`), enabling true parallel execution without file lockups or branch collisions. Reaping completed worktrees is fully governed manually from Settings.
+- **Observable PTY Terminals & Engine Telemetry:** Native integration with real pseudo-terminals (`node-pty`) completely sanitized of residual environment variables (`CLAUDE_*`). Real-time state tracking bypassing brittle terminal scraping: captures lifecycle events and tool invocations via engine-specific hooks. Automatically negotiates workspace trust dialogs strictly for folders formally verified by the active account.
+- **Multi-Account GitHub Governance & Repo Discovery:** Automatic discovery and strict mapping of local workspaces bound to authenticated GitHub accounts (`accounts.json`). Prevents cross-account leaks and context bleed between personal and corporate profiles, enforcing workspace trust boundaries per registered path.
+- **File-Based Decoupled Mailbox & Autonomous Coordination:** Asynchronous inter-process messaging utilizing disk-backed JSON queues (`events/`, `outbox/`) without exposing local TCP ports or network sockets. The coordinator agent delegates subtasks via atomic `spawn-requests`, while worker agents report lifecycle transitions (born, blocked, done, and arbitrary updates) directly into the coordinator's interactive PTY session.
+- **Automated Delivery Pipeline & Draft Pull Requests:** Robust, auditable delivery lifecycle upon task completion. Changes in the worktree are committed using the exact author identity (name and email) configured in `accounts.json`, securely pushed to `origin`, and registered via GitHub CLI as a draft Pull Request (`gh pr create --draft`) containing linked task reports and persisted audit trails in `deliveries.json`.
+- **Resource Governance, Token Budgets & Parallelism Limits:** Integrated task scheduler (`scheduler.js`) enforcing strict concurrency ceilings globally and per conversation. Live token tracking and budget caps halt runaway execution before cost overruns, reinforced by defense-in-depth read-only policies (denylist for Claude Code vs. strict tool allowlist for Antigravity CLI).
 
 ### The two engines, in practice
 
@@ -55,7 +41,7 @@ dates and versions live in the comments of `electron/agent.js`, `electron/hook.j
 | Hook config | `--settings <file>`, any path | fixed at `<cwd>/.agents/hooks.json`, no flag |
 | Process cwd | the repo (or its worktree, in write mode) | the agent's own directory in the harness — the repo comes in via `--add-dir` |
 | Hook payload | snake_case (`tool_name`, `tool_input`) | camelCase (`toolCall.name`, `stepIdx`) |
-| Per-worktree isolation | yes | **not yet** — a declared gap, not an oversight |
+| Per-worktree isolation | yes | yes — `--add-dir <worktree>` with hooks in harness |
 | Tokens / cost | live statusLine | no known equivalent — no token cap for agy |
 | Read-only mode | denies `Edit\|Write\|NotebookEdit` (blocklist) | allows only confirmed read-only tools (allowlist) — stricter on purpose, because agy's full tool surface was never enumerated |
 
@@ -90,16 +76,16 @@ Other available commands:
 ## Verify
 
 Every piece of plumbing has its own `tools/verify-*.js`, all following the same convention — live
-runs against a real `claude`/`agy` only where a mock can't prove the point (phase 1, hook
+runs against a real `claude`/`agy` only where a mock can't prove the point (hook
 isolation, read-only mode, the full `agy` engine), and pure `node:assert` unit tests for
 state-machine logic (token cap, scheduler, conversations, mailbox draining).
 
 ```bash
-npm test        # runs the 12 fast scripts that need no real CLI and no window, in one shot
+npm test        # runs the 15 fast scripts that need no real CLI and no window, in one shot
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 12 `verify-*.js` scripts MEASURED to finish in
+`npm test` (`tools/verify-all.js`) runs the 15 `verify-*.js` scripts MEASURED to finish in
 seconds under plain `node`. The rest need a real CLI turn and/or an Electron window — slow, real
 API cost, and the window-dependent ones never finish at all in a headless shell
 (`app.whenReady()` never resolves there). Those stay manual, run one at a time:
@@ -136,7 +122,8 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `json-queue.js` | Core file-based JSON queue mechanics (`drainJsonQueue`, `watchJsonQueue`) for inboxes and spawn-requests |
 | `tool-name.js` | Tool name normalizer between Claude Code (`snake_case`) and Antigravity (`camelCase`) |
 | `events.js` | `Registry`: hook → state, the worker↔coordinator mailbox, `status.json`, the token cap |
-| `worktree.js` | Per-`git worktree` isolation for write-mode tasks (`claude` only for now) |
+| `worktree.js` | Per-`git worktree` isolation for write-mode tasks (`claude` and `agy`) with semantic branch naming |
+| `delivery.js` | Delivery pipeline: account identity, commit dirty worktree files, safe push to origin, and draft PR (`gh pr create --draft`) |
 | `scheduler.js` | The parallelism cap, global and per-conversation, enforced before any spawn |
 | `conversations.js` | A conversation is a folder: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | The coordinator's prompt and the draining of its `spawn-requests` |

@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * The one rule that has to hold before anything else in phase 2 does: a coordinator can *ask*
+ * The one rule that has to hold before anything else: a coordinator can *ask*
  * for a worker, it can never spawn one. Whoever calls `spawn` goes through here first, and a
  * refusal is not silent -- it is worth an event, because "why didn't my request happen" needs
  * an answer that isn't "read the source".

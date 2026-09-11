@@ -30,6 +30,8 @@ const FAST = [
   'verify-live-repo-data.mjs',
   'verify-scheduled-tasks.js',
   'verify-models-effort-modes.js',
+  'verify-agy-worktree.js',
+  'verify-delivery.js',
 ];
 
 const MANUAL = [

@@ -21,27 +21,14 @@ servidor — decide en cuántas sesiones paralelas se divide el trabajo, abre un
 Dos motores soportados: **`claude`** (Claude Code) y **`agy`** (Antigravity CLI), con hooks propios
 para cada uno — la tarjeta nunca adivina el estado leyendo la terminal.
 
-## Estado
+## Características Principales
 
-Fases 0 a 4 del plan están hechas y verificadas en vivo (no sólo con mocks):
-
-- **Fase 0** — la interfaz completa, portada del diseño aprobado (`Despacho Local B`), sin colores
-  sueltos y sin pedir nada por red.
-- **Fase 1** — un agente real por PTY (`node-pty`), con el entorno saneado, hooks reportando cada
-  evento, y el diálogo de confianza del workspace respondido automáticamente sólo para carpetas que
-  la cuenta registró — nunca una que le haya pasado un coordinador.
-- **Fase 2** — descubrimiento real de repos por cuenta de GitHub, tope de paralelismo global y por
-  conversación, conversaciones como carpeta con su propio coordinador.
-- **Fase 3** — el buzón completo: el coordinador delega escribiendo un `spawn-request`, y el worker
-  le reporta de vuelta en tres momentos automáticos (nace, bloqueado, termina) más un cuarto canal
-  para mensajes libres — todo tipeado en la propia terminal del coordinador, que es el único canal
-  de vuelta que tiene una sesión interactiva.
-- **Fase 4** — una tarea en modo escritura corre en su propio `git worktree`, fuera del repo, en vez
-  de mutar el checkout compartido. Sin borrado automático: el reap es manual, con su propia tarjeta
-  en Configuración.
-
-**No construido todavía**: la fase 5 (rama + PR en borrador + cuenta correcta al entregar) — así que
-la frase "sale como rama y PR" describe la intención del diseño, no algo que hoy pase solo.
+- **Aislamiento concurrente mediante Git Worktrees:** Las tareas en modo escritura nunca mutan el checkout principal de trabajo. Cada agente (`claude` o `agy`) opera sobre un `git worktree` efímero e independiente con su propia rama semántica (`<engine>/<tarea>-<id>`), garantizando paralelismo real sin colisiones de archivos ni bloqueos de Git. La recolección de worktrees terminados es administrable manualmente desde Configuración.
+- **Terminal PTY observable y telemetría profunda de motores:** Integración nativa con pseudo-terminales (`node-pty`) saneadas de variables residuales (`CLAUDE_*`). Monitoreo en tiempo real sin escaneo frágil de buffers: captura eventos de ciclo de vida e invocación de herramientas mediante hooks específicos de cada CLI. Automatiza la aprobación de diálogos de confianza exclusivamente para directorios registrados formalmente por la cuenta activa.
+- **Gobernanza multicuenta de GitHub y descubrimiento local:** Detección y mapeo estricto de repositorios locales vinculados a identidades de GitHub (`accounts.json`). Previene fugas de contexto o autoría cruzada entre perfiles personales y profesionales, restringiendo el alcance de ejecución de los agentes exclusivamente a sus carpetas asignadas.
+- **Buzón desacoplado basado en archivos y coordinación autónoma:** Arquitectura de comunicación asíncrona sin puertos TCP ni sockets expuestos en red. El agente coordinador delega subtareas generando `spawn-requests` en colas JSON vigiladas en disco. Los workers reportan su estado (nacimiento, bloqueo, finalización y mensajes libres) inyectando entradas directamente en la terminal interactiva del coordinador.
+- **Pipeline automatizado de entrega y Pull Requests:** Ciclo de cierre seguro y auditable. Al finalizar una tarea en worktree, el sistema realiza commit con el autor y correo correspondientes a la cuenta asociada, realiza push seguro de la rama a `origin` sin tocar `main`, y crea automáticamente un Pull Request en borrador (`gh pr create --draft`) enlazando el informe de ejecución y persistiendo el registro en `deliveries.json`.
+- **Gobernanza de recursos, cuotas de tokens y paralelismo:** Programador de tareas (`scheduler.js`) con límites estrictos de concurrencia a nivel global y por conversación. Medición de consumo de tokens y costos en tiempo real con topes preventivos que detienen agentes antes de exceder presupuestos, complementado con políticas defensivas de sólo lectura (listas negras en Claude vs. listas blancas estrictas en Antigravity).
 
 ### Los dos motores, en la práctica
 
@@ -54,7 +41,7 @@ la frase "sale como rama y PR" describe la intención del diseño, no algo que h
 | Config de hooks | `--settings <archivo>`, cualquier ruta | fija en `<cwd>/.agents/hooks.json`, sin flag |
 | cwd del proceso | el repo (o su worktree, en modo escritura) | el directorio propio del agente en el harness — el repo entra por `--add-dir` |
 | Payload del hook | snake_case (`tool_name`, `tool_input`) | camelCase (`toolCall.name`, `stepIdx`) |
-| Aislamiento por worktree | sí | **no todavía** — hueco declarado, no oversight |
+| Aislamiento por worktree | sí | sí — `--add-dir <worktree>` con hooks en el harness |
 | Tokens / costo | statusLine en vivo | sin equivalente conocido — no hay tope de tokens para agy |
 | Modo lectura | niega `Edit\|Write\|NotebookEdit` (lista negra) | permite sólo tools confirmadas de sólo lectura (lista blanca) — más estricto a propósito, porque la superficie completa de tools de agy nunca se enumeró |
 
@@ -90,16 +77,16 @@ Otros comandos disponibles:
 
 Cada pieza de plomería tiene su propio `tools/verify-*.js`, con la misma convención en todos —
 corridas en vivo contra un `claude`/`agy` real sólo donde hace falta probar algo que un mock no
-puede (fase 1, aislamiento de hooks, modo lectura, el motor `agy` completo), y pruebas unitarias
+puede (aislamiento de hooks, modo lectura, el motor `agy` completo), y pruebas unitarias
 puras de `node:assert` para lógica de máquina de estados (tope de tokens, scheduler,
 conversaciones, el drenado del buzón).
 
 ```bash
-npm test        # corre de un tiro los 12 que son rápidos y no necesitan un CLI real ni ventana
+npm test        # corre de un tiro los 15 que son rápidos y no necesitan un CLI real ni ventana
 npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm test` (`tools/verify-all.js`) corre los 12 `verify-*.js` que MEDIDO tardan segundos bajo
+`npm test` (`tools/verify-all.js`) corre los 15 `verify-*.js` que MEDIDO tardan segundos bajo
 `node` puro. Los que quedan afuera necesitan un turno real de CLI y/o una ventana de Electron —
 son lentos, tienen costo real de API, y los que abren ventana no terminan nunca en una shell sin
 GUI (`app.whenReady()` no resuelve ahí). Esos se corren aparte, uno a la vez:
@@ -136,7 +123,8 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `json-queue.js` | Mecánica central de colas basadas en archivos JSON (`drainJsonQueue`, `watchJsonQueue`) para inboxes y peticiones |
 | `tool-name.js` | Normalizador de nombres de herramientas entre Claude Code (`snake_case`) y Antigravity (`camelCase`) |
 | `events.js` | `Registry`: hook → estado, el buzón worker↔coordinador, `status.json`, el tope de tokens |
-| `worktree.js` | Aislamiento por `git worktree` para tareas de escritura (sólo `claude` por ahora) |
+| `worktree.js` | Aislamiento por `git worktree` para tareas de escritura (`claude` y `agy`) con nombres de rama semánticos |
+| `delivery.js` | Pipeline de entrega: autoría de cuenta, commits, push seguro a `origin` y PR en borrador (`gh pr create --draft`) |
 | `scheduler.js` | El tope de paralelismo, global y por conversación, impuesto antes de cualquier spawn |
 | `conversations.js` | Una conversación es una carpeta: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | El prompt del coordinador y el drenado de sus `spawn-requests` |
