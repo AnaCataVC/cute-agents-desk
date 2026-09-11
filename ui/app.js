@@ -41,6 +41,13 @@ const state = {
   chat: null,                  // agent id whose panel is open
   chatTab: 'hilo',             // ficha | hilo | diff, within that panel
   queue: null,                 // repo name being queued, or '' for "pick a repo"
+  queueRepo: '',
+  queueTask: '',
+  queueEngine: 'claude',
+  queueModel: 'default',
+  queueEffort: 'default',
+  queueMode: 'write',
+  queueCoord: '',
   scan: null,                  // account id the add-folder dialog belongs to
   scanDepth: 2,
   newConvOpen: false,          // the sidebar's "+ nueva conversación" inline form
@@ -88,9 +95,46 @@ const ACTIONS = {
     if (!state.ideOpen.includes(id)) state.ideOpen.push(id);
     state.ideActive = id;
   },
-  openQueue: (repo) => { state.queue = repo ?? ''; },
+  openQueue: (repo) => {
+    state.queue = repo ?? '';
+    state.queueRepo = repo ?? '';
+    state.queueTask = '';
+    state.queueEngine = 'claude';
+    state.queueModel = 'default';
+    state.queueEffort = 'default';
+    state.queueMode = 'write';
+    state.queueCoord = '';
+  },
   closeQueue: () => { state.queue = null; },
-  submitQueue: () => { state.queue = null; },
+  queueMode: (m) => { state.queueMode = m || 'write'; },
+  submitQueue: async () => {
+    const task = (state.queueTask || '').trim();
+    if (!task) return;
+    const repos = data.getRepos();
+    const repoName = state.queueRepo || state.queue;
+    const repo = repos.find((r) => r.name === repoName);
+    const cwd = repo ? (repo.folder ? `${repo.folder}/${repo.name}` : repo.name) : undefined;
+    const model = (state.queueModel && state.queueModel !== 'default') ? state.queueModel.trim() : undefined;
+    const effort = (state.queueEffort && state.queueEffort !== 'default') ? state.queueEffort.trim() : undefined;
+
+    const result = await window.desk?.spawn?.({
+      cwd,
+      task,
+      bin: state.queueEngine,
+      model,
+      effort,
+      mode: state.queueMode,
+      conversationId: state.queueCoord || undefined,
+    });
+
+    if (result?.error) {
+      state.error = result.error;
+    } else {
+      state.queue = null;
+      state.queueTask = '';
+    }
+    render();
+  },
   openScan: (accountId) => { state.scan = accountId; },
   closeScan: () => { state.scan = null; },
   scanDepth: (d) => { state.scanDepth = Number(d); },
@@ -162,6 +206,24 @@ app.addEventListener('input', (ev) => {
   if (el.dataset.act === 'flowQuery') { state.flowQuery = el.value; render(); }
   if (el.dataset.act === 'newConvTitle') { state.newConvTitle = el.value; }
   if (el.dataset.act === 'newConvTopic') { state.newConvTopic = el.value; }
+  if (el.dataset.act === 'queueTask') { state.queueTask = el.value; }
+  if (el.dataset.act === 'queueModel') { state.queueModel = el.value; }
+});
+
+app.addEventListener('change', (ev) => {
+  const el = /** @type {HTMLInputElement|HTMLSelectElement} */ (ev.target);
+  if (el.dataset.act === 'queueEngine') {
+    state.queueEngine = el.value;
+    if (state.queueEngine === 'agy') {
+      if (state.queueMode === 'auto') state.queueMode = 'write';
+      if (state.queueEffort === 'xhigh' || state.queueEffort === 'max') state.queueEffort = 'default';
+    }
+    render();
+  }
+  if (el.dataset.act === 'queueEffort') { state.queueEffort = el.value; }
+  if (el.dataset.act === 'queueRepo') { state.queueRepo = el.value; }
+  if (el.dataset.act === 'queueCoord') { state.queueCoord = el.value; }
+  if (el.dataset.act === 'queueModel') { state.queueModel = el.value; }
 });
 
 document.addEventListener('keydown', (ev) => {

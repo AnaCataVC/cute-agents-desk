@@ -42,37 +42,61 @@ function queueDialog(state, data) {
   const account = repo ? data.getAccounts().find((a) => a.id === repo.accountId) : null;
   const flows = data.getFlows().filter((f) => f.status !== 'archivado');
 
+  const engineId = state.queueEngine || 'claude';
+  const models = (data.ENGINE_MODELS && data.ENGINE_MODELS[engineId]) || [];
+  const efforts = (data.ENGINE_EFFORTS && data.ENGINE_EFFORTS[engineId]) || [];
+  const modes = (data.ENGINE_MODES && data.ENGINE_MODES[engineId]) || [];
+  const activeMode = state.queueMode || 'write';
+
   const repoField = repo
     ? `<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--color-dark-bg);
          border:1px solid var(--color-dark-border);border-radius:var(--radius-sm)">
         <span class="mono" style="font-size:11.5px;font-weight:600">${esc(repo.name)}</span>
         <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(repo.folder)}</span>
        </div>`
-    : `<select style="${INPUT}">${repos.slice(0, 20).map((r) => `<option>${esc(r.name)}</option>`).join('')}</select>`;
+    : `<select style="${INPUT}" data-act="queueRepo">${repos.slice(0, 20).map((r) => `<option value="${esc(r.name)}" ${state.queueRepo === r.name ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>`;
+
+  const modeHint = activeMode === 'read' ? 'En modo lectura los hooks niegan Edit y Write'
+    : activeMode === 'plan' ? 'En modo planificación el agente diagnostica y diseña sin modificar código'
+    : activeMode === 'auto' ? 'En modo autónomo Claude evalúa permisos automáticamente'
+    : 'En modo escritura se aíslan los cambios en un git worktree aparte';
 
   return shell(`
     <div style="padding:16px 18px;border-bottom:1px solid var(--color-dark-border)">
       <div class="font-display" style="font:600 14px var(--font-display)">Nueva petición</div>
       <div style="font:400 11px/1.55 var(--font-body);color:var(--color-dark-text-3);margin-top:3px">
-        Esto levanta un coordinador: él decide en cuántas sesiones se divide y abre una por agente.
+        Despacha un agente con modelo, esfuerzo y modo de ejecución configurables.
       </div>
     </div>
-    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:13px">
       ${field('Repo', repoField)}
-      ${field('Qué hay que hacer', `<textarea rows="4" style="${INPUT};resize:vertical"
-        placeholder="Cachear las rutas resueltas sin cambiar el contrato del endpoint…"></textarea>`)}
+      ${field('Qué hay que hacer', `<textarea rows="3" data-act="queueTask" style="${INPUT};resize:vertical"
+        placeholder="Cachear las rutas resueltas sin cambiar el contrato del endpoint…">${esc(state.queueTask || '')}</textarea>`)}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        ${field('Motor', `<select style="${INPUT}">${data.getEngines()
-    .map((e) => `<option>${esc(e.name)}</option>`).join('')}</select>`)}
-        ${field('Coordinador', `<select style="${INPUT}">
-          <option>Nuevo coordinador</option>
-          ${flows.map((f) => `<option>Reutilizar · ${esc(f.short)}</option>`).join('')}
-        </select>`, 'Reutilizar mantiene el contexto del tema')}
+        ${field('Motor', `<select style="${INPUT}" data-act="queueEngine">
+          <option value="claude" ${engineId === 'claude' ? 'selected' : ''}>claude cli</option>
+          <option value="agy" ${engineId === 'agy' ? 'selected' : ''}>agy cli</option>
+        </select>`)}
+        ${field('Coordinador', `<select style="${INPUT}" data-act="queueCoord">
+          <option value="">Despacho directo (sin coordinador)</option>
+          ${flows.map((f) => `<option value="${esc(f.id)}" ${state.queueCoord === f.id ? 'selected' : ''}>Reutilizar · ${esc(f.short)}</option>`).join('')}
+        </select>`, 'Reutilizar mantiene el contexto')}
       </div>
-      ${field('Modo', `<div style="display:flex;gap:7px">
-        <button class="chip" aria-pressed="true">Escribe · worktree aparte</button>
-        <button class="chip" aria-pressed="false">Sólo lee · sin worktree</button>
-      </div>`, 'En modo lectura los hooks niegan Edit y Write, así una tarea mal etiquetada no muta el repo')}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        ${field('Modelo', `<input list="queue-models" data-act="queueModel" style="${INPUT}"
+          value="${esc(state.queueModel || 'default')}" placeholder="default (ambient)">
+          <datalist id="queue-models">
+            <option value="default">Predeterminado (ambient)</option>
+            ${models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </datalist>`, 'Alias o ID del modelo')}
+        ${field('Nivel de esfuerzo / razonamiento', `<select style="${INPUT}" data-act="queueEffort">
+          <option value="default" ${(!state.queueEffort || state.queueEffort === 'default') ? 'selected' : ''}>default (ambient)</option>
+          ${efforts.map((ef) => `<option value="${esc(ef)}" ${state.queueEffort === ef ? 'selected' : ''}>${esc(ef)}</option>`).join('')}
+        </select>`, 'Presupuesto de tokens de pensamiento')}
+      </div>
+      ${field('Modo', `<div style="display:flex;gap:7px;flex-wrap:wrap">
+        ${modes.map((m) => `<button class="chip" data-act="queueMode" data-arg="${esc(m.id)}" aria-pressed="${activeMode === m.id}">${esc(m.label)}</button>`).join('')}
+      </div>`, modeHint)}
       ${account ? `
       <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;background:var(--color-dark-bg);
            border-left:3px solid ${account.color};border-radius:var(--radius-sm)">
