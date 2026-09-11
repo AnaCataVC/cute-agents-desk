@@ -32,6 +32,8 @@ const FAST = [
   'verify-models-effort-modes.js',
   'verify-agy-worktree.js',
   'verify-delivery.js',
+  'verify-skills.js',
+  'verify-tokens-and-accounts.js',
 ];
 
 const MANUAL = [
