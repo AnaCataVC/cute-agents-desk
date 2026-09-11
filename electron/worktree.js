@@ -6,7 +6,7 @@
  * landing in the other's diff, and it is what keeps a task's changes reviewable as a branch
  * instead of loose commits already mixed into whatever the human had checked out.
  *
- * No automatic cleanup here (see the plan's phase 7): a worktree is only ever removed by an
+ * No automatic cleanup here: a worktree is only ever removed by an
  * explicit `removeWorktree` call, so losing an agent's work to a stray delete is not a failure
  * mode this module can produce on its own. `listWorktrees` is the always-on inventory that makes
  * "what's still out there" answerable without hunting through `.git/worktrees`.
@@ -29,27 +29,82 @@ function worktreeDirFor(agentId) {
   return path.join(WT_ROOT, agentId);
 }
 
+/** @param {string} task */
+function slugifyTask(task) {
+  return (task || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 30);
+}
+
+/**
+ * @param {string} agentId
+ * @param {{ engine?: string, task?: string, branch?: string }} [opts]
+ */
+function resolveBranchName(agentId, opts = {}) {
+  if (opts.branch) return opts.branch;
+  if (opts.engine || opts.task) {
+    const prefix = opts.engine || 'agent';
+    const slug = slugifyTask(opts.task);
+    return slug ? `${prefix}/${slug}-${agentId}` : `${prefix}/${agentId}`;
+  }
+  return `agent/${agentId}`;
+}
+
 /**
  * @param {string} repoPath
  * @param {string} agentId
+ * @param {{ engine?: string, task?: string, branch?: string }} [opts]
  * @returns {string} the absolute worktree path, ready to use as the agent's cwd
  */
-function createWorktree(repoPath, agentId) {
+function createWorktree(repoPath, agentId, opts = {}) {
   try {
     git(repoPath, ['rev-parse', '--is-inside-work-tree']);
   } catch {
     throw new Error(`"${repoPath}" no es un repo git; no se puede crear un worktree ahi`);
   }
 
-  const baseBranch = git(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  let baseBranch = 'main';
+  try {
+    const headRef = git(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    if (headRef && headRef !== 'HEAD') {
+      baseBranch = headRef;
+    } else {
+      try {
+        const originHead = git(repoPath, ['rev-parse', '--abbrev-ref', 'origin/HEAD']);
+        if (originHead) baseBranch = originHead.replace(/^origin\//, '');
+      } catch {
+        baseBranch = 'main';
+      }
+    }
+  } catch {
+    baseBranch = 'main';
+  }
+
+  const branch = resolveBranchName(agentId, opts);
   const worktreeDir = worktreeDirFor(agentId);
   fs.mkdirSync(WT_ROOT, { recursive: true });
 
-  git(repoPath, ['worktree', 'add', worktreeDir, '-b', `agent/${agentId}`, baseBranch]);
+  // Defensively ignore worktree.json so it never appears in git status
+  try {
+    const gitDir = git(repoPath, ['rev-parse', '--git-dir']);
+    const absGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(repoPath, gitDir);
+    const excludeFile = path.join(absGitDir, 'info', 'exclude');
+    if (fs.existsSync(excludeFile)) {
+      const content = fs.readFileSync(excludeFile, 'utf8');
+      if (!content.includes(MANIFEST_NAME)) {
+        fs.appendFileSync(excludeFile, `\n${MANIFEST_NAME}\n`);
+      }
+    }
+  } catch { /* best effort */ }
+
+  git(repoPath, ['worktree', 'add', worktreeDir, '-b', branch, baseBranch]);
 
   /** @type {{agentId: string, repoPath: string, branch: string, baseBranch: string, createdAt: string}} */
   const manifest = {
-    agentId, repoPath, branch: `agent/${agentId}`, baseBranch, createdAt: new Date().toISOString(),
+    agentId, repoPath, branch, baseBranch, createdAt: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(worktreeDir, MANIFEST_NAME), JSON.stringify(manifest, null, 2));
 
@@ -148,4 +203,4 @@ function listWorktrees() {
   }));
 }
 
-module.exports = { createWorktree, removeWorktree, listWorktrees, worktreeDirFor };
+module.exports = { createWorktree, removeWorktree, listWorktrees, worktreeDirFor, readManifest };

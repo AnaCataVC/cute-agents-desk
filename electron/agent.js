@@ -217,22 +217,39 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, s
   const { normMode, normModel, normEffort } = validateAndSanitizeParams({ engine, mode, model, effort });
 
   let effectiveCwd = cwd;
+  let worktreeCwd = cwd;
   let args;
 
   if (engine === 'agy') {
-    // agy has no worktree support yet — it always runs directly against `cwd`, reached through
-    // `--add-dir` since its own cwd has to be the directory holding `.agents/hooks.json` (see
-    // agyHooksFor's doc comment), never the repo itself. A write-mode agy task is therefore NOT
-    // isolated the way a write-mode claude task is: this is a known, deliberate gap, not an
-    // oversight, until worktree.js grows a variant that doesn't assume cwd == the repo.
+    // agy resolves hooks strictly from `<process_cwd>/.agents/hooks.json`, so its PTY cwd must
+    // remain the harness directory holding that file (`dirs.dir`). In write mode, an isolated
+    // git worktree is created and passed via `--add-dir <worktreeDir>` so mutations never affect
+    // the user's primary checkout.
     effectiveCwd = dirs.dir;
+    let targetDir = cwd;
+    if (normMode === 'write' && useWorktree) {
+      try {
+        worktreeCwd = worktree.createWorktree(cwd, id, { engine: 'agy', task });
+        targetDir = worktreeCwd;
+      } catch (err) {
+        console.error(`no se pudo crear el worktree para "${id}" en "${cwd}": ${err.message}`);
+        onNotice?.('WorktreeCreationFailed', { id, cwd, error: err.message });
+        if (err.message.includes('no es un repo git')) {
+          worktreeCwd = cwd;
+          targetDir = cwd;
+        } else {
+          throw err;
+        }
+      }
+    }
+
     fs.mkdirSync(dirs.agyHooksDir, { recursive: true });
     // agyHooksFor() cannot quote this path (see its own doc comment on why), so a space in it
     // breaks agy's hook invocation silently -- surface that as a harness event instead of
     // leaving it as an untraceable MODULE_NOT_FOUND inside agy's own process.
     if (/\s/.test(paths.hookScript)) onNotice?.('AgyHookPathHasSpace', { hookScript: paths.hookScript });
     fs.writeFileSync(dirs.agyHooks, JSON.stringify(agyHooksFor(), null, 2));
-    args = ['-i', task, '--add-dir', cwd];
+    args = ['-i', task, '--add-dir', targetDir];
     if (normMode === 'write') args.push('--mode', 'accept-edits');
     else if (normMode === 'plan') args.push('--mode', 'plan');
     if (normModel) args.push('--model', normModel);
@@ -245,12 +262,14 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, s
     // running in cwd directly rather than failing the whole spawn.
     if (normMode === 'write' && useWorktree) {
       try {
-        effectiveCwd = worktree.createWorktree(cwd, id);
+        worktreeCwd = worktree.createWorktree(cwd, id, { engine: 'claude', task });
+        effectiveCwd = worktreeCwd;
       } catch (err) {
         console.error(`no se pudo crear el worktree para "${id}" en "${cwd}": ${err.message}`);
         onNotice?.('WorktreeCreationFailed', { id, cwd, error: err.message });
         if (err.message.includes('no es un repo git')) {
           effectiveCwd = cwd;
+          worktreeCwd = cwd;
         } else {
           throw err;
         }
@@ -269,7 +288,7 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, s
   args = args.concat(systemPrompt && engine === 'claude' ? ['--append-system-prompt', systemPrompt] : []);
 
   fs.writeFileSync(dirs.manifest, JSON.stringify({
-    id, cwd, worktreeCwd: effectiveCwd, task, mode: normMode, bin, engine,
+    id, cwd, worktreeCwd, task, mode: normMode, bin, engine,
     model: normModel, effort: normEffort, startedAt: new Date().toISOString(),
   }, null, 2));
 
@@ -316,7 +335,7 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, s
   return {
     id,
     cwd,
-    worktreeCwd: effectiveCwd,
+    worktreeCwd,
     task,
     engine,
     mode: normMode,
