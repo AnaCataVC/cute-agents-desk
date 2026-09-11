@@ -177,7 +177,7 @@ const ACTIONS = {
     });
   },
 
-  /** Phase 1: one real agent on the toy repo, which is what the whole plumbing is proving. */
+  /** One real agent on the toy repo, proving the plumbing works end-to-end. */
   spawnTest: async () => {
     const result = await window.desk.spawn({
       task: 'Lee el README y agrega una linea al final que diga la hora actual. Nada mas.',
@@ -185,6 +185,29 @@ const ACTIONS = {
     if (result?.error) { state.error = result.error; render(); }
   },
   stopAgent: (id) => window.desk.stop(id),
+
+  /** Deliver an agent's work as a branch + draft PR. */
+  deliverAgent: async (agentId) => {
+    if (!window.desk?.deliver || !agentId) return;
+    state.error = null;
+    render();
+    try {
+      const res = await window.desk.deliver({ agentId });
+      if (!res.ok) {
+        state.error = res.error || 'Error al entregar la tarea';
+      } else {
+        const [delivered, worktrees] = await Promise.all([
+          window.desk.delivered(),
+          window.desk.worktrees(),
+        ]);
+        data.setLiveDelivered(delivered);
+        data.setLiveWorktrees(worktrees);
+      }
+    } catch (err) {
+      state.error = err.message || String(err);
+    }
+    render();
+  },
 };
 
 app.addEventListener('click', (ev) => {
@@ -363,11 +386,12 @@ if (window.desk?.isDesk) {
     if (agents.length) { data.setLiveAgents(agents); render(); }
   });
   // Scanned once on load, same as the agent list -- the tree does not need to re-scan on every
-  // repaint, only when a folder is added or removed from Configuracion (phase 2+).
+  // repaint, only when a folder is added or removed from Configuracion.
   window.desk.repos().then((repoData) => { data.setLiveRepoData(repoData); render(); });
   window.desk.conversations().then((conversations) => { data.setLiveConversations(conversations); render(); });
   window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
   window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
+  window.desk.delivered().then((deliv) => { data.setLiveDelivered(deliv); render(); });
 
   // Unlike repos/worktrees/conversations, this reflects files Claude Desktop and Antigravity
   // write in the background -- fetch-once-on-load would go stale the moment either reschedules,

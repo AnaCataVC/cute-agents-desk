@@ -121,7 +121,7 @@ function accountIdForCwd(cwd) {
 }
 
 /**
- * A real agent in the shape the card reads. What the harness does not know yet at this phase
+ * A real agent in the shape the card reads. What the harness does not know yet at this stage
  * says so rather than being invented: a card showing a plausible branch it never checked is
  * worse than one showing a dash.
  */
@@ -154,170 +154,29 @@ function fromLive(a) {
 /** Agents shown as cards on the dispatch tab. `ctxPct` is what the ring fills. */
 export function getAgents() { return liveAgents.map(fromLive); }
 
-/** @type {object[]} tasks with a merged/drafted PR -- real from the day phase 5 ships it */
-export function getDelivered() { return []; }
+let liveDelivered = [];
+export function setLiveDelivered(list) { liveDelivered = Array.isArray(list) ? list : []; }
+
+/** @type {() => object[]} tasks with a merged/drafted PR -- delivered tasks */
+export function getDelivered() { return liveDelivered; }
 
 const agent = (id, repo, branch, accountId, state, tokens) => ({
   id, repo, branch, accountId, state, tokens, ctxPct: Math.round(tokens / CONTEXT_CAP * 100),
 });
 
-/**
- * Coordinators, each with the full roster it opened. `defined` is how many sessions the
- * coordinator decided on, which can exceed the roster while some are still queued.
- */
-export function getFlows() {
-  return [
-    {
-      id: 'icarus', name: 'coordinador · icarus', short: 'icarus', split: 'por repo',
-      status: 'activo', accountId: 'work', engine: 'claude cli', color: 'var(--color-lilac)',
-      defined: 9, cost: 3.94, rate: 1840, turns: '46 / 120',
-      harness: 'despacho/base.md', loops: ['test', 'revisión'], hooks: 3,
-      skills: ['sql-queries', 'dwh-designer', 'frontend-design'],
-      repos: 'icarus-api, icarus-web, routing-core, geo-index, fleet-sync',
-      roster: [
-        agent('cache-rutas', 'icarus-api', 'claude/route-cache', 'work', 'thinking', 124000),
-        agent('rutas-tests', 'icarus-api', 'claude/route-tests', 'work', 'tool', 71000),
-        agent('geo-index-bump', 'geo-index', 'claude/index-bump', 'work', 'done', 44000),
-        agent('fleet-sync-poll', 'fleet-sync', 'claude/poll-window', 'work', 'done', 39000),
-        agent('web-mapa-lento', 'icarus-web', 'claude/map-perf', 'work', 'idle', 12000),
-        agent('docs-api', 'icarus-api', 'claude/docs-endpoints', 'work', 'tool', 33000),
-        agent('perf-bench', 'routing-core', 'claude/bench-suite', 'work', 'thinking', 58000),
-        agent('routing-lint', 'routing-core', 'claude/lint-flat', 'work', 'idle', 9000),
-        agent('pr-api-477', 'icarus-api', 'claude/pr-477', 'work', 'approval', 66000),
-      ],
-      links: [['perf-bench', 'cache-rutas']],
-    },
-    {
-      id: 'governance', name: 'coordinador · governance dwh', short: 'governance', split: 'por tema',
-      status: 'activo', accountId: 'pers', engine: 'agy cli', color: 'var(--color-blue)',
-      defined: 5, cost: 2.51, rate: 1120, turns: '31 / 120',
-      harness: 'despacho/dwh.md', loops: ['test', 'revisión', 'glosario'], hooks: 4,
-      skills: ['dwh-designer', 'glossary-entry', 'sql-queries'],
-      repos: 'dwh-dataform, dwh-mirror, sdk-python, glosario',
-      roster: [
-        agent('labels-gobierno', 'dwh-dataform', 'agy/labels-governance', 'pers', 'tool', 62000),
-        agent('retry-backoff', 'sdk-python', 'claude/retry-backoff', 'pers', 'approval', 156000),
-        agent('mirror-diff', 'dwh-mirror', 'agy/mirror-diff', 'pers', 'done', 50000),
-        agent('glosario-links', 'glosario', 'agy/links-metricas', 'pers', 'thinking', 28000),
-        agent('stg-orders', 'dwh-dataform', 'agy/stg-orders', 'pers', 'idle', 7000),
-      ],
-      links: [['glosario-links', 'labels-gobierno']],
-    },
-    {
-      id: 'mapas', name: 'coordinador · mapas y perf', short: 'mapas', split: 'por tema',
-      status: 'bloqueado', accountId: 'work', engine: 'agy cli', color: 'var(--app-dirty)',
-      defined: 3, cost: 0.91, rate: 0, turns: '18 / 120',
-      harness: 'despacho/base.md', loops: ['test'], hooks: 2, skills: ['sql-queries'],
-      repos: 'maps-tiles, tile-cache, sandbox-vm',
-      roster: [
-        agent('perf-tiles', 'maps-tiles', 'agy/tile-cache', 'work', 'blocked', 88000),
-        agent('tile-bench', 'maps-tiles', 'agy/bench-tiles', 'work', 'idle', 8000),
-        agent('libre', 'sandbox-vm', '—', 'pers', 'idle', 0),
-      ],
-      links: [],
-    },
-    {
-      id: 'sdk', name: 'coordinador · sdk release', short: 'sdk', split: 'por tema',
-      status: 'archivado', accountId: 'pers', engine: 'claude cli', color: 'var(--color-dark-text-3)',
-      defined: 3, cost: 2.88, rate: 0, turns: '77 / 120',
-      harness: 'despacho/release.md', loops: ['revisión'], hooks: 3, skills: ['read-pdf'],
-      repos: 'sdk-python, sdk-js, docs-sdk',
-      roster: [
-        agent('changelog-1-8', 'sdk-js', 'claude/changelog-1-8', 'pers', 'done', 61000),
-        agent('bump-semver', 'sdk-python', 'claude/bump-semver', 'pers', 'done', 24000),
-        agent('docs-migracion', 'sdk-js', 'claude/docs-migracion', 'pers', 'done', 98000),
-      ],
-      links: [],
-    },
-    {
-      id: 'lint', name: 'coordinador · lint-config', short: 'lint', split: 'por repo',
-      status: 'archivado', accountId: 'pers', engine: 'claude cli', color: 'var(--color-dark-text-3)',
-      defined: 2, cost: 0.39, rate: 0, turns: '9 / 120',
-      harness: 'despacho/base.md', loops: [], hooks: 1, skills: [],
-      repos: 'lint-config, tsconfig-base',
-      roster: [
-        agent('reglas-base', 'lint-config', 'claude/reglas-base', 'pers', 'done', 27000),
-        agent('migrar-flat', 'lint-config', 'claude/eslint-flat', 'pers', 'done', 14000),
-      ],
-      links: [],
-    },
-    {
-      id: 'billing', name: 'coordinador · billing-api', short: 'billing', split: 'por repo',
-      status: 'archivado', accountId: 'work', engine: 'agy cli', color: 'var(--color-dark-text-3)',
-      defined: 3, cost: 1.46, rate: 0, turns: '38 / 120',
-      harness: 'despacho/base.md', loops: ['test'], hooks: 3, skills: ['sql-queries'],
-      repos: 'billing-api, stripe-hooks',
-      roster: [
-        agent('webhooks-idem', 'billing-api', 'agy/webhooks-idem', 'work', 'done', 72000),
-        agent('proration', 'billing-api', 'agy/proration', 'work', 'done', 51000),
-        agent('tests-e2e', 'stripe-hooks', 'agy/tests-e2e', 'work', 'done', 32000),
-      ],
-      links: [],
-    },
-    {
-      id: 'otel', name: 'coordinador · telemetría otel', short: 'otel', split: 'por tema',
-      status: 'archivado', accountId: 'work', engine: 'claude cli', color: 'var(--color-dark-text-3)',
-      defined: 3, cost: 2.09, rate: 0, turns: '52 / 120',
-      harness: 'despacho/base.md', loops: ['test'], hooks: 4, skills: ['dashboard-finder'],
-      repos: 'telemetry, notify-svc, event-bus',
-      roster: [
-        agent('spans-http', 'telemetry', 'claude/spans-http', 'work', 'done', 88000),
-        agent('metricas-bus', 'event-bus', 'claude/metricas-bus', 'work', 'done', 76000),
-        agent('sampling', 'telemetry', 'claude/sampling', 'work', 'done', 55000),
-      ],
-      links: [],
-    },
-    {
-      id: 'docs', name: 'coordinador · docs onboarding', short: 'docs', split: 'por tema',
-      status: 'archivado', accountId: 'pers', engine: 'claude cli', color: 'var(--color-dark-text-3)',
-      defined: 2, cost: 0.84, rate: 0, turns: '22 / 120',
-      harness: 'despacho/base.md', loops: [], hooks: 2, skills: ['read-pdf', 'pastel-tech-ds'],
-      repos: 'docs-site, landing',
-      roster: [
-        agent('guia-setup', 'docs-site', 'claude/guia-setup', 'pers', 'done', 47000),
-        agent('glosario-links-docs', 'docs-site', 'claude/glosario-links', 'pers', 'done', 41000),
-      ],
-      links: [],
-    },
-  ];
-}
+/** @type {object[]} */
+let liveFlows = [];
+/** @param {object[]} flows */
+export function setLiveFlows(flows) { liveFlows = Array.isArray(flows) ? flows : []; }
+/** Coordinators, each with the full roster it opened. */
+export function getFlows() { return liveFlows; }
 
+/** @type {Record<string, any[]>} */
+let liveThreads = {};
+/** @param {Record<string, any[]>} threads */
+export function setLiveThreads(threads) { liveThreads = threads || {}; }
 /** Thread messages, keyed by agent id. Authors: boss | sub | user | sys | tool. */
-export function getThread(agentId) { return THREADS[agentId] || []; }
-
-const THREADS = {
-  'cache-rutas': [
-    ['boss', 'coordinador · icarus', '14:02', 'Tarea: cachear las rutas resueltas en icarus-api sin cambiar el contrato del endpoint. Rama claude/route-cache, PR en borrador al terminar.'],
-    ['sub', 'cache-rutas', '14:03', 'Leído el módulo. El cálculo vive en optimizer/heuristics.ts y se llama dos veces por request. Propongo memoizar por hash de paradas con TTL de 5 min.'],
-    ['tool', 'herramienta', '14:04', 'Grep · "routeCache" · 14 coincidencias en 6 archivos'],
-    ['boss', 'coordinador · icarus', '14:05', 'De acuerdo con el TTL. No toques el orden de los resultados: hay un test que lo compara literal.'],
-    ['user', 'tú', '14:06', 'Y deja la métrica de hit rate detrás del feature flag que ya existe.'],
-    ['sub', 'cache-rutas', '14:06', 'Anotado. Uso flags.routeCacheMetrics para no encender nada por defecto.'],
-    ['sub', 'cache-rutas', 'ahora', 'Escribiendo el memo en src/router/index.ts. Después corro la suite de router y reporto.'],
-  ],
-  'labels-gobierno': [
-    ['boss', 'coordinador · governance dwh', '13:51', 'Aplica las etiquetas de gobierno a las tablas stg_ del dataform. Sigue la convención del glosario, no inventes labels nuevos.'],
-    ['sub', 'labels-gobierno', '13:52', 'Encontré 34 modelos stg_, 11 sin bloque config completo. Empiezo por los de orders.'],
-    ['tool', 'herramienta', '14:10', 'Bash · dataform compile · 34 modelos, 0 errores'],
-    ['sub', 'labels-gobierno', 'ahora', 'Editando definitions/stg_orders.sqlx. Voy 8 de 11.'],
-  ],
-  'retry-backoff': [
-    ['boss', 'coordinador · governance dwh', '14:28', 'Arregla el backoff del retry en sdk-python y empuja la rama. PR en borrador, sin reviewers.'],
-    ['sub', 'retry-backoff', '14:29', 'El backoff era lineal; lo dejé exponencial con jitter y tope de 30 s. Tests verdes.'],
-    ['sys', 'sistema', '14:30', 'Push detenido: la carpeta ~/dev/personal es de cata-personal y el repo apunta a ana@simplit-solutions.com.'],
-    ['sub', 'retry-backoff', 'ahora', 'Espero tu decisión sobre con qué cuenta empujar.'],
-  ],
-  'perf-tiles': [
-    ['boss', 'coordinador · mapas y perf', '14:12', 'Sube el hit rate del caché de tiles en maps-tiles. Mide antes y después.'],
-    ['sub', 'perf-tiles', '14:20', 'Rebase sobre main para partir limpio.'],
-    ['sys', 'sistema', '14:25', 'CONFLICT (content): Merge conflict in Cargo.lock'],
-    ['sub', 'perf-tiles', '14:25', 'No resuelvo lockfiles sin permiso. Detenido, sin avance desde entonces.'],
-  ],
-  'libre': [
-    ['boss', 'coordinador · mapas y perf', '13:48', 'Sin tarea por ahora. Quedas disponible.'],
-    ['sub', 'libre', '13:48', 'En espera. Contexto limpio.'],
-  ],
-};
+export function getThread(agentId) { return liveThreads[agentId] || []; }
 
 /** Author -> colour pair for the thread bubbles. */
 export const AUTHORS = {
@@ -407,208 +266,97 @@ export const SKILL_STATES = {
   disponible: { color: 'var(--color-dark-text-3)', bg: 'var(--color-dark-surface)' },
 };
 
-export function getAgentSkills(agentId) { return AGENT_SKILLS[agentId] || []; }
+let liveAgentSkills = {};
+/** @param {Record<string, any[]>} skills */
+export function setLiveAgentSkills(skills) { liveAgentSkills = skills || {}; }
+export function getAgentSkills(agentId) { return liveAgentSkills[agentId] || []; }
 
-const AGENT_SKILLS = {
-  'cache-rutas': [['sql-queries', 'usada', '2 llamadas'], ['dwh-designer', 'cargada', 'sin usar'],
-    ['frontend-design', 'cargada', 'sin usar'], ['read-pdf', 'disponible', 'no cargada']],
-  'labels-gobierno': [['dwh-designer', 'usada', '6 llamadas'], ['glossary-entry', 'usada', '1 llamada'],
-    ['sql-queries', 'cargada', 'sin usar'], ['automatizaciones-query', 'disponible', 'no cargada']],
-  'retry-backoff': [['sql-queries', 'cargada', 'sin usar'], ['read-pdf', 'disponible', 'no cargada'],
-    ['dwh-designer', 'disponible', 'no cargada']],
-  'perf-tiles': [['sql-queries', 'usada', '1 llamada'], ['dashboard-finder', 'cargada', 'sin usar'],
-    ['glossary-entry', 'disponible', 'no cargada']],
-  'libre': [['sql-queries', 'cargada', 'sin usar'], ['dwh-designer', 'cargada', 'sin usar'],
-    ['read-pdf', 'disponible', 'no cargada']],
-};
-
+let liveConflicts = {};
+/** @param {Record<string, string[]>} conflicts */
+export function setLiveConflicts(conflicts) { liveConflicts = conflicts || {}; }
 /** Files that clash with main. An agent cannot push until these are resolved. */
-export function getConflicts() { return { 'maps-tiles': ['Cargo.lock', 'src/tiles/cache.rs'] }; }
+export function getConflicts() { return liveConflicts; }
 
-const row = (kind, lno, ltext, rno, rtext) => ({ kind, lno, ltext, rno, rtext });
-
+let liveDiffs = {};
+/** @param {Record<string, any>} diffs */
+export function setLiveDiffs(diffs) { liveDiffs = diffs || {}; }
 /**
  * Uncommitted work per agent, as the editor shows it.
  * `status` is where the work stands: sin commitear | commit sin empujar | con conflicto.
  */
-export function getDiffs() {
-  return {
-    'cache-rutas': {
-      repo: 'icarus-api', branch: 'claude/route-cache', status: 'sin commitear',
-      message: 'feat(router): memoiza rutas resueltas por hash de paradas',
-      files: [
-        {
-          path: 'optimizer/heuristics.ts', add: 21, del: 4,
-          hunk: '@@ -118,7 +118,24 @@ export function resolveRoute(',
-          rows: [
-            row('ctx', 118, 'export function resolveRoute(req: RouteRequest) {', 118, 'export function resolveRoute(req: RouteRequest) {'),
-            row('ctx', 119, '  const stops = normalizeStops(req.stops);', 119, '  const stops = normalizeStops(req.stops);'),
-            row('add', '', '', 120, '  const key = hashStops(stops);'),
-            row('add', '', '', 121, '  const hit = routeCache.get(key);'),
-            row('add', '', '', 122, '  if (hit && !hit.stale) {'),
-            row('add', '', '', 123, '    if (flags.routeCacheMetrics) metrics.inc("route_cache.hit");'),
-            row('add', '', '', 124, '    return hit.value;'),
-            row('add', '', '', 125, '  }'),
-            row('del', 120, '  const solved = solve(stops, req.opts);', '', ''),
-            row('del', 121, '  return solved;', '', ''),
-            row('add', '', '', 126, '  const solved = solve(stops, req.opts);'),
-            row('add', '', '', 127, '  routeCache.set(key, { value: solved, stale: false }, TTL_MS);'),
-            row('add', '', '', 128, '  if (flags.routeCacheMetrics) metrics.inc("route_cache.miss");'),
-            row('add', '', '', 129, '  return solved;'),
-            row('ctx', 122, '}', 130, '}'),
-          ],
-        },
-        {
-          path: 'optimizer/cache.ts', add: 18, del: 0, hunk: '@@ -0,0 +1,18 @@ nuevo archivo',
-          rows: [
-            row('add', '', '', 1, 'const TTL_MS = 5 * 60 * 1000;'),
-            row('add', '', '', 2, ''),
-            row('add', '', '', 3, 'export function hashStops(stops: Stop[]): string {'),
-            row('add', '', '', 4, '  return stops.map(s => `${s.lat},${s.lng}`).join("|");'),
-            row('add', '', '', 5, '}'),
-            row('add', '', '', 6, ''),
-            row('add', '', '', 7, 'export const routeCache = new TtlMap<string, CachedRoute>(TTL_MS);'),
-          ],
-        },
-        {
-          path: 'test/router.spec.ts', add: 9, del: 1, hunk: '@@ -44,7 +44,15 @@ describe("resolveRoute"',
-          rows: [
-            row('ctx', 44, '  it("mantiene el orden de las paradas", () => {', 44, '  it("mantiene el orden de las paradas", () => {'),
-            row('ctx', 45, '    expect(resolveRoute(req).stops).toEqual(req.stops);', 45, '    expect(resolveRoute(req).stops).toEqual(req.stops);'),
-            row('del', 46, '  });', '', ''),
-            row('add', '', '', 46, '  });'),
-            row('add', '', '', 47, ''),
-            row('add', '', '', 48, '  it("sirve del caché en la segunda llamada", () => {'),
-            row('add', '', '', 49, '    const a = resolveRoute(req);'),
-            row('add', '', '', 50, '    expect(resolveRoute(req)).toBe(a);'),
-            row('add', '', '', 51, '  });'),
-          ],
-        },
-      ],
-    },
-    'rutas-tests': {
-      repo: 'icarus-api', branch: 'claude/route-tests', status: 'commit sin empujar',
-      message: 'test(router): cubre expiración del caché',
-      files: [
-        {
-          path: 'test/cache.spec.ts', add: 12, del: 0, hunk: '@@ -0,0 +1,12 @@ nuevo archivo',
-          rows: [
-            row('add', '', '', 1, 'it("expira a los 5 min", () => {'),
-            row('add', '', '', 2, '  jest.advanceTimersByTime(5 * 60 * 1000 + 1);'),
-            row('add', '', '', 3, '  expect(routeCache.get(key)).toBeUndefined();'),
-            row('add', '', '', 4, '});'),
-          ],
-        },
-      ],
-    },
-    'labels-gobierno': {
-      repo: 'dwh-dataform', branch: 'agy/labels-governance', status: 'sin commitear',
-      message: 'chore(dwh): etiquetas de gobierno en los modelos stg_',
-      files: [
-        {
-          path: 'definitions/stg_orders.sqlx', add: 6, del: 1,
-          hunk: '@@ -1,8 +1,13 @@ config {',
-          rows: [
-            row('ctx', 1, 'config {', 1, 'config {'),
-            row('ctx', 2, '  type: "table",', 2, '  type: "table",'),
-            row('del', 3, '  tags: ["stg"],', '', ''),
-            row('add', '', '', 3, '  tags: ["stg", "gobierno"],'),
-            row('add', '', '', 4, '  labels: {'),
-            row('add', '', '', 5, '    dominio: "ventas",'),
-            row('add', '', '', 6, '    responsable: "data-domain",'),
-            row('add', '', '', 7, '    confidencialidad: "interna"'),
-            row('add', '', '', 8, '  },'),
-            row('ctx', 4, '}', 9, '}'),
-          ],
-        },
-      ],
-    },
-    'perf-tiles': {
-      repo: 'maps-tiles', branch: 'agy/tile-cache', status: 'con conflicto',
-      message: 'perf(tiles): sube el hit rate del caché de teselas',
-      files: [
-        {
-          path: 'Cargo.lock', add: 0, del: 0, conflict: true,
-          hunk: '@@ conflicto con main @@',
-          rows: [
-            row('ctx', 1, '# este archivo lo regenera cargo', 1, '# este archivo lo regenera cargo'),
-          ],
-        },
-        {
-          path: 'src/tiles/cache.rs', add: 14, del: 3, conflict: true,
-          hunk: '@@ -22,6 +22,17 @@ impl TileCache {',
-          rows: [
-            row('ctx', 22, 'impl TileCache {', 22, 'impl TileCache {'),
-            row('del', 23, '    fn get(&self, k: &Key) -> Option<Tile> {', '', ''),
-            row('add', '', '', 23, '    fn get(&mut self, k: &Key) -> Option<Tile> {'),
-            row('add', '', '', 24, '        self.hits += 1;'),
-            row('ctx', 24, '        self.map.get(k).cloned()', 25, '        self.map.get(k).cloned()'),
-          ],
-        },
-      ],
-    },
-  };
-}
+export function getDiffs() { return liveDiffs; }
 
-/** 24 hourly buckets of thousands of tokens; the last four have no data yet. */
-const TOKEN_SERIES = [18, 24, 31, 22, 40, 52, 47, 61, 55, 72, 68, 84, 91, 77, 96, 88, 104, 97, 112, 86, 74, 63, 58, 44];
-export const SERIES_NO_DATA_FROM = 20;
+export const SERIES_NO_DATA_FROM = 0;
 
 /** The day's usage, per engine and per account. */
 export function getUsage() {
+  const accounts = getAccounts().map((a) => ({
+    name: a.name || a.id,
+    color: a.color || 'var(--color-lilac)',
+    tokens: '0 k',
+    cost: '$0.00',
+    share: 0,
+    claude: '0 k',
+    agy: '0 k',
+    claudeShare: 0,
+  }));
   return {
-    today: { total: '1.58 M', claude: '1.02 M', agy: '560 k' },
-    cost: { total: '$14.92', claude: '$9.70', agy: '$5.22' },
-    rate: { total: 2960, claude: 1920, agy: 1040 },
-    risk: { total: '1 de 5', claude: '1', agy: '0' },
-    series: TOKEN_SERIES,
+    today: { total: '0 k', claude: '0 k', agy: '0 k' },
+    cost: { total: '$0.00', claude: '$0.00', agy: '$0.00' },
+    rate: { total: 0, claude: 0, agy: 0 },
+    risk: { total: '0', claude: '0', agy: '0' },
+    series: Array(24).fill(0),
     budgets: [
-      { engine: 'claude cli', used: 0.64, cap: '1.6 M', color: 'var(--color-lilac)' },
-      { engine: 'agy cli', used: 0.62, cap: '900 k', color: 'var(--color-blue)' },
+      { engine: 'claude cli', used: 0, cap: '1.6 M', color: 'var(--color-lilac)' },
+      { engine: 'agy cli', used: 0, cap: '900 k', color: 'var(--color-blue)' },
     ],
-    accounts: [
-      { name: 'simplit-work', color: 'var(--color-mint)', tokens: '968k', cost: '$9.14', share: 0.61, claude: '630k', agy: '338k', claudeShare: 0.65 },
-      { name: 'cata-personal', color: 'var(--color-lilac)', tokens: '613k', cost: '$5.78', share: 0.39, claude: '400k', agy: '213k', claudeShare: 0.65 },
-    ],
+    accounts,
   };
 }
 
 /** Mismatches: repo sits under one account's folder, git config says the other. */
 export function getMismatches() {
-  return [
-    { repo: 'sdk-python', detail: '~/dev/personal/sdk-python → ana@simplit-solutions.com', fix: 'cata-personal' },
-    { repo: 'slack-apps', detail: '~/dev/personal/slack-apps → ana@simplit-solutions.com', fix: 'cata-personal' },
-  ];
+  const repos = getRepos();
+  const accounts = getAccounts();
+  return repos.filter((r) => r.mismatch).map((r) => {
+    const acc = accounts.find((a) => a.id === r.accountId);
+    return {
+      repo: r.name,
+      detail: `${r.path} → ${r.email || '(sin email)'}`,
+      fix: acc?.name || r.accountId,
+    };
+  });
 }
 
 export function getScanSummary() {
-  return { folders: 4, repos: 65, dirty: 9, noRemote: 3, mismatched: 2, when: 'hace 12 min', took: '1.4 s' };
+  const repos = getRepos();
+  const accounts = getAccounts();
+  const totalFolders = accounts.reduce((acc, a) => acc + (a.folders?.length || 0), 0);
+  const dirtyCount = repos.filter((r) => r.dirty).length;
+  const noRemoteCount = repos.filter((r) => r.noRemote).length;
+  const mismatchedCount = repos.filter((r) => r.mismatch).length;
+  return {
+    folders: totalFolders,
+    repos: repos.length,
+    dirty: dirtyCount,
+    noRemote: noRemoteCount,
+    mismatched: mismatchedCount,
+    when: repos.length ? 'escaneo en vivo' : 'sin escaneo',
+    took: '—',
+  };
 }
 
-export function getScanCandidates() {
-  return [
-    { name: 'tarifas-api', remote: 'github.com/cata/tarifas-api', tag: 'ok', picked: true },
-    { name: 'tarifas-web', remote: 'github.com/cata/tarifas-web', tag: 'ok', picked: true },
-    { name: 'notebooks', remote: '—', tag: 'sin remoto', picked: false },
-    { name: 'geo-playground', remote: 'github.com/cata/geo-playground', tag: 'ok', picked: true },
-    { name: 'scratch', remote: '—', tag: 'sin remoto', picked: false },
-    { name: 'ruteo-sim', remote: 'github.com/simplit/ruteo-sim', tag: 'otra cuenta', picked: false },
-    { name: 'bench-osrm', remote: 'github.com/cata/bench-osrm', tag: 'ok', picked: true },
-  ];
-}
+let liveScanCandidates = [];
+/** @param {any[]} candidates */
+export function setLiveScanCandidates(candidates) { liveScanCandidates = Array.isArray(candidates) ? candidates : []; }
+export function getScanCandidates() { return liveScanCandidates; }
 
 /** Timeline: one lane per agent, bars are state runs inside the window. */
 export function getTimeline() {
   return {
-    window: 'últimos 30 min',
-    ticks: ['14:02', '14:12', '14:22', '14:31'],
-    lanes: [
-      { agent: 'cache-rutas', bars: [['tool', 0, 14], ['thinking', 16, 30], ['tool', 48, 22], ['thinking', 72, 26]] },
-      { agent: 'labels-gobierno', bars: [['thinking', 0, 10], ['tool', 12, 40], ['tool', 56, 38]] },
-      { agent: 'retry-backoff', bars: [['thinking', 22, 18], ['tool', 42, 26], ['approval', 70, 28]] },
-      { agent: 'perf-tiles', bars: [['tool', 4, 30], ['thinking', 36, 12], ['blocked', 50, 48]] },
-      { agent: 'libre', bars: [['idle', 0, 98]] },
-    ],
+    window: 'sesión actual',
+    ticks: [],
+    lanes: [],
   };
 }
 
@@ -621,7 +369,7 @@ export function getSummary() {
     running: agents.filter((a) => a.state === 'thinking' || a.state === 'tool').length,
     maxParallel: 5,
     blocked: agents.filter((a) => a.state === 'blocked').length,
-    queued: 2,
+    queued: 0,
   };
 }
 
@@ -674,10 +422,5 @@ export function getSettings() {
 }
 
 export function getTerminalLines() {
-  return [
-    { kind: 'cmd', text: 'git rebase origin/main' },
-    { kind: 'err', text: 'CONFLICT (content): Merge conflict in Cargo.lock' },
-    { kind: 'cmd', text: 'git checkout --theirs Cargo.lock && cargo update -w' },
-    { kind: 'prompt', text: '' },
-  ];
+  return [];
 }

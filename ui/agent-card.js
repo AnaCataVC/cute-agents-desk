@@ -44,10 +44,17 @@ function mismatchBanner(agent) {
   </div>`;
 }
 
-function actionRow(agent) {
+function actionRow(agent, isDelivered = false) {
   // A live agent is a real process: what you need is its screen and a way to end it.
   if (agent.live) {
     const ended = agent.state === 'done' || agent.state === 'failed';
+    const deliverButton = agent.state === 'done'
+      ? (isDelivered
+        ? '<span style="font:600 11px var(--font-body);color:var(--color-emerald-400);margin-left:4px">✓ Entregado</span>'
+        : `<button class="btn-primary" data-act="deliverAgent" data-arg="${esc(agent.id)}"
+             style="border-radius:var(--radius-sm);font-size:11.5px;padding:3px 9px">Entregar PR</button>`)
+      : '';
+
     return `
     <div style="display:flex;gap:8px;align-items:center;margin-top:11px">
       <button class="btn-ghost" data-act="openTerminal" data-arg="${esc(agent.id)}"
@@ -55,6 +62,7 @@ function actionRow(agent) {
       ${ended ? '' : `<button class="btn-ghost" data-act="stopAgent" data-arg="${esc(agent.id)}"
         style="border-radius:var(--radius-sm);font-size:11.5px;border-color:var(--state-blocked);
                color:var(--state-blocked)">Detener</button>`}
+      ${deliverButton}
       <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3)">
         $${(agent.costUsd || 0).toFixed(4)}</span>
     </div>
@@ -81,7 +89,7 @@ function actionRow(agent) {
   return '';
 }
 
-function card(agent, account, states) {
+function card(agent, account, states, isDelivered = false) {
   const st = states[agent.state] || states.idle;
   const pill = 'padding:1px 8px;border-radius:var(--radius-full);font:500 9.5px var(--font-body)';
 
@@ -105,15 +113,9 @@ function card(agent, account, states) {
                 text-overflow:ellipsis;white-space:nowrap">${esc(account.email)}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap">
-          <span class="mono" style="font-size:12px;font-weight:600">${esc(agent.id)}</span>
-          <span style="${pill};background:var(--color-dark-bg);color:var(--color-dark-text-2)">${esc(agent.engine)}</span>
-          <span class="mono" style="font-size:10px;color:${st.color}">${st.label} · ${elapsed(agent.elapsed)}</span>
-        </div>
-        <div class="mono" style="font-size:12.5px;font-weight:500;overflow:hidden;
-             text-overflow:ellipsis;white-space:nowrap">${esc(agent.repo)}</div>
-        <div class="mono" style="font-size:11px;color:var(--color-dark-text-3);margin-top:2px">↳ ${esc(agent.branch)}</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
-          <span style="font:400 10px var(--font-body);color:var(--color-dark-text-3)">responde a</span>
+          <span class="mono" style="font-size:12.5px;font-weight:600">${esc(agent.id)}</span>
+          <span class="mono" style="font-size:11.5px;color:var(--color-dark-text-2)">${esc(agent.repo)}</span>
+          <span style="${pill};background:${st.color};color:var(--app-on-accent)">${esc(st.label)}</span>
           <span style="${pill};background:var(--who-boss-bg);color:var(--who-boss);
                 border:1px solid var(--color-dark-border)">${esc(agent.boss)}</span>
         </div>
@@ -124,20 +126,29 @@ function card(agent, account, states) {
       </div>
       ${meter}
     </div>
-    ${actionRow(agent)}
+    ${actionRow(agent, isDelivered)}
   </div>`;
 }
 
 function deliveredRow(task) {
+  const prDisplay = task.prUrl
+    ? `<a href="${esc(task.prUrl)}" target="_blank" rel="noopener" style="font:600 11px var(--font-body);color:var(--color-blue)">${esc(task.pr || 'PR borrador')}</a>`
+    : `<span style="font:400 11px var(--font-body);color:var(--color-dark-text-3)">${esc(task.pr || 'borrador')}</span>`;
+  const reportDisplay = task.reportUrl
+    ? `<a href="${esc(task.reportUrl)}" target="_blank" rel="noopener" style="font:600 11px var(--font-body)">ver reporte →</a>`
+    : '';
+
   return `
   <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:var(--app-surface-done);
        border:1px solid var(--color-dark-border);border-radius:var(--radius-md);flex-wrap:wrap">
-    <span class="mono" style="font-size:11px;font-weight:600;color:var(--color-dark-text-3)">${esc(task.id)}</span>
+    <span class="mono" style="font-size:11px;font-weight:600;color:var(--color-dark-text-3)">${esc(task.agentId || task.id)}</span>
     <span style="width:7px;height:7px;border-radius:50%;background:var(--color-emerald-400)"></span>
     <span class="mono" style="font-size:11.5px;font-weight:500;color:var(--color-dark-text-2)">${esc(task.repo)}</span>
     <span class="mono" style="font-size:11px;color:var(--color-dark-text-3)">↳ ${esc(task.branch)}</span>
-    <span style="font:400 11px var(--font-body);color:var(--color-dark-text-3);margin-left:auto">${esc(task.pr)}</span>
-    <a href="${esc(task.reportUrl)}" style="font:600 11px var(--font-body)">ver reporte →</a>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      ${prDisplay}
+      ${reportDisplay}
+    </div>
   </div>`;
 }
 
@@ -148,8 +159,10 @@ export function renderAgentPanel(state, data) {
   const byId = (id) => accounts.find((a) => a.id === id) || accounts[0] || noAccount;
 
   const agents = data.getAgents();
-  const cards = agents.map((a) => card(a, byId(a.accountId), data.STATES)).join('');
-  const delivered = data.getDelivered().map(deliveredRow).join('');
+  const deliveredList = data.getDelivered();
+  const deliveredSet = new Set(deliveredList.map((d) => d.agentId || d.id));
+  const cards = agents.map((a) => card(a, byId(a.accountId), data.STATES, deliveredSet.has(a.id))).join('');
+  const delivered = deliveredList.map(deliveredRow).join('');
 
   return `
   <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0">

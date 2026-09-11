@@ -34,6 +34,8 @@ const paths = {
   eventsLog: path.join(HOME, 'events.jsonl'),
   agents: path.join(HOME, 'agents'),
 
+  deliveries: path.join(HOME, 'deliveries.json'),
+
   /** @param {string} id */
   agent(id) {
     const dir = path.join(HOME, 'agents', id);
@@ -43,6 +45,7 @@ const paths = {
       settings: path.join(dir, 'settings.json'),
       inbox: path.join(dir, 'events'),
       outbox: path.join(dir, 'outbox'),
+      report: path.join(dir, 'report.md'),
       ptyLog: path.join(dir, 'pty.log'),
       agyHooksDir: path.join(dir, '.agents'),
       agyHooks: path.join(dir, '.agents', 'hooks.json'),

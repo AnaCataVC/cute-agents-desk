@@ -189,7 +189,8 @@ function fileFooter(diff, agentId) {
     </div>
     <button class="btn-ghost" data-act="openChat" data-arg="${esc(agentId)}">Abrir hilo del agente</button>
     <button class="btn-ghost">Descartar</button>
-    <button class="btn-primary" style="padding:8px 15px;border-radius:var(--radius-sm);font-size:11.5px">
+    <button class="btn-primary" data-act="deliverAgent" data-arg="${esc(agentId)}"
+      style="padding:8px 15px;border-radius:var(--radius-sm);font-size:11.5px">
       Commitear y abrir PR</button>
   </div>`;
 }

@@ -9,10 +9,10 @@ const execFileAsync = promisify(execFile);
 /**
  * Throws on failure -- for git calls whose result the caller actually depends on (creating or
  * removing a worktree, building a throwaway repo for a test).
- * @param {string} cwd @param {string[]} args
+ * @param {string} cwd @param {string[]} args @param {object} [opts]
  */
-function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+function git(cwd, args, opts = {}) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', ...opts }).trim();
 }
 
 /**
@@ -20,10 +20,10 @@ function git(cwd, args) {
  * remote, no HEAD yet, not a repo) is an expected outcome, not an error. Stderr is ignored too:
  * execFileSync passes it through to this process' own stderr by default, and an expected failure
  * (checked across every scanned repo) is not worth printing.
- * @param {string} cwd @param {string[]} args
+ * @param {string} cwd @param {string[]} args @param {object} [opts]
  */
-function tryGit(cwd, args) {
-  try { return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+function tryGit(cwd, args, opts = {}) {
+  try { return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...opts }).trim(); }
   catch { return null; }
 }
 

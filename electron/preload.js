@@ -49,6 +49,15 @@ contextBridge.exposeInMainWorld('desk', {
    */
   spawnCoordinator: (o) => ipcRenderer.invoke('desk:spawnCoordinator', o),
 
+  /** Delivered tasks with their PR and repo links. */
+  delivered: () => ipcRenderer.invoke('desk:delivered'),
+
+  /**
+   * Deliver an agent's work: commits dirty files, pushes branch, and opens a draft PR.
+   * @param {{agentId: string, commitMessage?: string, prTitle?: string, prBody?: string}} o
+   */
+  deliver: (o) => ipcRenderer.invoke('desk:deliver', o),
+
   /**
    * Push channel for what the main process owns: agent state, and raw terminal output.
    * Replaces the SSE stream the web version would have needed.

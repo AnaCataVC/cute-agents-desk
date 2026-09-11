@@ -34,6 +34,7 @@ const coordinator = require('./coordinator.js');
 const paths = require('./paths.js');
 const worktree = require('./worktree.js');
 const { getScheduledTasks } = require('./scheduled-tasks.js');
+const delivery = require('./delivery.js');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -55,7 +56,7 @@ let repoDataPromise = null;
  * click (scanning real repos "takes a moment", per the comment this replaces) and reused for
  * validating a coordinator's spawn-request `cwd` too. Caches the in-flight promise, not the
  * resolved value, so two calls that race before the first scan finishes still only trigger one.
- * Nothing in this phase can add a folder at runtime, so there is no invalidation yet -- add one
+ * Nothing can add a folder at runtime, so there is no invalidation yet -- add one
  * when Configuracion can.
  */
 function getRepoData() {
@@ -366,6 +367,15 @@ function wireAgents(win) {
     if (running.has(agentId)) return { error: 'el agente todavia esta vivo' };
     worktree.removeWorktree(agentId);
     return true;
+  });
+
+  ipcMain.handle('desk:delivered', () => delivery.listDeliveries());
+  ipcMain.handle('desk:deliver', async (_ev, opts) => {
+    const res = await delivery.deliverAgent(opts || {});
+    if (res.ok && res.delivery) {
+      registry.note(opts.agentId, 'AgentDelivered', res.delivery);
+    }
+    return res;
   });
 }
 
