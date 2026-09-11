@@ -34,6 +34,7 @@ const coordinator = require('./coordinator.js');
 const paths = require('./paths.js');
 const worktree = require('./worktree.js');
 const { getScheduledTasks } = require('./scheduled-tasks.js');
+const { scanSkills } = require('./skills.js');
 const delivery = require('./delivery.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -48,21 +49,53 @@ const spawnRequestWatchers = new Map();
 /** @type {Registry} */
 let registry;
 
+const fs = require('node:fs');
+
 /** @type {Promise<{accounts: object[], repos: object[]}>|null} */
 let repoDataPromise = null;
 
+function readCachedRepos() {
+  try {
+    if (fs.existsSync(paths.reposCache)) {
+      return JSON.parse(fs.readFileSync(paths.reposCache, 'utf8'));
+    }
+  } catch { /* ignore corrupted cache */ }
+  return null;
+}
+
+function writeCachedRepos(data) {
+  try {
+    fs.writeFileSync(paths.reposCache, JSON.stringify(data), 'utf8');
+  } catch { /* best effort */ }
+}
+
 /**
- * The accounts/repos scan, computed at most once per run instead of on every "abrir coordinador"
- * click (scanning real repos "takes a moment", per the comment this replaces) and reused for
- * validating a coordinator's spawn-request `cwd` too. Caches the in-flight promise, not the
- * resolved value, so two calls that race before the first scan finishes still only trigger one.
- * Nothing can add a folder at runtime, so there is no invalidation yet -- add one
- * when Configuracion can.
+ * The accounts/repos scan. Reads from cache immediately if present so window startup
+ * doesn't wait 19s for 70+ git spawns. In the background, scanRepos refreshes the cache
+ * and notifies the window.
  */
 function getRepoData() {
   if (!repoDataPromise) {
-    const accountsConfig = readAccountsConfig();
-    repoDataPromise = scanRepos(accountsConfig).then((repos) => ({ accounts: buildAccounts(), repos }));
+    const cached = readCachedRepos();
+    if (cached && Array.isArray(cached.repos) && cached.repos.length > 0) {
+      repoDataPromise = Promise.resolve({ accounts: buildAccounts(), repos: cached.repos });
+      const accountsConfig = readAccountsConfig();
+      scanRepos(accountsConfig).then((repos) => {
+        writeCachedRepos({ repos });
+        const fresh = { accounts: buildAccounts(), repos };
+        repoDataPromise = Promise.resolve(fresh);
+        const [win] = BrowserWindow.getAllWindows();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('desk:patch', { repoData: fresh });
+        }
+      }).catch(() => {});
+    } else {
+      const accountsConfig = readAccountsConfig();
+      repoDataPromise = scanRepos(accountsConfig).then((repos) => {
+        writeCachedRepos({ repos });
+        return { accounts: buildAccounts(), repos };
+      });
+    }
   }
   return repoDataPromise;
 }
@@ -128,6 +161,7 @@ function createWindow() {
     // running unpackaged with `npm start`.
     icon: path.join(ROOT, 'assets', 'icon.ico'),
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -135,6 +169,13 @@ function createWindow() {
       sandbox: true,
     },
   });
+
+  win.once('ready-to-show', () => {
+    win.show();
+  });
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+  }, 1000);
 
   win.loadURL('app://desk/index.html');
   if (process.argv.includes('--devtools')) win.webContents.openDevTools({ mode: 'bottom' });
@@ -169,8 +210,8 @@ function createWindow() {
  * @param {import('electron').BrowserWindow} win
  */
 function wireAgents(win) {
-  registry = new Registry((agents) => {
-    if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents });
+  registry = new Registry((agents, usage) => {
+    if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage });
   });
   const scheduler = new Scheduler();
 
@@ -202,6 +243,22 @@ function wireAgents(win) {
   // Scanning 71 real repos takes a moment; the renderer asks for this once on load, not on
   // every repaint, and getRepoData() caches the scan itself so re-invoking this handler is cheap.
   ipcMain.handle('desk:repos', () => getRepoData());
+
+  ipcMain.handle('desk:usage', () => registry.getUsage());
+
+  ipcMain.handle('desk:setAccountColor', async (_ev, { accountId, color }) => {
+    const { updateAccountColor, buildAccounts } = require('./accounts.js');
+    const ok = updateAccountColor(accountId, color);
+    if (ok) {
+      const accounts = buildAccounts();
+      if (repoDataPromise) {
+        const current = await repoDataPromise;
+        current.accounts = accounts;
+      }
+      return { ok: true, accounts };
+    }
+    return { ok: false };
+  });
 
   const ALLOWED_ENGINES = new Set(['claude', 'agy', 'claude.exe', 'agy.exe']);
 
@@ -361,6 +418,7 @@ function wireAgents(win) {
   // Unlike getRepoData(), never memoized: these are cheap fs reads, and the data changes in the
   // background whenever Claude Desktop or Antigravity fire or reschedule a task, outside this app.
   ipcMain.handle('desk:scheduledTasks', () => getScheduledTasks());
+  ipcMain.handle('desk:skills', () => scanSkills());
 
   ipcMain.handle('desk:worktrees', () => worktree.listWorktrees());
   ipcMain.handle('desk:reapWorktree', (_ev, agentId) => {

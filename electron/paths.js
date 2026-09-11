@@ -35,6 +35,7 @@ const paths = {
   agents: path.join(HOME, 'agents'),
 
   deliveries: path.join(HOME, 'deliveries.json'),
+  reposCache: path.join(HOME, 'repos-cache.json'),
 
   /** @param {string} id */
   agent(id) {

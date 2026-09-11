@@ -63,6 +63,13 @@ export function renderRepoTree(state, data) {
   const visible = repos.filter((r) => matches(r, state, agentRepos));
 
   const rows = [];
+  if (!data.getAccounts().length && !repos.length) {
+    rows.push(`
+    <div style="padding:24px 12px;text-align:center;font:400 11px var(--font-body);color:var(--color-dark-text-3)">
+      <div class="r-antenna" style="width:10px;height:10px;border-radius:50%;background:var(--color-lilac);margin:0 auto 8px"></div>
+      <div>Escaneando repositorios…</div>
+    </div>`);
+  }
   for (const acc of data.getAccounts()) {
     const mine = visible.filter((r) => r.accountId === acc.id);
     const total = repos.filter((r) => r.accountId === acc.id).length;
