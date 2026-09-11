@@ -202,6 +202,8 @@ function wireAgents(win) {
   // every repaint, and getRepoData() caches the scan itself so re-invoking this handler is cheap.
   ipcMain.handle('desk:repos', () => getRepoData());
 
+  const ALLOWED_ENGINES = new Set(['claude', 'agy', 'claude.exe', 'agy.exe']);
+
   /**
    * The one path that gates and spawns a worker, whether the request came from the window's own
    * `desk:spawn` IPC or from a coordinator's spawn-request file. One code path means the cap
@@ -212,10 +214,27 @@ function wireAgents(win) {
    * @param {string} [o.conversationId]
    * @param {string} [o.replyTo]  the coordinator's agent id, when this worker was spawned on its
    *   behalf rather than directly from the window
-   * @param {'read'|'write'} [o.mode]
+   * @param {'read'|'write'|'plan'|'auto'} [o.mode]
+   * @param {string} [o.bin]
+   * @param {string} [o.engine]
+   * @param {string} [o.model]
+   * @param {string} [o.effort]
    * @returns {Promise<string | { error: string }>}
    */
-  async function spawnWorker({ cwd, task, conversationId, replyTo, mode }) {
+  async function spawnWorker({ cwd, task, conversationId, replyTo, mode, bin, engine, model, effort }) {
+    const rawBin = bin || engine || 'claude';
+    const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
+
+    try {
+      const { engineFor, validateAndSanitizeParams } = require('./agent.js');
+      validateAndSanitizeParams({ engine: engineFor(effectiveBin), mode, model, effort });
+    } catch (err) {
+      const reason = err.message;
+      registry.note(conversationId || 'scheduler', 'SpawnRefused', { reason, cwd, task });
+      if (replyTo) registry.notifyCoordinator(replyTo, 'scheduler', `pedido rechazado: ${reason}`);
+      return { error: reason };
+    }
+
     // A path from anywhere other than the window's own trusted call must never reach `spawn`
     // unchecked (see agent.js's TRUST_PROMPT doc comment) — a coordinator's spawn-request is
     // exactly that "anywhere else", so its cwd is checked against the real, registered repos
@@ -262,21 +281,24 @@ function wireAgents(win) {
       cwd,
       task,
       mode,
+      bin: effectiveBin,
+      model,
+      effort,
       systemPrompt: workerSystemPrompt,
       ...wireLifecycle(() => id),
       onNotice: (kind, detail) => registry.note(id, kind, detail),
     });
     running.set(id, agent);
-    registry.register(agent, { conversationId, replyTo });
+    registry.register(agent, { conversationId, replyTo, model: agent.model, effort: agent.effort, mode: agent.mode });
     return id;
   }
 
-  ipcMain.handle('desk:spawn', (_ev, { cwd, task, conversationId }) => spawnWorker({ cwd, task, conversationId }));
+  ipcMain.handle('desk:spawn', (_ev, opts) => spawnWorker(opts || {}));
 
   ipcMain.handle('desk:conversations', () => conv.listConversations());
   ipcMain.handle('desk:createConversation', (_ev, o) => conv.createConversation(o));
 
-  ipcMain.handle('desk:spawnCoordinator', async (_ev, { conversationId }) => {
+  ipcMain.handle('desk:spawnCoordinator', async (_ev, { conversationId, bin, engine, model, effort, mode } = {}) => {
     const conversation = conv.getConversation(conversationId);
     if (!conversation) return { error: `conversacion desconocida: ${conversationId}` };
     // A coordinator is a real PTY process in the same `running` map the global cap is measured
@@ -286,6 +308,17 @@ function wireAgents(win) {
       registry.note(conversationId, 'SpawnRefused', { reason: gate.reason });
       return { error: gate.reason };
     }
+    const rawBin = bin || engine || 'claude';
+    const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
+
+    try {
+      const { engineFor, validateAndSanitizeParams } = require('./agent.js');
+      validateAndSanitizeParams({ engine: engineFor(effectiveBin), mode, model, effort });
+    } catch (err) {
+      registry.note(conversationId, 'SpawnRefused', { reason: err.message });
+      return { error: err.message };
+    }
+
     const { repos } = await getRepoData();
 
     const agent = coordinator.spawnCoordinator({
@@ -293,6 +326,10 @@ function wireAgents(win) {
       conversation,
       repos,
       spawn,
+      bin: effectiveBin,
+      model,
+      effort,
+      mode,
       ...wireLifecycle(() => agent.id, (id) => {
         spawnRequestWatchers.get(id)?.close();
         spawnRequestWatchers.delete(id);
@@ -300,10 +337,11 @@ function wireAgents(win) {
       onNotice: (kind, detail) => registry.note(agent.id, kind, detail),
     });
     running.set(agent.id, agent);
-    registry.register(agent, { conversationId, role: 'coordinator' });
+    registry.register(agent, { conversationId, role: 'coordinator', model: agent.model, effort: agent.effort, mode: agent.mode });
 
     const watcher = coordinator.watchSpawnRequests(conversationId, (req) => spawnWorker({
       cwd: req.cwd, task: req.objective, conversationId, replyTo: agent.id, mode: req.mode,
+      bin: req.bin || req.engine, model: req.model, effort: req.effort,
     }));
     spawnRequestWatchers.set(agent.id, watcher);
 

@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('desk', {
 
   /**
    * Start an agent on a repo. Returns its id, or `{ error }` if the scheduler refused it.
-   * @param {{cwd: string, task: string, conversationId?: string}} o
+   * @param {{cwd?: string, task: string, conversationId?: string, bin?: string, engine?: string, model?: string, effort?: string, mode?: 'write'|'read'|'plan'|'auto'}} o
    */
   spawn: (o) => ipcRenderer.invoke('desk:spawn', o),
 
@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld('desk', {
   /**
    * Start a conversation's coordinator: a real CLI agent whose only job is to break down work
    * and delegate, never to edit code itself. Returns its agent id, or `{ error }`.
-   * @param {{conversationId: string}} o
+   * @param {{conversationId: string, bin?: string, engine?: string, model?: string, effort?: string, mode?: 'write'|'read'|'plan'|'auto'}} o
    */
   spawnCoordinator: (o) => ipcRenderer.invoke('desk:spawnCoordinator', o),
 

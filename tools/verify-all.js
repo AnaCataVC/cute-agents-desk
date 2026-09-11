@@ -29,6 +29,7 @@ const FAST = [
   'verify-discovery.js',
   'verify-live-repo-data.mjs',
   'verify-scheduled-tasks.js',
+  'verify-models-effort-modes.js',
 ];
 
 const MANUAL = [

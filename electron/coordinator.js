@@ -35,9 +35,9 @@ function buildCoordinatorPrompt(conversation, repos) {
     'Para delegar una tarea, escribe un archivo JSON en:',
     `  ${path.join(p.dir, 'spawn-requests')}\\<nombre-unico>.json`,
     'con esta forma exacta:',
-    '  { "objective": "que debe lograr", "cwd": "<ruta absoluta del repo>", "mode": "read"|"write" }',
-    '"cwd" tiene que ser la ruta absoluta de uno de los repos de la lista de arriba. "mode" es',
-    'opcional (por defecto escribe).',
+    '  { "objective": "que debe lograr", "cwd": "<ruta absoluta del repo>", "mode": "write"|"plan"|"auto"|"read", "engine": "claude"|"agy", "model": "<modelo>", "effort": "low"|"medium"|"high" }',
+    '"cwd" tiene que ser la ruta absoluta de uno de los repos de la lista de arriba. "mode",',
+    '"engine", "model" y "effort" son opcionales (por defecto escribe con el motor predeterminado).',
     '',
     `Tu tope: a lo mas ${conversation.cap} workers vivos a la vez en esta conversacion. Un pedido`,
     'que se pase del tope se rechaza -- espera a que baje el numero de workers vivos antes de',
@@ -61,12 +61,16 @@ function buildCoordinatorPrompt(conversation, repos) {
  * @param {{id: string, cap: number}} o.conversation
  * @param {Array<{name: string, accountGh: string, branch: string, path: string}>} o.repos
  * @param {typeof import('./agent.js').spawn} o.spawn
+ * @param {string} [o.bin]
+ * @param {string} [o.model]
+ * @param {string} [o.effort]
+ * @param {'write'|'read'|'plan'|'auto'} [o.mode]
  * @param {(chunk: string) => void} [o.onOutput]
  * @param {(code: number) => void} [o.onExit]
  * @param {(kind: string, detail: object) => void} [o.onNotice]
  * @returns {{ id: string } & ReturnType<typeof import('./agent.js').spawn>}
  */
-function spawnCoordinator({ conversationId, conversation, repos, spawn, onOutput, onExit, onNotice }) {
+function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, model, effort, mode, onOutput, onExit, onNotice }) {
   const dir = conv.conversationPaths(conversationId).dir;
   fs.mkdirSync(dir, { recursive: true });
   const id = `co${Date.now().toString(36).slice(-5)}`;
@@ -74,6 +78,10 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, onOutput
     id,
     cwd: dir,
     task: 'Empieza: revisa tu system prompt y decide en que repos delegar trabajo.',
+    bin,
+    model,
+    effort,
+    mode,
     systemPrompt: buildCoordinatorPrompt(conversation, repos),
     // The conversation folder is never a git repo, so a worktree here would always fail to
     // create — skip the doomed `git rev-parse` call and the spurious error log entirely.
@@ -94,7 +102,7 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, onOutput
  * and `watchOutbox` in `events.js`, typed straight into this coordinator's own live terminal
  * rather than routed through a file here.
  * @param {string} conversationId
- * @param {(req: {objective: string, cwd: string, mode?: 'read'|'write'}) => (boolean|void|Promise<any>)} onRequest
+ * @param {(req: {objective: string, cwd: string, mode?: 'read'|'write'|'plan'|'auto', bin?: string, engine?: string, model?: string, effort?: string}) => (boolean|void|Promise<any>)} onRequest
  *   a `false` return leaves the request file in place for the next drain instead of consuming it
  * @returns {{ close: () => void }}
  */
@@ -102,7 +110,12 @@ function watchSpawnRequests(conversationId, onRequest) {
   const dir = path.join(conv.conversationPaths(conversationId).dir, 'spawn-requests');
   return watchJsonQueue(dir, () => drainJsonQueue(dir, (req) => {
     if (!req || !req.objective || !req.cwd) return false;
-    return onRequest({ objective: req.objective, cwd: req.cwd, mode: req.mode });
+    const item = { objective: req.objective, cwd: req.cwd, mode: req.mode };
+    if (req.bin) item.bin = req.bin;
+    if (req.engine) item.engine = req.engine;
+    if (req.model) item.model = req.model;
+    if (req.effort) item.effort = req.effort;
+    return onRequest(item);
   }));
 }
 

@@ -121,18 +121,78 @@ function resolveBin(bin) {
   throw new Error(`no se encontro "${bin}" en el PATH`);
 }
 
+const VALID_EFFORTS_CLAUDE = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const VALID_EFFORTS_AGY = new Set(['low', 'medium', 'high']);
+const MODEL_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,99}$/;
+
+/**
+ * Validate and normalize execution mode, model, and reasoning effort per engine.
+ * @param {object} o
+ * @param {'claude'|'agy'} o.engine
+ * @param {string} [o.mode]
+ * @param {string} [o.model]
+ * @param {string} [o.effort]
+ * @returns {{ normMode: 'write'|'read'|'plan'|'auto', normModel?: string, normEffort?: string }}
+ */
+function validateAndSanitizeParams({ engine, mode = 'write', model, effort }) {
+  let normMode = (mode || 'write').toLowerCase();
+  if (normMode === 'planning') normMode = 'plan';
+
+  if (normMode === 'auto') {
+    if (engine === 'agy') {
+      throw new Error('el motor agy no soporta el modo "auto" (modos validos: write, plan, read)');
+    }
+  } else if (!['write', 'read', 'plan'].includes(normMode)) {
+    throw new Error(`modo no reconocido: "${mode}" (modos validos: write, plan, auto, read)`);
+  }
+
+  let normModel;
+  if (model && model !== 'default' && typeof model === 'string') {
+    const trimmed = model.trim();
+    if (trimmed && trimmed !== 'default') {
+      if (trimmed.startsWith('-') || !MODEL_REGEX.test(trimmed)) {
+        throw new Error(`nombre de modelo invalido o no permitido: "${model}"`);
+      }
+      normModel = trimmed;
+    }
+  }
+
+  let normEffort;
+  if (effort && effort !== 'default' && typeof effort === 'string') {
+    const trimmed = effort.trim().toLowerCase();
+    if (trimmed && trimmed !== 'default') {
+      if (engine === 'agy') {
+        if (!VALID_EFFORTS_AGY.has(trimmed)) {
+          throw new Error(`el motor agy no soporta el nivel de esfuerzo "${effort}" (niveles validos: low, medium, high)`);
+        }
+      } else {
+        if (!VALID_EFFORTS_CLAUDE.has(trimmed)) {
+          throw new Error(`el motor claude no soporta el nivel de esfuerzo "${effort}" (niveles validos: low, medium, high, xhigh, max)`);
+        }
+      }
+      normEffort = trimmed;
+    }
+  }
+
+  return { normMode: /** @type {'write'|'read'|'plan'|'auto'} */ (normMode), normModel, normEffort };
+}
+
 /**
  * Spawn an agent.
  * @param {object} o
  * @param {string} o.id
  * @param {string} o.cwd            the repo it works in
  * @param {string} o.task           what it is asked to do, submitted as the first prompt
- * @param {'read'|'write'} [o.mode] defaults to 'write'; 'read' denies Edit/Write/NotebookEdit at
+ * @param {'read'|'write'|'plan'|'auto'} [o.mode] defaults to 'write'; 'read' denies Edit/Write/NotebookEdit at
  *                                  the hook, so a task mislabeled read-only cannot mutate the repo.
  *                                  'write' runs inside a fresh `git worktree` on its own
  *                                  `agent/<id>` branch instead of `cwd` directly (see
- *                                  `worktree.js`), falling back to `cwd` if one can't be made
+ *                                  `worktree.js`), falling back to `cwd` if one can't be made.
+ *                                  'plan' runs in planning mode without worktree.
+ *                                  'auto' runs claude in autonomous permission mode.
  * @param {string} [o.bin]          defaults to `claude` on PATH
+ * @param {string} [o.model]        optional model override (alias or ID)
+ * @param {string} [o.effort]       optional reasoning effort override
  * @param {string} [o.systemPrompt] appended to the CLI's own system prompt via
  *                                  `--append-system-prompt`, instead of replacing it. Absent by
  *                                  default, which keeps every existing caller byte-identical.
@@ -146,7 +206,7 @@ function resolveBin(bin) {
  * @param {(code: number) => void} [o.onExit]
  * @param {(kind: string, detail: object) => void} [o.onNotice]  things the harness did on its own
  */
-function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, worktree: useWorktree = true, onOutput, onExit, onNotice }) {
+function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, systemPrompt, worktree: useWorktree = true, onOutput, onExit, onNotice }) {
   // Required lazily so the rest of the app (and the smoke check) still runs if the native
   // module is missing — a broken node-pty should not mean a blank window.
   const pty = require('node-pty');
@@ -154,6 +214,8 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, wo
   fs.mkdirSync(dirs.inbox, { recursive: true });
 
   const engine = engineFor(bin);
+  const { normMode, normModel, normEffort } = validateAndSanitizeParams({ engine, mode, model, effort });
+
   let effectiveCwd = cwd;
   let args;
 
@@ -170,15 +232,18 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, wo
     // leaving it as an untraceable MODULE_NOT_FOUND inside agy's own process.
     if (/\s/.test(paths.hookScript)) onNotice?.('AgyHookPathHasSpace', { hookScript: paths.hookScript });
     fs.writeFileSync(dirs.agyHooks, JSON.stringify(agyHooksFor(), null, 2));
-    args = ['-i', task, '--add-dir', cwd]
-      .concat(mode === 'write' ? ['--mode', 'accept-edits'] : []);
+    args = ['-i', task, '--add-dir', cwd];
+    if (normMode === 'write') args.push('--mode', 'accept-edits');
+    else if (normMode === 'plan') args.push('--mode', 'plan');
+    if (normModel) args.push('--model', normModel);
+    if (normEffort) args.push('--effort', normEffort);
   } else {
     // Write agents get their own worktree so parallel tasks on the same repo never collide and
-    // a task's changes stay isolated on their own branch until reviewed. Read agents never need
+    // a task's changes stay isolated on their own branch until reviewed. Read and plan agents never need
     // this — the hook already denies Edit/Write/NotebookEdit for them — and a worktree that
     // can't be created (cwd isn't a git repo, e.g. the toy repo in some tests) degrades to
     // running in cwd directly rather than failing the whole spawn.
-    if (mode === 'write' && useWorktree) {
+    if (normMode === 'write' && useWorktree) {
       try {
         effectiveCwd = worktree.createWorktree(cwd, id);
       } catch (err) {
@@ -192,20 +257,20 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, wo
       }
     }
     fs.writeFileSync(dirs.settings, JSON.stringify(settingsFor(id), null, 2));
-    args = [task, '--settings', dirs.settings]
-      // Edits inside the repo go through without asking; anything that leaves the machine does
-      // not, and the harness — not the agent — is what pushes. In read mode this flag is moot —
-      // the hook denies Edit/Write/NotebookEdit outright — but acceptEdits would still let other
-      // side-effecting tools through without a prompt, so read mode keeps the CLI's own default
-      // (ask) as a second layer instead of loosening it for a mode meant to be the strict one.
-      .concat(mode === 'write' ? ['--permission-mode', 'acceptEdits'] : []);
+    args = [task, '--settings', dirs.settings];
+    if (normMode === 'write') args.push('--permission-mode', 'acceptEdits');
+    else if (normMode === 'plan') args.push('--permission-mode', 'plan');
+    else if (normMode === 'auto') args.push('--permission-mode', 'auto');
+    if (normModel) args.push('--model', normModel);
+    if (normEffort) args.push('--effort', normEffort);
   }
   // `--append-system-prompt` is claude-only (unconfirmed whether agy has an equivalent) — never
   // pass an unverified flag to a CLI, so it's silently dropped for agy rather than guessed at.
   args = args.concat(systemPrompt && engine === 'claude' ? ['--append-system-prompt', systemPrompt] : []);
 
   fs.writeFileSync(dirs.manifest, JSON.stringify({
-    id, cwd, worktreeCwd: effectiveCwd, task, mode, bin, engine, startedAt: new Date().toISOString(),
+    id, cwd, worktreeCwd: effectiveCwd, task, mode: normMode, bin, engine,
+    model: normModel, effort: normEffort, startedAt: new Date().toISOString(),
   }, null, 2));
 
   const term = pty.spawn(resolveBin(bin), args, {
@@ -213,7 +278,7 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, wo
     cols: 120,
     rows: 30,
     cwd: effectiveCwd,
-    env: agentEnv({ agentId: id, mode }),
+    env: agentEnv({ agentId: id, mode: normMode }),
     useConpty: true,
   });
 
@@ -254,6 +319,9 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, wo
     worktreeCwd: effectiveCwd,
     task,
     engine,
+    mode: normMode,
+    model: normModel || undefined,
+    effort: normEffort || undefined,
     pid: term.pid,
     /** @param {string} text */
     write(text) { term.write(text); },
@@ -267,4 +335,4 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, wo
   };
 }
 
-module.exports = { spawn, trustDialogFor };
+module.exports = { spawn, trustDialogFor, validateAndSanitizeParams, engineFor };

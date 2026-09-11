@@ -118,6 +118,9 @@ class Registry {
       repo: path.basename(agent.cwd),
       task: agent.task,
       engine: agent.engine,
+      mode: agent.mode || opts.mode || 'write',
+      model: agent.model || opts.model || null,
+      effort: agent.effort || opts.effort || null,
       pid: agent.pid,
       state: 'spawning',
       tool: 'arrancando',
@@ -133,7 +136,7 @@ class Registry {
     this.handles.set(agent.id, { write: agent.write, kill: agent.kill });
     this.watch(agent.id);
     this.watchOutbox(agent.id);
-    this.append({ event: 'AgentSpawned', at: new Date().toISOString(), agentId: agent.id, payload: { cwd: agent.cwd, task: agent.task, pid: agent.pid, tokenCap: opts.tokenCap, replyTo: opts.replyTo, role: opts.role } });
+    this.append({ event: 'AgentSpawned', at: new Date().toISOString(), agentId: agent.id, payload: { cwd: agent.cwd, task: agent.task, pid: agent.pid, tokenCap: opts.tokenCap, replyTo: opts.replyTo, role: opts.role, mode: agent.mode || opts.mode || 'write', model: agent.model || opts.model || null, effort: agent.effort || opts.effort || null } });
     if (opts.replyTo) this.notifyCoordinator(opts.replyTo, agent.id, `arranco en ${path.basename(agent.cwd)}: ${agent.task}`);
     this.publish();
   }
