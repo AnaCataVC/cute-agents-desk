@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Shell: state, the five tabs, and one delegated event handler.
+ * Shell: state, the six tabs, and one delegated event handler.
  *
  * Components are pure `render(state, data) -> html` functions. Interaction happens through
  * `data-act` attributes, dispatched here — so a re-render never has to rebind anything,
@@ -14,12 +14,14 @@ import { renderAgentPanel } from './agent-card.js';
 import { renderFlows } from './boss-graph.js';
 import { renderEditor } from './editor.js';
 import { renderUsage } from './tokens-view.js';
+import { renderScheduledTasks } from './scheduled-tasks-view.js';
 import { renderConfig } from './config.js';
 import { renderDialogs } from './dialogs.js';
+import { esc } from './esc.js';
 
 /** @type {Record<string, any>} */
 const state = {
-  view: 'dispatch',            // dispatch | flows | editor | usage | config
+  view: 'dispatch',            // dispatch | flows | editor | usage | scheduled | config
   flowView: 'detail',          // detail | compact
   cfgTab: 'accounts',
   open: {},                     // repo tree, expanded nodes
@@ -45,6 +47,7 @@ const state = {
   newConvTitle: '',
   newConvTopic: '',
   tick: 0,
+  error: null,                 // last IPC refusal (scheduler cap, still-alive agent, ...), or null
 };
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -87,6 +90,7 @@ const ACTIONS = {
   },
   openQueue: (repo) => { state.queue = repo ?? ''; },
   closeQueue: () => { state.queue = null; },
+  submitQueue: () => { state.queue = null; },
   openScan: (accountId) => { state.scan = accountId; },
   closeScan: () => { state.scan = null; },
   scanDepth: (d) => { state.scanDepth = Number(d); },
@@ -106,8 +110,15 @@ const ACTIONS = {
       .then(() => window.desk.conversations())
       .then((conversations) => { data.setLiveConversations(conversations); render(); });
   },
-  /** Fire-and-forget: the coordinator's own card shows up once it reports in, like any agent. */
-  openCoordinator: (conversationId) => { window.desk?.spawnCoordinator?.({ conversationId }); },
+  dismissError: () => { state.error = null; },
+
+  /** The coordinator's own card shows up once it reports in, like any agent -- a rejection
+   * (scheduler cap full) is the one outcome worth telling the user about right away. */
+  openCoordinator: (conversationId) => {
+    window.desk?.spawnCoordinator?.({ conversationId }).then((result) => {
+      if (result?.error) { state.error = result.error; render(); }
+    });
+  },
   // Declared but inert until the main process owns them: archiving and closing sessions are
   // its calls, not the window's.
   archive: () => {},
@@ -116,16 +127,18 @@ const ACTIONS = {
   /** Manual reap, per the plan: never automatic, so losing an agent's uncommitted work is never
    * a side effect of something else finishing. The IPC handler itself refuses a still-live agent. */
   reapWorktree: (agentId) => {
-    window.desk?.reapWorktree?.(agentId)
-      .then(() => window.desk.worktrees())
-      .then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
+    window.desk?.reapWorktree?.(agentId).then((result) => {
+      if (result?.error) { state.error = result.error; render(); return; }
+      return window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
+    });
   },
 
   /** Phase 1: one real agent on the toy repo, which is what the whole plumbing is proving. */
   spawnTest: async () => {
-    await window.desk.spawn({
+    const result = await window.desk.spawn({
       task: 'Lee el README y agrega una linea al final que diga la hora actual. Nada mas.',
     });
+    if (result?.error) { state.error = result.error; render(); }
   },
   stopAgent: (id) => window.desk.stop(id),
 };
@@ -166,7 +179,7 @@ document.addEventListener('keydown', (ev) => {
 
 const TABS = [
   ['dispatch', 'Control de agentes'], ['flows', 'Flujos de trabajo'], ['editor', 'Editor'],
-  ['usage', 'Uso'], ['config', 'Configuración'],
+  ['usage', 'Uso'], ['scheduled', 'Tareas programadas'], ['config', 'Configuración'],
 ];
 
 function header() {
@@ -175,7 +188,7 @@ function header() {
   const accounts = data.getAccounts().map((a) => `
     <div style="display:flex;align-items:center;gap:7px">
       <span style="width:9px;height:9px;border-radius:2px;background:${a.color}"></span>
-      <span style="font:500 11px var(--font-body,Inter);color:var(--color-dark-text-2)">${a.name} · ${a.folders[0].path}</span>
+      <span style="font:500 11px var(--font-body,Inter);color:var(--color-dark-text-2)">${a.name} · ${a.folders?.[0]?.path || '(sin carpetas)'}</span>
     </div>`).join('');
 
   return `
@@ -197,6 +210,16 @@ function header() {
   </div>`;
 }
 
+function errorBanner() {
+  if (!state.error) return '';
+  return `
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:9px 14px;
+       background:var(--who-system-bg);border:1px solid var(--state-blocked);border-radius:var(--radius-md)">
+    <span style="font:500 11.5px var(--font-body);color:var(--state-blocked)">${esc(state.error)}</span>
+    <button class="btn-ghost" data-act="dismissError" style="margin-left:auto;font-size:11px">Cerrar</button>
+  </div>`;
+}
+
 function dispatch() {
   return `
   <div style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start">
@@ -210,6 +233,7 @@ const VIEWS = {
   flows: () => renderFlows(state, data),
   editor: () => renderEditor(state, data),
   usage: () => renderUsage(state, data),
+  scheduled: () => renderScheduledTasks(state, data),
   config: () => renderConfig(state, data),
 };
 
@@ -241,11 +265,25 @@ function paint() {
     <div style="display:flex;align-items:flex-start">
       ${renderSidebar(state, data)}
       <div style="flex:1;min-width:0;max-width:1440px;margin:0 auto;padding:22px 26px 40px">
+        ${errorBanner()}
         ${header()}
         ${(VIEWS[state.view] || dispatch)()}
       </div>
     </div>
     ${renderDialogs(state, data)}`;
+}
+
+/**
+ * At most one repaint per animation frame, however many patches land inside it. Without this, a
+ * chatty agent's raw PTY output — forwarded chunk by chunk, independent of and often far more
+ * frequent than any one tick — was rebuilding the whole app on every single chunk. The data is
+ * still applied immediately below; only the (expensive) painting is coalesced.
+ */
+let renderScheduled = false;
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(() => { renderScheduled = false; render(); });
 }
 
 /**
@@ -257,7 +295,7 @@ if (window.desk?.isDesk) {
   window.desk.subscribe((patch) => {
     if (patch.agents) data.setLiveAgents(patch.agents);
     if (patch.output) data.pushOutput(patch.output.id, patch.output.chunk);
-    render();
+    scheduleRender();
   });
   window.desk.agents().then((agents) => {
     if (agents.length) { data.setLiveAgents(agents); render(); }
@@ -267,6 +305,16 @@ if (window.desk?.isDesk) {
   window.desk.repos().then((repoData) => { data.setLiveRepoData(repoData); render(); });
   window.desk.conversations().then((conversations) => { data.setLiveConversations(conversations); render(); });
   window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
+  window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
+
+  // Unlike repos/worktrees/conversations, this reflects files Claude Desktop and Antigravity
+  // write in the background -- fetch-once-on-load would go stale the moment either reschedules,
+  // so it gets its own poll, cheap fs reads only, and only while the tab is actually open.
+  setInterval(() => {
+    if (state.view === 'scheduled') {
+      window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
+    }
+  }, 5000);
 }
 
 // The clock the artboard runs: elapsed times and the live rate tick without touching anything else.

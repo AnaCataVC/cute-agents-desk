@@ -14,16 +14,16 @@ import * as data from '../ui/data.js';
 
 const accounts = [
   { id: 'work-account', name: 'work-account', email: 'a@b.com', color: 'var(--color-mint)',
-    folders: [{ path: 'C:/Users/dev/Work/Repositories', depth: 3 }] },
+    folders: [{ path: 'C:/Users/mockuser/Work/Repositories', depth: 3 }] },
   { id: 'personal-account', name: 'personal-account', email: 'c@d.com', color: 'var(--color-lilac)',
-    folders: [{ path: 'C:/Users/dev/Repos', depth: 2 }] },
+    folders: [{ path: 'C:/Users/mockuser/Repos', depth: 2 }] },
 ];
 const repos = [
-  { path: 'C:/Users/dev/Work/Repositories/external/munder-difflin', name: 'munder-difflin',
-    accountGh: 'work-account', folder: 'C:/Users/dev/Work/Repositories',
+  { path: 'C:/Users/mockuser/Work/Repositories/external/munder-difflin', name: 'munder-difflin',
+    accountGh: 'work-account', folder: 'C:/Users/mockuser/Work/Repositories',
     branch: 'main', dirty: false, remote: 'git@github.com:x/munder-difflin.git', mismatch: false },
-  { path: 'C:/Users/dev/Repos/cute-agents-desk', name: 'cute-agents-desk',
-    accountGh: 'personal-account', folder: 'C:/Users/dev/Repos',
+  { path: 'C:/Users/mockuser/Repos/cute-agents-desk', name: 'cute-agents-desk',
+    accountGh: 'personal-account', folder: 'C:/Users/mockuser/Repos',
     branch: 'main', dirty: true, remote: null, mismatch: false },
 ];
 
@@ -39,7 +39,7 @@ const nested = gotRepos.find((r) => r.name === 'munder-difflin');
 // The exact bug this test exists to catch: a repo nested two levels under its declared root
 // (external/munder-difflin) must still carry the ROOT as its `folder`, not its filesystem parent
 // (`.../external`), because that root is the only string repo-tree.js groups by.
-assert.strictEqual(nested.folder, 'C:/Users/dev/Work/Repositories',
+assert.strictEqual(nested.folder, 'C:/Users/mockuser/Work/Repositories',
   'un repo anidado debe quedar etiquetado con la raiz declarada, no con su carpeta padre real');
 assert.strictEqual(nested.accountId, 'work-account');
 assert.strictEqual(nested.noRemote, false);

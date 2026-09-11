@@ -50,7 +50,7 @@ function filterBlock(state, data, visibleCount) {
     <div style="display:flex;flex-wrap:wrap;gap:6px">${stChips}</div>
     <div style="display:flex;align-items:center;gap:10px;margin-top:13px;padding-top:11px;
          border-top:1px solid var(--color-dark-border)">
-      <span class="mono" style="font-size:10.5px;color:var(--color-dark-text-3)">${visibleCount} de 65 repos</span>
+      <span class="mono" style="font-size:10.5px;color:var(--color-dark-text-3)">${visibleCount} de ${data.getRepos().length} repos</span>
       <button class="chip" data-act="clearFilters" style="margin-left:auto">Limpiar</button>
     </div>
   </div>`;
@@ -81,7 +81,7 @@ export function renderRepoTree(state, data) {
 
     if (!open) continue;
 
-    for (const folder of acc.folders) {
+    for (const folder of (acc.folders || [])) {
       const kids = mine.filter((r) => r.folder === folder.path);
       if (!kids.length) continue;
       const fOpen = !!state.open[folder.path];

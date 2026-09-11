@@ -15,6 +15,12 @@ const conv = require('./conversations.js');
 const { toolNameOf } = require('./tool-name.js');
 const { drainJsonQueue, watchJsonQueue } = require('./json-queue.js');
 
+/** How long a done/failed agent stays visible (in the live grid, in its conversation's
+ * status.json) after it exits, before its record is dropped for good. Long enough to see the
+ * final state; short enough that a long session spawning many short-lived workers does not grow
+ * this map by one entry per agent ever spawned, for the app's entire lifetime. */
+const TERMINAL_RETENTION_MS = 5 * 60 * 1000;
+
 /**
  * Event → state. The mapping is the whole state machine, so it lives in one table instead of
  * a chain of ifs across the file.
@@ -277,6 +283,13 @@ class Registry {
     this.handles.delete(id);
     this.append({ event: 'AgentExited', at: new Date().toISOString(), agentId: id, payload: { code } });
     this.publish();
+    // Kept in `this.agents` long enough for this publish (and status.json) to show the terminal
+    // state, then dropped -- runningInConversation() already ignores done/failed agents, so this
+    // is purely about not growing the map forever, not about the cap.
+    setTimeout(() => {
+      this.agents.delete(id);
+      this.publish();
+    }, TERMINAL_RETENTION_MS).unref();
   }
 
   /**

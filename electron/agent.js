@@ -138,11 +138,15 @@ function resolveBin(bin) {
  *                                  default, which keeps every existing caller byte-identical.
  *                                  claude-only: silently dropped for agy, whose equivalent (if
  *                                  any) was never confirmed.
+ * @param {boolean} [o.worktree]    defaults to true; set false for a write-mode agent whose `cwd`
+ *                                  is known not to be a git repo (e.g. the coordinator's own
+ *                                  conversation folder), so it skips the doomed worktree attempt
+ *                                  instead of failing it on every spawn.
  * @param {(chunk: string) => void} [o.onOutput]
  * @param {(code: number) => void} [o.onExit]
  * @param {(kind: string, detail: object) => void} [o.onNotice]  things the harness did on its own
  */
-function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, onOutput, onExit, onNotice }) {
+function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, worktree: useWorktree = true, onOutput, onExit, onNotice }) {
   // Required lazily so the rest of the app (and the smoke check) still runs if the native
   // module is missing — a broken node-pty should not mean a blank window.
   const pty = require('node-pty');
@@ -161,6 +165,10 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, on
     // oversight, until worktree.js grows a variant that doesn't assume cwd == the repo.
     effectiveCwd = dirs.dir;
     fs.mkdirSync(dirs.agyHooksDir, { recursive: true });
+    // agyHooksFor() cannot quote this path (see its own doc comment on why), so a space in it
+    // breaks agy's hook invocation silently -- surface that as a harness event instead of
+    // leaving it as an untraceable MODULE_NOT_FOUND inside agy's own process.
+    if (/\s/.test(paths.hookScript)) onNotice?.('AgyHookPathHasSpace', { hookScript: paths.hookScript });
     fs.writeFileSync(dirs.agyHooks, JSON.stringify(agyHooksFor(), null, 2));
     args = ['-i', task, '--add-dir', cwd]
       .concat(mode === 'write' ? ['--mode', 'accept-edits'] : []);
@@ -170,11 +178,17 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', systemPrompt, on
     // this — the hook already denies Edit/Write/NotebookEdit for them — and a worktree that
     // can't be created (cwd isn't a git repo, e.g. the toy repo in some tests) degrades to
     // running in cwd directly rather than failing the whole spawn.
-    if (mode === 'write') {
+    if (mode === 'write' && useWorktree) {
       try {
         effectiveCwd = worktree.createWorktree(cwd, id);
       } catch (err) {
         console.error(`no se pudo crear el worktree para "${id}" en "${cwd}": ${err.message}`);
+        onNotice?.('WorktreeCreationFailed', { id, cwd, error: err.message });
+        if (err.message.includes('no es un repo git')) {
+          effectiveCwd = cwd;
+        } else {
+          throw err;
+        }
       }
     }
     fs.writeFileSync(dirs.settings, JSON.stringify(settingsFor(id), null, 2));

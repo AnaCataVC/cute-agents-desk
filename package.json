@@ -10,10 +10,13 @@
     "dev": "electron . --devtools",
     "smoke": "electron . --smoke",
     "icon": "electron tools/make-ico.js",
+    "test": "node tools/verify-all.js",
     "verify": "electron tools/verify-phase1.js",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "rebuild": "electron-rebuild -f -w node-pty"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "electron": "^44.3.0",
     "electron-builder": "^26.0.12"
   },

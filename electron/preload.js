@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('desk', {
   /** Retained write-mode worktrees, listed for the manual "reap" button — none are ever deleted on their own. */
   worktrees: () => ipcRenderer.invoke('desk:worktrees'),
 
+  /** Recurring tasks Claude Desktop and Antigravity have scheduled on this machine, outside this app — read-only. */
+  scheduledTasks: () => ipcRenderer.invoke('desk:scheduledTasks'),
+
   /** @param {string} agentId  refused with `{error}` while that agent is still alive */
   reapWorktree: (agentId) => ipcRenderer.invoke('desk:reapWorktree', agentId),
 

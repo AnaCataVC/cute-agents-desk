@@ -1,7 +1,10 @@
 // @ts-check
 /** Two ways to shell out to git, depending on whether a failure is exceptional or just "no answer". */
 
-const { execFileSync } = require('node:child_process');
+const { execFile, execFileSync } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Throws on failure -- for git calls whose result the caller actually depends on (creating or
@@ -24,4 +27,26 @@ function tryGit(cwd, args) {
   catch { return null; }
 }
 
-module.exports = { git, tryGit };
+/**
+ * Non-blocking twins of the two above, for callers that run many of these per scan
+ * (`discovery.js`, `worktree.js`'s `listWorktrees`) and must not freeze the Electron main thread
+ * for the sum of every git spawn. execFile never inherits stdio to this process, so there is no
+ * `stdio` option to repeat here the way `tryGit` needs one.
+ * @param {string} cwd @param {string[]} args
+ */
+async function gitAsync(cwd, args) {
+  const { stdout } = await execFileAsync('git', args, { cwd, encoding: 'utf8' });
+  return stdout.trim();
+}
+
+/** @param {string} cwd @param {string[]} args */
+async function tryGitAsync(cwd, args) {
+  try {
+    const { stdout } = await execFileAsync('git', args, { cwd, encoding: 'utf8' });
+    return stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { git, tryGit, gitAsync, tryGitAsync };

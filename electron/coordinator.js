@@ -75,6 +75,9 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, onOutput
     cwd: dir,
     task: 'Empieza: revisa tu system prompt y decide en que repos delegar trabajo.',
     systemPrompt: buildCoordinatorPrompt(conversation, repos),
+    // The conversation folder is never a git repo, so a worktree here would always fail to
+    // create — skip the doomed `git rev-parse` call and the spurious error log entirely.
+    worktree: false,
     onOutput,
     onExit,
     onNotice,
@@ -91,14 +94,15 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, onOutput
  * and `watchOutbox` in `events.js`, typed straight into this coordinator's own live terminal
  * rather than routed through a file here.
  * @param {string} conversationId
- * @param {(req: {objective: string, cwd: string, mode?: 'read'|'write'}) => void} onRequest
+ * @param {(req: {objective: string, cwd: string, mode?: 'read'|'write'}) => (boolean|void|Promise<any>)} onRequest
+ *   a `false` return leaves the request file in place for the next drain instead of consuming it
  * @returns {{ close: () => void }}
  */
 function watchSpawnRequests(conversationId, onRequest) {
   const dir = path.join(conv.conversationPaths(conversationId).dir, 'spawn-requests');
   return watchJsonQueue(dir, () => drainJsonQueue(dir, (req) => {
     if (!req || !req.objective || !req.cwd) return false;
-    onRequest({ objective: req.objective, cwd: req.cwd, mode: req.mode });
+    return onRequest({ objective: req.objective, cwd: req.cwd, mode: req.mode });
   }));
 }
 

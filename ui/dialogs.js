@@ -84,7 +84,7 @@ function queueDialog(state, data) {
     <div style="display:flex;gap:9px;justify-content:flex-end;padding:13px 18px;
          border-top:1px solid var(--color-dark-border);background:var(--app-surface-sunken)">
       <button class="btn-ghost" data-act="closeQueue">Cancelar</button>
-      <button class="btn-primary" style="padding:9px 18px">Encolar</button>
+      <button class="btn-primary" data-act="submitQueue" style="padding:9px 18px">Encolar</button>
     </div>`, 560, 'closeQueue');
 }
 

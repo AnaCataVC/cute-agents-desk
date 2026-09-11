@@ -18,9 +18,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { git } = require('./git.js');
+const { git, gitAsync } = require('./git.js');
+const paths = require('./paths.js');
 
-const WT_ROOT = path.join(os.homedir(), '.cute-agents-desk', 'wt');
+const WT_ROOT = path.join(paths.home, 'wt');
 const MANIFEST_NAME = 'worktree.json';
 
 /** @param {string} agentId */
@@ -91,37 +92,47 @@ function removeWorktree(agentId) {
 
 /**
  * `worktree.json` itself must never count as "uncommitted work" — it is harness bookkeeping,
- * not something the agent wrote.
+ * not something the agent wrote. Compares the exact filename, not just a line's tail: a real
+ * file that merely ends in the same suffix (e.g. `src/other-worktree.json`) must still count.
  * @param {string} porcelain
  */
 function hasRealChanges(porcelain) {
-  return porcelain.split('\n').some((line) => line.trim() && !line.trim().endsWith(MANIFEST_NAME));
+  return porcelain.split('\n').some((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    // Porcelain v1: two status chars, a space, then the path (a rename adds " -> newpath").
+    const filePath = trimmed.slice(2).trim().split(' -> ').pop();
+    return path.basename(filePath) !== MANIFEST_NAME;
+  });
 }
 
 /**
- * @returns {Array<{agentId: string, repoPath: string|null, branch: string|null, createdAt: string|null, hasUncommittedChanges: boolean, hasUnpushedCommits: boolean}>}
+ * @returns {Promise<Array<{agentId: string, repoPath: string|null, branch: string|null, createdAt: string|null, hasUncommittedChanges: boolean, hasUnpushedCommits: boolean}>>}
  */
 function listWorktrees() {
   let entries;
   try {
     entries = fs.readdirSync(WT_ROOT, { withFileTypes: true }).filter((e) => e.isDirectory());
   } catch {
-    return [];
+    return Promise.resolve([]);
   }
 
-  return entries.map(({ name: agentId }) => {
+  // One git spawn per worktree ran serially used to block the main thread for the sum of all of
+  // them; running them together, through the async git helper, keeps the app responsive while a
+  // long retained-worktree list is being inspected.
+  return Promise.all(entries.map(async ({ name: agentId }) => {
     const worktreeDir = worktreeDirFor(agentId);
     const manifest = readManifest(agentId);
 
     let hasUncommittedChanges = true; // fail toward conserving when we can't tell
     try {
-      hasUncommittedChanges = hasRealChanges(git(worktreeDir, ['status', '--porcelain']));
+      hasUncommittedChanges = hasRealChanges(await gitAsync(worktreeDir, ['status', '--porcelain']));
     } catch { /* keep the conservative default */ }
 
     let hasUnpushedCommits = true; // same: an unresolvable base branch reads as "assume unpushed"
     if (manifest && manifest.baseBranch) {
       try {
-        const count = git(worktreeDir, ['rev-list', `${manifest.baseBranch}..HEAD`, '--count']);
+        const count = await gitAsync(worktreeDir, ['rev-list', `${manifest.baseBranch}..HEAD`, '--count']);
         hasUnpushedCommits = Number(count) > 0;
       } catch { /* keep the conservative default */ }
     }
@@ -134,7 +145,7 @@ function listWorktrees() {
       hasUncommittedChanges,
       hasUnpushedCommits,
     };
-  });
+  }));
 }
 
 module.exports = { createWorktree, removeWorktree, listWorktrees, worktreeDirFor };

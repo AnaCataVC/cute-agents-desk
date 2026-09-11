@@ -33,6 +33,7 @@ const conv = require('./conversations.js');
 const coordinator = require('./coordinator.js');
 const paths = require('./paths.js');
 const worktree = require('./worktree.js');
+const { getScheduledTasks } = require('./scheduled-tasks.js');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -45,6 +46,25 @@ const spawnRequestWatchers = new Map();
 
 /** @type {Registry} */
 let registry;
+
+/** @type {Promise<{accounts: object[], repos: object[]}>|null} */
+let repoDataPromise = null;
+
+/**
+ * The accounts/repos scan, computed at most once per run instead of on every "abrir coordinador"
+ * click (scanning real repos "takes a moment", per the comment this replaces) and reused for
+ * validating a coordinator's spawn-request `cwd` too. Caches the in-flight promise, not the
+ * resolved value, so two calls that race before the first scan finishes still only trigger one.
+ * Nothing in this phase can add a folder at runtime, so there is no invalidation yet -- add one
+ * when Configuracion can.
+ */
+function getRepoData() {
+  if (!repoDataPromise) {
+    const accountsConfig = readAccountsConfig();
+    repoDataPromise = scanRepos(accountsConfig).then((repos) => ({ accounts: buildAccounts(), repos }));
+  }
+  return repoDataPromise;
+}
 
 // `standard` is what makes it a real origin (so modules and fetch behave); `secure` puts it
 // on the same footing as https for the features that check.
@@ -90,7 +110,7 @@ function smoke(win) {
     if (errors.length) console.error(errors.join('\n'));
     // `agents` and `repos` are just logged, not asserted: zero of either is the correct render
     // when no agent is running and no account/folder has been configured yet -- not a failure.
-    app.exit(found.tabs === 5 && errors.length === 0 ? 0 : 1);
+    app.exit(found.tabs === 6 && errors.length === 0 ? 0 : 1);
   });
 }
 
@@ -122,6 +142,14 @@ function createWindow() {
   // background shell reports nonsense for its own size, but "did the page load and paint
   // the tabs" is answerable without looking at it.
   if (process.argv.includes('--smoke')) smoke(win);
+
+  // Prevent renderer from navigating away from the application
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url !== 'app://desk/index.html') {
+      event.preventDefault();
+      if (/^https?:/.test(url)) shell.openExternal(url);
+    }
+  });
 
   // A PR link or a report belongs in the real browser, not in a window with no address bar.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -171,11 +199,8 @@ function wireAgents(win) {
   ipcMain.handle('desk:agents', () => registry.list());
 
   // Scanning 71 real repos takes a moment; the renderer asks for this once on load, not on
-  // every repaint, so there is no reason to cache it here too.
-  ipcMain.handle('desk:repos', () => {
-    const accountsConfig = readAccountsConfig();
-    return { accounts: buildAccounts(), repos: scanRepos(accountsConfig) };
-  });
+  // every repaint, and getRepoData() caches the scan itself so re-invoking this handler is cheap.
+  ipcMain.handle('desk:repos', () => getRepoData());
 
   /**
    * The one path that gates and spawns a worker, whether the request came from the window's own
@@ -188,9 +213,22 @@ function wireAgents(win) {
    * @param {string} [o.replyTo]  the coordinator's agent id, when this worker was spawned on its
    *   behalf rather than directly from the window
    * @param {'read'|'write'} [o.mode]
-   * @returns {string | { error: string }}
+   * @returns {Promise<string | { error: string }>}
    */
-  function spawnWorker({ cwd, task, conversationId, replyTo, mode }) {
+  async function spawnWorker({ cwd, task, conversationId, replyTo, mode }) {
+    // A path from anywhere other than the window's own trusted call must never reach `spawn`
+    // unchecked (see agent.js's TRUST_PROMPT doc comment) — a coordinator's spawn-request is
+    // exactly that "anywhere else", so its cwd is checked against the real, registered repos
+    // before it can become a real process's cwd.
+    if (cwd && cwd !== toyRepo()) {
+      const { repos } = await getRepoData();
+      if (!repos.some((r) => r.path === cwd)) {
+        const reason = `"${cwd}" no es uno de los repos registrados`;
+        registry.note(conversationId || 'scheduler', 'SpawnRefused', { reason, cwd, task });
+        if (replyTo) registry.notifyCoordinator(replyTo, 'scheduler', `pedido rechazado: ${reason}`);
+        return { error: reason };
+      }
+    }
     const conversation = conversationId && conv.getConversation(conversationId);
     const convGate = conversation
       ? { cap: conversation.cap, running: conv.runningInConversation(conversationId, registry.agents) }
@@ -200,6 +238,10 @@ function wireAgents(win) {
     const gate = scheduler.canSpawn(running.size, convGate);
     if (!gate.ok) {
       registry.note(conversationId || 'scheduler', 'SpawnRefused', { reason: gate.reason, cwd, task });
+      // Without this, a refused delegation just vanishes: no worker starts and the coordinator's
+      // own terminal never says why, contradicting the "no insistas con el mismo archivo" line in
+      // its own prompt, which assumes it can see the refusal.
+      if (replyTo) registry.notifyCoordinator(replyTo, 'scheduler', `pedido rechazado: ${gate.reason}`);
       return { error: gate.reason };
     }
     cwd = cwd || toyRepo();
@@ -234,11 +276,17 @@ function wireAgents(win) {
   ipcMain.handle('desk:conversations', () => conv.listConversations());
   ipcMain.handle('desk:createConversation', (_ev, o) => conv.createConversation(o));
 
-  ipcMain.handle('desk:spawnCoordinator', (_ev, { conversationId }) => {
+  ipcMain.handle('desk:spawnCoordinator', async (_ev, { conversationId }) => {
     const conversation = conv.getConversation(conversationId);
     if (!conversation) return { error: `conversacion desconocida: ${conversationId}` };
-    const accountsConfig = readAccountsConfig();
-    const repos = scanRepos(accountsConfig);
+    // A coordinator is a real PTY process in the same `running` map the global cap is measured
+    // against — desk:spawn already gates on it, and this path was the one caller that didn't.
+    const gate = scheduler.canSpawn(running.size);
+    if (!gate.ok) {
+      registry.note(conversationId, 'SpawnRefused', { reason: gate.reason });
+      return { error: gate.reason };
+    }
+    const { repos } = await getRepoData();
 
     const agent = coordinator.spawnCoordinator({
       conversationId,
@@ -271,6 +319,10 @@ function wireAgents(win) {
 
   // Manual reap only, per the plan: a worktree is never deleted on its own, so losing an
   // agent's uncommitted work is never a side effect of something else finishing.
+  // Unlike getRepoData(), never memoized: these are cheap fs reads, and the data changes in the
+  // background whenever Claude Desktop or Antigravity fire or reschedule a task, outside this app.
+  ipcMain.handle('desk:scheduledTasks', () => getScheduledTasks());
+
   ipcMain.handle('desk:worktrees', () => worktree.listWorktrees());
   ipcMain.handle('desk:reapWorktree', (_ev, agentId) => {
     if (running.has(agentId)) return { error: 'el agente todavia esta vivo' };

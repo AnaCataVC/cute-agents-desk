@@ -11,14 +11,14 @@
 const assert = require('node:assert');
 const { trustDialogFor } = require('../electron/agent.js');
 
-for (const bin of ['claude', 'C:\\Users\\dev\\.local\\bin\\claude.exe']) {
+for (const bin of ['claude', 'C:\\Users\\mockuser\\.local\\bin\\claude.exe']) {
   const { engine, keys } = trustDialogFor(bin);
   assert.strictEqual(engine, 'claude', `"${bin}" deberia resolver a claude`);
   assert.deepStrictEqual(keys, ['\x1b[B', '\r'],
     'claude arranca en "No, exit": hace falta bajar una flecha antes de confirmar');
 }
 
-for (const bin of ['agy', 'C:\\Users\\dev\\AppData\\Local\\agy\\bin\\agy.exe']) {
+for (const bin of ['agy', 'C:\\Users\\mockuser\\AppData\\Local\\agy\\bin\\agy.exe']) {
   const { engine, keys } = trustDialogFor(bin);
   assert.strictEqual(engine, 'agy', `"${bin}" deberia resolver a agy`);
   assert.deepStrictEqual(keys, ['\r'],

@@ -7,7 +7,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { tryGit } = require('./git.js');
+const { tryGitAsync } = require('./git.js');
 
 // Noise a folder scan should never descend into: never a repo itself, and finding one nested
 // inside would either be someone else's dependency tree or this harness's own scratch space.
@@ -43,11 +43,15 @@ function findRepos(dir, depth) {
  *   parent, which for a nested repo (depth > 1) is a different, undeclared directory the UI
  *   never grouped anything by
  */
-function inspectRepo(repoPath, account, folderRoot) {
-  const branch = tryGit(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  const dirty = tryGit(repoPath, ['status', '--porcelain']);
-  const remote = tryGit(repoPath, ['remote', 'get-url', 'origin']);
-  const email = tryGit(repoPath, ['config', 'user.email']);
+async function inspectRepo(repoPath, account, folderRoot) {
+  // Four independent git spawns per repo -- run together instead of one after another, and
+  // through the async git helper so none of them blocks the Electron main thread while it waits.
+  const [branch, dirty, remote, email] = await Promise.all([
+    tryGitAsync(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    tryGitAsync(repoPath, ['status', '--porcelain']),
+    tryGitAsync(repoPath, ['remote', 'get-url', 'origin']),
+    tryGitAsync(repoPath, ['config', 'user.email']),
+  ]);
   return {
     path: repoPath,
     name: path.basename(repoPath),
@@ -65,17 +69,18 @@ function inspectRepo(repoPath, account, folderRoot) {
 
 /**
  * @param {Array<{gh: string, email?: string, folders: {path: string, depth: number}[]}>} accounts
+ * @returns {Promise<object[]>}
  */
 function scanRepos(accounts) {
-  const repos = [];
+  const jobs = [];
   for (const account of accounts) {
     for (const folder of account.folders) {
       for (const repoPath of findRepos(folder.path, folder.depth)) {
-        repos.push(inspectRepo(repoPath, account, folder.path));
+        jobs.push(inspectRepo(repoPath, account, folder.path));
       }
     }
   }
-  return repos;
+  return Promise.all(jobs);
 }
 
 module.exports = { inspectRepo, scanRepos };

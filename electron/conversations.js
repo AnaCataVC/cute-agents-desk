@@ -64,12 +64,20 @@ function getConversation(id) {
  * How many workers this conversation currently has alive — the number its own cap is checked
  * against. Takes the live count rather than reading it off disk, since status.json is a summary
  * for display, not the source of truth for scheduling (that's the registry, in memory).
+ *
+ * A done/failed agent stays in the registry for a while after it exits purely so the UI and
+ * status.json can still show its final state (see events.js's TERMINAL_RETENTION_MS) — it must
+ * never count against this cap, or a conversation that already finished its workers would stay
+ * refused until that retention window happens to lapse.
  * @param {string} id
- * @param {Map<string, {conversationId?: string}>} agents  the registry's live agents, keyed by id
+ * @param {Map<string, {conversationId?: string, state?: string}>} agents  the registry's live
+ *   agents, keyed by id
  */
 function runningInConversation(id, agents) {
   let n = 0;
-  for (const agent of agents.values()) if (agent.conversationId === id) n++;
+  for (const agent of agents.values()) {
+    if (agent.conversationId === id && agent.state !== 'done' && agent.state !== 'failed') n++;
+  }
   return n;
 }
 

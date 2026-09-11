@@ -35,12 +35,15 @@ const CLAUDE_WRITE_TOOLS = /^(Edit|Write|NotebookEdit)$/;
 // would never think to name. So agy inverts the check to an ALLOW-list of tools confirmed
 // read-only instead of a deny-list of tools confirmed to write — safer under the genuine
 // uncertainty about what else agy can call, at the cost of being stricter than claude's mode.
-const AGY_READONLY_TOOLS = /^(view_file|list_dir|grep_search|search_web|find)$/;
+const AGY_READONLY_TOOLS = /^(view_file|list_dir|grep_search|search_web|find|find_by_name|read_url_content|ask_question)$/;
 
 /** @param {object|null} payload @returns {boolean} */
 function isDeniedInReadMode(payload) {
   const name = toolNameOf(payload);
-  if (!name) return false;
+  // Fail closed: read mode exists to guarantee Edit/Write/NotebookEdit cannot run, so a payload
+  // this harness cannot even name (e.g. one hook.js's own JSON.parse below couldn't parse) must
+  // be denied, not waved through.
+  if (!name) return true;
   return payload?.toolCall ? !AGY_READONLY_TOOLS.test(name) : CLAUDE_WRITE_TOOLS.test(name);
 }
 
@@ -59,15 +62,16 @@ process.stdin.on('end', () => {
 
   if (event === 'PreToolUse') {
     const denied = process.env.CAD_MODE === 'read' && isDeniedInReadMode(payload);
+    const toolLabel = toolNameOf(payload) || 'herramienta no identificada';
     if (payload?.toolCall) {
       // agy's contract (hooks.md): PreToolUse output is JSON on stdout with a REQUIRED
       // `decision` field — unlike claude, an empty stdout is not a documented "allow", so every
       // PreToolUse call gets an explicit answer, not just the denied ones.
       process.stdout.write(JSON.stringify(denied
-        ? { decision: 'deny', reason: `modo lectura: ${toolNameOf(payload)} esta deshabilitado para este agente.` }
+        ? { decision: 'deny', reason: `modo lectura: ${toolLabel} esta deshabilitado para este agente.` }
         : { decision: 'allow' }));
     } else if (denied) {
-      process.stderr.write(`modo lectura: ${toolNameOf(payload)} esta deshabilitado para este agente.\n`);
+      process.stderr.write(`modo lectura: ${toolLabel} esta deshabilitado para este agente.\n`);
       process.exit(2);
     }
   }

@@ -83,7 +83,7 @@ function accountCard(ac, data) {
       <div style="display:flex;gap:6px;margin-left:auto">${SWATCHES.map((v) => swatchButton(ac, v)).join('')}</div>
     </div>
     <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-      ${ac.folders.map((f) => folderRow(f, data)).join('')}
+      ${(ac.folders || []).map((f) => folderRow(f, data)).join('')}
       <button class="btn-ghost" style="align-self:flex-start;margin-top:2px;border-style:dashed"
         data-act="openScan" data-arg="${ac.id}">Añadir carpeta…</button>
     </div>
