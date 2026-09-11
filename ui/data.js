@@ -46,6 +46,14 @@ export function setLiveRepoData({ accounts, repos }) {
 
 export function getAccounts() { return liveAccounts ?? []; }
 
+export function setAccounts(accounts) { liveAccounts = accounts; }
+
+export function updateAccountColor(accountId, color) {
+  if (!liveAccounts) return;
+  const acc = liveAccounts.find((a) => a.id === accountId);
+  if (acc) acc.color = color;
+}
+
 /** @type {object[]|null} null until the first scan of the external schedulers comes back;
  * distinct from "scanned, found none" for the same reason liveAccounts/liveRepos use null. */
 let liveScheduledTasks = null;
@@ -160,9 +168,6 @@ export function setLiveDelivered(list) { liveDelivered = Array.isArray(list) ? l
 /** @type {() => object[]} tasks with a merged/drafted PR -- delivered tasks */
 export function getDelivered() { return liveDelivered; }
 
-const agent = (id, repo, branch, accountId, state, tokens) => ({
-  id, repo, branch, accountId, state, tokens, ctxPct: Math.round(tokens / CONTEXT_CAP * 100),
-});
 
 /** @type {object[]} */
 let liveFlows = [];
@@ -234,27 +239,25 @@ export function getEngines() {
   ];
 }
 
+let liveSkills = null;
+/** @param {any[]} skills */
+export function setLiveSkills(skills) { liveSkills = Array.isArray(skills) ? skills : null; }
+
 /** Skills installed per engine, read from each CLI's own skills directory. */
 export function getEngineSkills() {
+  if (liveSkills) return liveSkills;
   return [
     {
       engine: 'claude cli', color: 'var(--color-lilac)', path: '~/.claude/skills',
-      rows: [
-        ['dwh-designer', 'diseño y gobierno de tablas BigQuery', 'v3', 'siempre'],
-        ['sql-queries', 'SQL por dialecto desde lenguaje natural', 'v2', 'siempre'],
-        ['dashboard-finder', 'catálogo de reportes y dashboards', 'v1', 'siempre'],
-        ['read-pdf', 'lectura y extracción de PDF', 'v4', 'a demanda'],
-        ['pastel-tech-ds', 'sistema de diseño de la marca', 'v1', 'a demanda'],
-      ],
+      installed: false, rows: [],
     },
     {
-      engine: 'agy cli', color: 'var(--color-blue)', path: '~/.agy/skills',
-      rows: [
-        ['dwh-designer', 'diseño y gobierno de tablas BigQuery', 'v3', 'siempre'],
-        ['sql-queries', 'SQL por dialecto desde lenguaje natural', 'v2', 'siempre'],
-        ['automatizaciones-query', 'consulta del catastro de flows', 'v2', 'a demanda'],
-        ['glossary-entry', 'entradas del glosario de negocio', 'v1', 'a demanda'],
-      ],
+      engine: 'agy cli', color: 'var(--color-blue)', path: '~/.gemini/config/skills',
+      installed: false, rows: [],
+    },
+    {
+      engine: 'agy cli (builtin)', color: 'var(--color-blue)', path: '~/.gemini/antigravity-cli/builtin/skills',
+      installed: false, rows: [],
     },
   ];
 }
@@ -286,29 +289,133 @@ export function setLiveDiffs(diffs) { liveDiffs = diffs || {}; }
  */
 export function getDiffs() { return liveDiffs; }
 
-export const SERIES_NO_DATA_FROM = 0;
+export const SERIES_NO_DATA_FROM = new Date().getHours() + 1;
+
+let liveServerUsage = null;
+/** @param {object} usage */
+export function setLiveUsage(usage) { liveServerUsage = usage; }
+
+function fmtTokens(n) {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)} M`;
+  if (n >= 1000) return `${Math.round(n / 1000)} k`;
+  return `${n} `;
+}
+
+function fmtCost(c) {
+  return `$${(c || 0).toFixed(2)}`;
+}
 
 /** The day's usage, per engine and per account. */
 export function getUsage() {
-  const accounts = getAccounts().map((a) => ({
-    name: a.name || a.id,
-    color: a.color || 'var(--color-lilac)',
-    tokens: '0 k',
-    cost: '$0.00',
-    share: 0,
-    claude: '0 k',
-    agy: '0 k',
-    claudeShare: 0,
-  }));
+  const agents = getAgents();
+
+  let claudeTokens = liveServerUsage?.claude?.tokens ?? 0;
+  let agyTokens = liveServerUsage?.agy?.tokens ?? 0;
+  let claudeCost = liveServerUsage?.claude?.costUsd ?? 0;
+  let agyCost = liveServerUsage?.agy?.costUsd ?? 0;
+
+  if (!liveServerUsage) {
+    for (const a of agents) {
+      if (a.engine.includes('agy')) {
+        agyTokens += (a.tokens || 0);
+        agyCost += (a.costUsd || 0);
+      } else {
+        claudeTokens += (a.tokens || 0);
+        claudeCost += (a.costUsd || 0);
+      }
+    }
+  }
+
+  const totalTokens = claudeTokens + agyTokens;
+  const totalCost = claudeCost + agyCost;
+
+  let rateClaude = 0;
+  let rateAgy = 0;
+  for (const a of agents) {
+    if (a.state === 'thinking' || a.state === 'tool') {
+      const mins = Math.max(0.2, (a.elapsed || 1) / 60);
+      const r = Math.round((a.tokens || 0) / mins);
+      if (a.engine.includes('agy')) rateAgy += r;
+      else rateClaude += r;
+    }
+  }
+  const rateTotal = rateClaude + rateAgy;
+
+  let riskClaude = 0;
+  let riskAgy = 0;
+  for (const a of agents) {
+    const pct = a.tokenCap > 0 ? (a.tokens / a.tokenCap) * 100 : 0;
+    if (pct >= 85) {
+      if (a.engine.includes('agy')) riskAgy++;
+      else riskClaude++;
+    }
+  }
+
+  const rawAccounts = getAccounts();
+  const byAcc = new Map();
+  for (const acc of rawAccounts) {
+    byAcc.set(acc.id, { tokens: 0, cost: 0, claudeTokens: 0, agyTokens: 0 });
+  }
+  for (const a of agents) {
+    if (a.accountId && byAcc.has(a.accountId)) {
+      const rec = byAcc.get(a.accountId);
+      rec.tokens += (a.tokens || 0);
+      rec.cost += (a.costUsd || 0);
+      if (a.engine.includes('agy')) rec.agyTokens += (a.tokens || 0);
+      else rec.claudeTokens += (a.tokens || 0);
+    }
+  }
+
+  const accounts = rawAccounts.map((a) => {
+    const rec = byAcc.get(a.id) || { tokens: 0, cost: 0, claudeTokens: 0, agyTokens: 0 };
+    const share = totalTokens > 0 ? rec.tokens / totalTokens : 0;
+    const claudeShare = rec.tokens > 0 ? rec.claudeTokens / rec.tokens : 0.5;
+    return {
+      name: a.name || a.id,
+      color: a.color || 'var(--color-lilac)',
+      tokens: fmtTokens(rec.tokens),
+      cost: fmtCost(rec.cost),
+      share,
+      claude: fmtTokens(rec.claudeTokens),
+      agy: fmtTokens(rec.agyTokens),
+      claudeShare,
+    };
+  });
+
+  const currentHour = new Date().getHours();
+  const series = Array(24).fill(0);
+  if (totalTokens > 0) {
+    series[currentHour] = Math.max(1, Math.round(totalTokens / 1000));
+  }
+
+  const claudeBudget = Math.min(1, claudeTokens / 1600000);
+  const agyBudget = Math.min(1, agyTokens / 900000);
+
   return {
-    today: { total: '0 k', claude: '0 k', agy: '0 k' },
-    cost: { total: '$0.00', claude: '$0.00', agy: '$0.00' },
-    rate: { total: 0, claude: 0, agy: 0 },
-    risk: { total: '0', claude: '0', agy: '0' },
-    series: Array(24).fill(0),
+    today: {
+      total: fmtTokens(totalTokens),
+      claude: fmtTokens(claudeTokens),
+      agy: fmtTokens(agyTokens),
+    },
+    cost: {
+      total: fmtCost(totalCost),
+      claude: fmtCost(claudeCost),
+      agy: fmtCost(agyCost),
+    },
+    rate: {
+      total: rateTotal,
+      claude: rateClaude,
+      agy: rateAgy,
+    },
+    risk: {
+      total: String(riskClaude + riskAgy),
+      claude: String(riskClaude),
+      agy: String(riskAgy),
+    },
+    series,
     budgets: [
-      { engine: 'claude cli', used: 0, cap: '1.6 M', color: 'var(--color-lilac)' },
-      { engine: 'agy cli', used: 0, cap: '900 k', color: 'var(--color-blue)' },
+      { engine: 'claude cli', used: claudeBudget, cap: '1.6 M', color: 'var(--color-lilac)' },
+      { engine: 'agy cli', used: agyBudget, cap: '900 k', color: 'var(--color-blue)' },
     ],
     accounts,
   };

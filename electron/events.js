@@ -95,7 +95,12 @@ class Registry {
     /** @type {Map<string, {write: (t: string) => void, kill: () => void}>} live handles, kept
      * out of the published state — the token cap is the only reason the registry needs them */
     this.handles = new Map();
+    this.completedUsage = {
+      claude: { tokens: 0, costUsd: 0 },
+      agy: { tokens: 0, costUsd: 0 },
+    };
     paths.ensure();
+    this.loadTodayUsage();
   }
 
   /**
@@ -214,6 +219,7 @@ class Registry {
       Object.assign(agent, cleanUsage(readUsage(report.payload)));
       agent.raw = report.payload;
       this.enforceTokenCap(id, agent);
+      this.publish();
       return;
     }
 
@@ -270,6 +276,11 @@ class Registry {
   exited(id, code) {
     const agent = this.agents.get(id);
     if (!agent) return;
+    if (agent.tokens || agent.costUsd) {
+      const eng = agent.engine === 'agy' ? 'agy' : 'claude';
+      this.completedUsage[eng].tokens += (agent.tokens || 0);
+      this.completedUsage[eng].costUsd += (agent.costUsd || 0);
+    }
     if (agent.failReason === 'token-cap') {
       agent.tool = `sesión cerrada por tope de tokens (${agent.tokens}/${agent.tokenCap})`;
     } else {
@@ -320,8 +331,65 @@ class Registry {
     }));
   }
 
+  getUsage() {
+    let claudeTokens = this.completedUsage.claude.tokens;
+    let agyTokens = this.completedUsage.agy.tokens;
+    let claudeCost = this.completedUsage.claude.costUsd;
+    let agyCost = this.completedUsage.agy.costUsd;
+
+    for (const a of this.agents.values()) {
+      if (a.state === 'done' || a.state === 'failed') continue;
+      const eng = a.engine === 'agy' ? 'agy' : 'claude';
+      if (eng === 'agy') {
+        agyTokens += (a.tokens || 0);
+        agyCost += (a.costUsd || 0);
+      } else {
+        claudeTokens += (a.tokens || 0);
+        claudeCost += (a.costUsd || 0);
+      }
+    }
+
+    return {
+      claude: { tokens: claudeTokens, costUsd: claudeCost },
+      agy: { tokens: agyTokens, costUsd: agyCost },
+      total: { tokens: claudeTokens + agyTokens, costUsd: claudeCost + agyCost },
+    };
+  }
+
+  loadTodayUsage() {
+    try {
+      if (!fs.existsSync(paths.eventsLog)) return;
+      const todayPrefix = new Date().toISOString().slice(0, 10);
+      const lines = fs.readFileSync(paths.eventsLog, 'utf8').split('\n');
+      const latestAgentStatus = new Map();
+      const agentEngines = new Map();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const entry = JSON.parse(line);
+          if (!entry.at || !entry.at.startsWith(todayPrefix)) continue;
+          if (entry.event === 'AgentSpawned' && entry.agentId) {
+            const isAgy = (entry.payload?.bin || entry.payload?.engine || '').includes('agy');
+            agentEngines.set(entry.agentId, isAgy ? 'agy' : 'claude');
+          }
+          if (entry.event === 'Status' && entry.agentId && entry.payload) {
+            const u = readUsage(entry.payload);
+            latestAgentStatus.set(entry.agentId, u);
+          }
+        } catch { /* skip */ }
+      }
+
+      for (const [agentId, u] of latestAgentStatus) {
+        const eng = agentEngines.get(agentId) || 'claude';
+        this.completedUsage[eng].tokens += (u.tokens || 0);
+        this.completedUsage[eng].costUsd += (u.costUsd || 0);
+      }
+    } catch { /* convenience only */ }
+  }
+
   publish() {
-    this.onChange(this.list());
+    this.onChange(this.list(), this.getUsage());
     this.writeConversationStatuses();
   }
 
