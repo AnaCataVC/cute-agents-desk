@@ -1,0 +1,57 @@
+/* App tokens: the values the artboard uses that the design system does not name.
+   Every one of these is a surface or a state with meaning, so it gets a name here
+   instead of being pasted as a literal in a component. */
+:root {
+  /* Surfaces, darkest to lightest. --app-bg is the page behind the panels. */
+  --app-bg: #151223;
+  --app-surface-tree: #241F33;
+  --app-surface-agent: #242F33;
+  --app-surface-mine: #3A2E5C;
+  --app-on-accent: #2A1B5E;
+
+  /* Agent states. These five are the vocabulary of the whole dashboard: the card
+     border, the timeline bar and the graph edge all read from the same token. */
+  --state-thinking: #A855F7;
+  --state-tool: #C8F3E0;
+  --state-approval: #E9B872;
+  --state-blocked: #C23B6B;
+  --state-idle: #3F3760;
+
+  /* Accents used on gradients and links, from the artboard. */
+  --app-accent-mid: #A78BFA;
+  --app-dirty: #EFA9C4;
+
+  /* Sunken panels: the repo column and the unmounted terminal sit below the page. */
+  --app-surface-sunken: #1B1829;
+  /* A delivered task's row leans green-grey, away from the working palette. */
+  --app-surface-done: #20293A;
+  /* Body text inside the amber mismatch banner. */
+  --app-on-warning: #E3C79A;
+  /* An approval-state card leans warm, away from the working palette. */
+  --app-surface-approval: #332A2A;
+  /* The mounted terminal's screen, darker than any other surface in the app. */
+  --app-surface-terminal: #120F1C;
+
+  /* A skill that actually ran, on the deep-green ground the mint text needs to read. */
+  --app-skill-used: #0F7A5C;
+  /* Hours the day has not reached yet, on the usage chart. */
+  --app-no-data: #5A6478;
+  /* Diff grounds. Green and red only ever appear here, so they are not state colors. */
+  --app-diff-add: #16301F;
+  --app-diff-add-line: #7DDCA4;
+  --app-diff-del: #3A1622;
+  --app-diff-del-line: #EFA9C4;
+  --app-diff-gutter: #1B1829;
+
+  /* Author colors for the conversation thread. */
+  --who-boss: var(--color-lilac);
+  --who-boss-bg: var(--color-dark-surface);
+  --who-agent: var(--color-mint);
+  --who-agent-bg: var(--app-surface-agent);
+  --who-mine: var(--color-dark-text-1);
+  --who-mine-bg: var(--app-surface-mine);
+  --who-system: var(--state-approval);
+  --who-system-bg: #4A3A20;
+  --who-tool: var(--color-dark-text-3);
+  --who-tool-bg: var(--color-dark-bg);
+}

@@ -1,0 +1,25 @@
+/* Pastel-Tech design system — typography tokens.
+   The design system's Google Fonts @import is replaced by ../fonts/fonts.css, which
+   serves the same faces from disk so the page opens with no network at all. */
+@import "../fonts/fonts.css";
+
+:root {
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+
+  --fs-display: 56px;
+  --fs-h1: 34px;
+  --fs-h2: 24px;
+  --fs-subtitle: 18px;
+  --fs-body: 15px;
+  --fs-body-sm: 14px;
+  --fs-caption: 12px;
+
+  --lh-display: 1.08;
+  --lh-heading: 1.2;
+  --lh-body: 1.6;
+  --tracking-wide: 0.01em;
+}
+
+.font-display { font-family: var(--font-display); }

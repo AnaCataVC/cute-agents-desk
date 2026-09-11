@@ -1,0 +1,7 @@
+/* Pastel-Tech design system — motion tokens. */
+:root {
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 300ms;
+  --duration-slow: 800ms;
+}

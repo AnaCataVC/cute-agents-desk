@@ -1,0 +1,209 @@
+@import "tokens/colors.css";
+@import "tokens/typography.css";
+@import "tokens/spacing.css";
+@import "tokens/radius.css";
+@import "tokens/shadows.css";
+@import "tokens/motion.css";
+@import "tokens/app.css";
+
+/* ---- reset / page ---- */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--color-dark-text-1);
+  font-family: var(--font-body);
+}
+
+a { color: var(--color-lilac); text-decoration: none; }
+a:hover { color: var(--color-dark-accent); }
+
+button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-dark-border); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-dark-surface-2); }
+
+/* ---- the artboard's animation vocabulary ----
+   Motion means progress: a still element is a stopped agent, never a styling choice. */
+@keyframes breathe {
+  0%, 100% { box-shadow: inset 0 0 0 1px #7C4DD6; }
+  50% { box-shadow: inset 0 0 0 1px var(--color-lilac), 0 0 20px 1px rgba(168, 85, 247, .28); }
+}
+@keyframes tilePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, .5); }
+  70% { box-shadow: 0 0 0 5px rgba(168, 85, 247, 0); }
+}
+@keyframes flowDash { to { stroke-dashoffset: -24; } }
+@keyframes caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes ringSpin { to { transform: rotate(360deg); } }
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(.12); }
+}
+@keyframes antenna {
+  0%, 100% { opacity: .4; transform: scale(.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes scan {
+  0%, 100% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+}
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-24deg); }
+}
+
+/* The robot's moving parts. `transform-box: fill-box` is what makes a transform-origin
+   of `center` mean the glyph's own center rather than the whole SVG canvas. */
+.r-bob, .r-antenna, .r-blink, .r-wave {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.r-bob { animation: bob 3.6s ease-in-out infinite; }
+.r-antenna { animation: antenna 1.8s ease-in-out infinite; }
+.r-blink { animation: blink 4.6s step-end infinite; }
+.r-wave { transform-origin: 0% 100%; animation: wave 1.3s ease-in-out infinite; }
+
+/* Edges of the coordinator graph: dashes crawl while the agent works, freeze when stopped. */
+.edge-live { animation: flowDash 1.2s linear infinite; }
+
+/* The terminal's cursor. It blinks even on a stopped agent — it reports the shell is alive,
+   not that work is advancing, so it must not be confused with the progress animations. */
+.term-caret { animation: caret 1.1s step-end infinite; }
+
+/* ---- shared controls, from the artboard's repeated inline styles ---- */
+.tab {
+  padding: 5px 13px;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+  background: transparent;
+  color: var(--color-dark-text-3);
+  font: 500 11px var(--font-body);
+}
+.tab:hover { color: var(--color-dark-text-2); }
+.tab[aria-selected="true"] {
+  background: var(--color-dark-border);
+  color: var(--color-dark-text-1);
+  font-weight: 600;
+}
+
+.chip {
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  border: 1px solid var(--color-dark-border);
+  background: var(--color-dark-bg);
+  color: var(--color-dark-text-3);
+  font: 500 10.5px var(--font-body);
+}
+.chip[aria-pressed="true"] {
+  border-color: var(--color-dark-accent);
+  background: var(--app-surface-mine);
+  color: var(--color-dark-text-1);
+  font-weight: 600;
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--color-lilac), var(--app-accent-mid));
+  color: var(--app-on-accent);
+  font: 600 12.5px var(--font-body);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-soft), box-shadow var(--duration-fast) var(--ease-soft);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-glow); }
+
+.btn-ghost {
+  padding: 6px 12px;
+  border: 1px solid var(--color-dark-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-dark-text-2);
+  font: 500 10.5px var(--font-body);
+  cursor: pointer;
+}
+.btn-ghost:hover { border-color: var(--color-lilac); color: var(--color-dark-text-1); }
+
+.panel {
+  background: var(--color-dark-surface);
+  border: 1px solid var(--color-dark-border);
+  border-radius: var(--radius-lg);
+}
+
+/* A settings row is the same shape in all eight config sub-tabs. */
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  background: var(--color-dark-bg);
+  border: 1px solid var(--color-dark-border);
+  border-radius: 9px;
+  font: 400 11.5px var(--font-body);
+}
+.value-pill {
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  background: var(--color-dark-surface);
+  color: var(--color-dark-text-1);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.toggle-track {
+  display: inline-block;
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: var(--radius-full);
+  background: var(--color-dark-border);
+}
+.toggle-track[data-on="true"] { background: var(--color-dark-accent); }
+.toggle-knob {
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-dark-text-1);
+  transition: transform var(--duration-fast) var(--ease-soft);
+}
+.toggle-knob[data-on="true"] { transform: translateX(13px); }
+
+/* Diff rows in the editor. Monospace and a fixed line height, so the two panes align. */
+.diff-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); font-size: 11px; line-height: 1.75; }
+.diff-row > .ln {
+  padding-right: 8px;
+  text-align: right;
+  color: var(--color-dark-text-3);
+  background: var(--app-diff-gutter);
+  user-select: none;
+}
+.diff-row > .lt { padding: 0 9px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.diff-row[data-kind="add"] > .lt { background: var(--app-diff-add); color: var(--app-diff-add-line); }
+.diff-row[data-kind="del"] > .lt { background: var(--app-diff-del); color: var(--app-diff-del-line); }
+.diff-row[data-kind="pad"] > .lt { background: var(--app-surface-sunken); }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--color-dark-text-3); }
+
+/* Someone who asked the OS not to animate gets a still dashboard. The state colors
+   and labels already carry the meaning; the motion is a second, redundant channel. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

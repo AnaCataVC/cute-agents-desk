@@ -1,0 +1,58 @@
+/* Pastel-Tech design system — color tokens.
+   Copied from the design system project; the dark block is what this app runs on. */
+:root {
+  --color-lilac: #C7B8EA;
+  --color-lavender: #8F6FFF;
+  --color-pink: #F7C6D9;
+  --color-blue: #BCDFFB;
+  --color-mint: #C8F3E0;
+  --color-emerald-500: #10B981;
+  --color-emerald-400: #34D399;
+
+  --color-surface-app: #FDFBFF;
+  --color-surface-card: #FFFFFF;
+  --color-surface-sunken: #F6F3FC;
+  --color-border: #DAD7E8;
+  --color-border-strong: #C7B8EA;
+  --color-text-1: #3A3550;
+  --color-text-2: #6A6480;
+  --color-text-3: #8C86A0;
+  --color-error: #C23B6B;
+  --color-error-border: #EFA9C4;
+
+  --color-dark-bg: #1E1A2B;
+  --color-dark-surface: #2A243D;
+  --color-dark-surface-2: #342C4C;
+  --color-dark-border: #3F3760;
+  --color-dark-text-1: #FDFBFF;
+  --color-dark-text-2: #B7AECF;
+  --color-dark-text-3: #8F86AC;
+  --color-dark-accent: #A855F7;
+  --color-dark-icon: #C7B8EA;
+
+  --surface-app: var(--color-surface-app);
+  --surface-card: var(--color-surface-card);
+  --surface-sunken: var(--color-surface-sunken);
+  --border-subtle: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --text-primary: var(--color-text-1);
+  --text-secondary: var(--color-text-2);
+  --text-tertiary: var(--color-text-3);
+  --accent: var(--color-lavender);
+  --accent-soft: var(--color-lilac);
+  --success: var(--color-emerald-500);
+  --focus-ring: var(--color-lavender);
+}
+
+[data-theme="dark"] {
+  --surface-app: var(--color-dark-bg);
+  --surface-card: var(--color-dark-surface);
+  --surface-sunken: var(--color-dark-surface-2);
+  --border-subtle: var(--color-dark-border);
+  --border-strong: var(--color-dark-border);
+  --text-primary: var(--color-dark-text-1);
+  --text-secondary: var(--color-dark-text-2);
+  --text-tertiary: var(--color-dark-text-3);
+  --accent: var(--color-dark-accent);
+  --accent-soft: var(--color-dark-icon);
+}

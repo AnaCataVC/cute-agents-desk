@@ -1,0 +1,59 @@
+// @ts-check
+/**
+ * The seam between the window and the machine.
+ *
+ * The renderer never gets `require`, `fs` or a whole `ipcRenderer`: it gets named calls, so the
+ * list of things the window can ask the machine to do is this file, readable in full.
+ */
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('desk', {
+  /** True inside the app, absent when the same `ui/` is opened through a plain http server. */
+  isDesk: true,
+
+  /** Live agents with their derived state, as the cards need them. */
+  agents: () => ipcRenderer.invoke('desk:agents'),
+
+  /** The declared accounts and every repo found under their folders, scanned for real. */
+  repos: () => ipcRenderer.invoke('desk:repos'),
+
+  /** Every conversation folder, newest first. */
+  conversations: () => ipcRenderer.invoke('desk:conversations'),
+
+  /** @param {{title: string, topic?: string, cap?: number}} o */
+  createConversation: (o) => ipcRenderer.invoke('desk:createConversation', o),
+
+  /**
+   * Start an agent on a repo. Returns its id, or `{ error }` if the scheduler refused it.
+   * @param {{cwd: string, task: string, conversationId?: string}} o
+   */
+  spawn: (o) => ipcRenderer.invoke('desk:spawn', o),
+
+  /** @param {string} id */
+  stop: (id) => ipcRenderer.invoke('desk:stop', id),
+
+  /** Retained write-mode worktrees, listed for the manual "reap" button — none are ever deleted on their own. */
+  worktrees: () => ipcRenderer.invoke('desk:worktrees'),
+
+  /** @param {string} agentId  refused with `{error}` while that agent is still alive */
+  reapWorktree: (agentId) => ipcRenderer.invoke('desk:reapWorktree', agentId),
+
+  /**
+   * Start a conversation's coordinator: a real CLI agent whose only job is to break down work
+   * and delegate, never to edit code itself. Returns its agent id, or `{ error }`.
+   * @param {{conversationId: string}} o
+   */
+  spawnCoordinator: (o) => ipcRenderer.invoke('desk:spawnCoordinator', o),
+
+  /**
+   * Push channel for what the main process owns: agent state, and raw terminal output.
+   * Replaces the SSE stream the web version would have needed.
+   * @param {(patch: {agents?: object[], output?: {id: string, chunk: string}}) => void} onPatch
+   */
+  subscribe(onPatch) {
+    const handler = (_ev, patch) => onPatch(patch);
+    ipcRenderer.on('desk:patch', handler);
+    return () => ipcRenderer.off('desk:patch', handler);
+  },
+});

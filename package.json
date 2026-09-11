@@ -1,0 +1,48 @@
+{
+  "name": "cute-agents-desk",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Despacho local de agentes: coordinadores, repos y entregas",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --devtools",
+    "smoke": "electron . --smoke",
+    "icon": "electron tools/make-ico.js",
+    "verify": "electron tools/verify-phase1.js",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "cl.anacatavc.cute-agents-desk",
+    "productName": "Cute Agents Desk",
+    "files": [
+      "electron/**",
+      "ui/**",
+      "index.html",
+      "assets/icon.ico"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "portable": {
+      "artifactName": "CuteAgentsDesk-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "node-pty": "^1.1.0"
+  }
+}
