@@ -144,11 +144,11 @@ function scanDialog(state, data) {
       </div>
     </div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
-      ${field('Ruta', `<input type="text" value="~/dev/tarifas" style="${INPUT}">`)}
+      ${field('Ruta', `<input type="text" placeholder="~/ruta/a/repositorios" value="" style="${INPUT}">`)}
       ${field('Profundidad', `<div style="display:flex;gap:7px">${[1, 2, 3].map(depthChip).join('')}</div>`,
     'Más profundidad encuentra más repos y tarda más; los node_modules y .git anidados se saltan siempre')}
       ${field(`Repos encontrados · ${data.getScanCandidates().filter((c) => c.picked).length} de ${data.getScanCandidates().length}`,
-    `<div style="display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto">${rows}</div>`,
+    `<div style="display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto">${rows || '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0;text-align:center">Sin repositorios escaneados todavía.</div>'}</div>`,
     `último escaneo ${s.when} · ${s.took}`)}
     </div>
     <div style="display:flex;gap:9px;justify-content:flex-end;padding:13px 18px;

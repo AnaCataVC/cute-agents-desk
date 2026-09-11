@@ -74,7 +74,8 @@ function changeTree(state, diffs) {
       <div style="font:400 9.5px var(--font-body);color:var(--color-dark-text-3);margin-top:2px">
         lo que hay en los worktrees y todavía no es un PR</div>
     </div>
-    ${groups}
+    ${groups || `<div style="padding:18px 12px;text-align:center;font:400 11px var(--font-body);
+         color:var(--color-dark-text-3)">Sin cambios pendientes en los worktrees.</div>`}
   </div>`;
 }
 

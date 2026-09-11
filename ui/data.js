@@ -522,8 +522,8 @@ export function getSettings() {
       ['Aislar la configuración del agente', true],
       ['Serializar operaciones remotas', true],
       ['Reconciliar procesos al arrancar', true],
-      ['Puerto del panel', '4321'],
-      ['Token del panel por corrida', true],
+      ['Protocolo de ventana', 'app://desk'],
+      ['Instancia única de Electron', true],
     ],
   };
 }

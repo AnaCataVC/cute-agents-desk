@@ -133,7 +133,7 @@ function sessionTable(agents, usage) {
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:640px">
         <thead><tr>${th('sesión')}${th('motor')}${th('contexto')}${th('reparto')}${th('ritmo')}${th('costo', 'right')}</tr></thead>
-        <tbody>${agents.map((a) => sessionRow(a, usage)).join('')}</tbody>
+        <tbody>${agents.length ? agents.map((a) => sessionRow(a, usage)).join('') : '<tr><td colspan="6" style="padding:16px 10px;text-align:center;font:400 11px var(--font-body);color:var(--color-dark-text-3)">Sin sesiones activas en este momento</td></tr>'}</tbody>
       </table>
     </div>
   </div>`;
