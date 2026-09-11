@@ -19,6 +19,7 @@ yarn-error.log*
 # Environment & local settings
 .env
 .env*.local
+accounts.json
 
 # Operating System & IDE
 .DS_Store

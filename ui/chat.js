@@ -80,7 +80,8 @@ function infoBox(rows) {
 /** The status card: what this session is, right now — not a running transcript. */
 function fichaPanel(agent, states, skills, skillStates, data) {
   const st = states[agent.state] || states.idle;
-  const account = agent.accountId === 'work' ? 'simplit-work' : 'cata-personal';
+  const acc = (data?.getAccounts() || []).find((a) => a.id === agent.accountId);
+  const account = acc ? (acc.name || acc.id) : (agent.accountId || '—');
   const diff = data.getDiffs()[agent.id];
   const pct = Math.round((agent.tokens / agent.tokenCap) * 100);
   const mono = (v) => `<span class="mono" style="font-size:10.5px;color:var(--color-dark-text-1)">${esc(v)}</span>`;

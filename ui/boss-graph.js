@@ -178,10 +178,11 @@ function metaRow(flow) {
   </div>`;
 }
 
-function detailCard(flow, state, states) {
+function detailCard(flow, state, states, data) {
   const live = flow.roster.filter((a) => LIVE.includes(a.state));
   const parked = flow.roster.filter((a) => !LIVE.includes(a.state));
-  const account = flow.accountId === 'work' ? 'simplit-work' : 'cata-personal';
+  const acc = (data?.getAccounts() || []).find((a) => a.id === flow.accountId);
+  const account = acc ? (acc.name || acc.id) : (flow.accountId || '—');
 
   return `
   <div class="panel" style="padding:14px;position:relative">
@@ -249,10 +250,12 @@ function legend() {
   </div>`;
 }
 
-function toolbar(state, flows, total) {
+function toolbar(state, flows, total, accounts = []) {
   const compact = state.flowView === 'compact';
   const accChip = (id, label) => `<button class="chip" aria-pressed="${state.accFlow === id}"
     data-act="accFlow" data-arg="${id}">${label}</button>`;
+
+  const accountChips = accounts.map((a) => accChip(a.id, a.name || a.id)).join('');
 
   return `
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
@@ -267,7 +270,7 @@ function toolbar(state, flows, total) {
       style="width:212px;padding:6px 12px;border-radius:var(--radius-full);
              border:1px solid var(--color-dark-border);background:var(--color-dark-bg);
              color:var(--color-dark-text-1);font:400 11px var(--font-body)">
-    ${accChip('all', 'Todas')}${accChip('work', 'simplit-work')}${accChip('pers', 'cata-personal')}
+    ${accChip('all', 'Todas')}${accountChips}
     <button class="chip" aria-pressed="${state.showArch}" data-act="showArch">Ver archivados</button>
     <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${flows.length} de ${total}</span>
     <button class="btn-primary" data-act="openQueue" data-arg="" style="margin-left:auto">
@@ -278,6 +281,7 @@ function toolbar(state, flows, total) {
 /** @returns {string} */
 export function renderFlows(state, data) {
   const all = data.getFlows();
+  const accounts = data.getAccounts();
   const q = state.flowQuery.trim().toLowerCase();
 
   const flows = all.filter((f) => {
@@ -292,17 +296,20 @@ export function renderFlows(state, data) {
         ${flows.map((f) => compactCard(f, data.STATES)).join('')}
        </div>`
     : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
-        ${flows.map((f) => detailCard(f, state, data.STATES)).join('')}
+        ${flows.map((f) => detailCard(f, state, data.STATES, data)).join('')}
        </div>
        ${legend()}`;
 
-  const empty = flows.length ? '' : `
+  const empty = all.length === 0
+    ? `<div style="padding:48px 16px;text-align:center;font:400 12px var(--font-body);
+         color:var(--color-dark-text-3)">No hay flujos de trabajo ni coordinadores activos.</div>`
+    : (flows.length ? '' : `
     <div style="padding:34px;text-align:center;font:400 11.5px var(--font-body);
-         color:var(--color-dark-text-3)">Ningún coordinador calza con el filtro.</div>`;
+         color:var(--color-dark-text-3)">Ningún coordinador calza con el filtro.</div>`);
 
   return `
   <div>
-    ${toolbar(state, flows, all.length)}
+    ${toolbar(state, flows, all.length, accounts)}
     <div style="font:400 12px/1.6 var(--font-body);color:var(--color-dark-text-3);max-width:680px;margin-bottom:20px">
       Cada petición nueva crea un coordinador. Él decide en cuántas sesiones paralelas se divide el
       trabajo y abre una por cada agente, recibe sus reportes y consolida la entrega. Los agentes

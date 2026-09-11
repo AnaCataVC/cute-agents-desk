@@ -43,19 +43,21 @@ export function renderTerminal(state, data) {
     </div>`;
   }
 
-  const lines = data.getTerminalLines().map((l) => {
+  const rawLines = data.getTerminalLines();
+  const lines = rawLines.length ? rawLines.map((l) => {
     if (l.kind === 'cmd') {
       return `<div><span style="color:var(--color-mint)">$</span> ${esc(l.text)}</div>`;
     }
     if (l.kind === 'err') {
       return `<div style="color:var(--state-blocked)">${esc(l.text)}</div>`;
     }
-    // The caret is the only thing moving in a stopped terminal: it says the shell is alive,
-    // not that the agent is progressing.
     return `<div><span style="color:var(--color-mint)">$</span>
       <span class="term-caret" style="display:inline-block;width:7px;height:13px;
             background:var(--color-dark-text-2);vertical-align:-2px"></span></div>`;
-  }).join('');
+  }).join('') : `
+    <div style="padding:24px 14px;text-align:center;font:400 11px var(--font-body);color:var(--color-dark-text-3)">
+      Sin salida de terminal todavía para este proceso.
+    </div>`;
 
   return `
   <div style="background:var(--app-surface-sunken);border:1px solid var(--color-dark-border);

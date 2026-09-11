@@ -22,7 +22,7 @@ function settingsRow([label, value]) {
 }
 
 // Order and labels match the approved design (Despacho Local B.dc.html) exactly — this is not a
-// free grouping choice, it is what phase 0's screenshot comparison checks against.
+// free grouping choice, it is what the reference design checks against.
 const SUB_TABS = [
   ['accounts', 'Cuentas y rutas'], ['engines', 'Motores'], ['skills', 'Skills'],
   ['adv', 'Avanzado'], ['bosses', 'Coordinadores'],
@@ -91,6 +91,20 @@ function accountCard(ac, data) {
 }
 
 function mismatchPanel(mismatches) {
+  if (!mismatches.length) {
+    return `
+    <div class="panel" style="margin-top:18px;padding:16px;border-left:4px solid var(--color-mint)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font:600 12.5px var(--font-display);color:var(--color-mint)">Sin desajustes detectados</span>
+        <span style="font:600 10px var(--font-body);color:var(--app-on-accent);
+              background:var(--color-mint);padding:2px 7px;border-radius:var(--radius-full)">0</span>
+      </div>
+      <div style="font:400 11px/1.55 var(--font-body);color:var(--color-dark-text-3);margin-top:6px">
+        Todos los repositorios escaneados coinciden con el email de su cuenta asignada.
+      </div>
+    </div>`;
+  }
+
   return `
   <div class="panel" style="margin-top:18px;padding:16px">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">

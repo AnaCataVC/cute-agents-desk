@@ -220,12 +220,12 @@ export function renderUsage(state, data) {
       <div class="panel" style="padding:14px 15px">
         <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
              text-transform:uppercase;margin-bottom:10px">Por coordinador</div>
-        <div style="display:flex;flex-direction:column;gap:7px">${flows.map(coordRow).join('')}</div>
+        <div style="display:flex;flex-direction:column;gap:7px">${flows.length ? flows.map(coordRow).join('') : '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0">Sin coordinadores activos</div>'}</div>
       </div>
       <div class="panel" style="padding:14px 15px">
         <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
              text-transform:uppercase;margin-bottom:12px">Por cuenta</div>
-        <div style="display:flex;flex-direction:column;gap:13px">${u.accounts.map(accountRow).join('')}</div>
+        <div style="display:flex;flex-direction:column;gap:13px">${u.accounts.length ? u.accounts.map(accountRow).join('') : '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0">Sin cuentas configuradas</div>'}</div>
       </div>
     </div>
   </div>`;
