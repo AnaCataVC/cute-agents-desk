@@ -55,7 +55,7 @@ function listGhAccounts() {
     out = String(e.stdout || '') + String(e.stderr || '');
   }
   const accounts = [];
-  // "  ✓ Logged in to github.com account CataVillalobosC (keyring)" / "  - Active account: true"
+  // "  ✓ Logged in to github.com account <username> (keyring)" / "  - Active account: true"
   // / "  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'"
   const lines = out.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
