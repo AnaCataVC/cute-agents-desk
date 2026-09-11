@@ -52,7 +52,7 @@ function panel(title, blurb, body, columns = 1) {
 
 function swatchButton(ac, color) {
   const selected = ac.color === color;
-  return `<button data-selected="${selected}" title="${esc(color)}"
+  return `<button data-act="setAccountColor" data-arg="${esc(ac.id)}|${esc(color)}" data-selected="${selected}" title="${esc(color)}"
     style="width:18px;height:18px;border-radius:5px;background:${color};cursor:pointer;padding:0;
     border:${selected ? '2px solid var(--color-dark-text-1)' : '1px solid var(--color-dark-border)'}"></button>`;
 }
@@ -183,17 +183,23 @@ function enginesPanel(data) {
 /* ---- skills ---- */
 
 function skillTable(group) {
-  const rows = group.rows.map(([name, desc, version, load]) => `
-    <div class="settings-row">
-      <span class="mono" style="font-size:11px;font-weight:500;color:var(--color-dark-text-1);
-            flex:none">${esc(name)}</span>
-      <span style="font-size:10.5px;color:var(--color-dark-text-3);min-width:0;overflow:hidden;
-            text-overflow:ellipsis;white-space:nowrap">${esc(desc)}</span>
-      <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3)">${esc(version)}</span>
-      <span style="padding:1px 7px;border-radius:var(--radius-full);font:600 9px var(--font-body);
-            background:${load === 'siempre' ? 'var(--app-on-accent)' : 'var(--color-dark-surface)'};
-            color:${load === 'siempre' ? 'var(--color-lilac)' : 'var(--color-dark-text-3)'}">${esc(load)}</span>
-    </div>`).join('');
+  const emptyMsg = group.installed === false
+    ? 'Directorio no detectado o motor no instalado.'
+    : 'Sin skills instaladas en esta ruta.';
+
+  const content = group.rows.length
+    ? group.rows.map(([name, desc, version, load]) => `
+      <div class="settings-row">
+        <span class="mono" style="font-size:11px;font-weight:500;color:var(--color-dark-text-1);
+              flex:none">${esc(name)}</span>
+        <span style="font-size:10.5px;color:var(--color-dark-text-3);min-width:0;overflow:hidden;
+              text-overflow:ellipsis;white-space:nowrap">${esc(desc)}</span>
+        <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3)">${esc(version)}</span>
+        <span style="padding:1px 7px;border-radius:var(--radius-full);font:600 9px var(--font-body);
+              background:${load === 'siempre' ? 'var(--app-on-accent)' : 'var(--color-dark-surface)'};
+              color:${load === 'siempre' ? 'var(--color-lilac)' : 'var(--color-dark-text-3)'}">${esc(load)}</span>
+      </div>`).join('')
+    : `<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:6px 0">${esc(emptyMsg)}</div>`;
 
   return `
   <div style="margin-bottom:14px">
@@ -203,7 +209,7 @@ function skillTable(group) {
       <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3)">
         ${group.rows.length} skills</span>
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px">${rows}</div>
+    <div style="display:flex;flex-direction:column;gap:6px">${content}</div>
   </div>`;
 }
 
@@ -212,7 +218,10 @@ function skillsPanel(data) {
     'Lo que cada CLI trae instalado en su propio directorio de skills. Una skill "siempre" entra en el '
     + 'contexto de cada agente de ese motor y se paga en tokens aunque no se use; en el hilo de un agente '
     + 'se ve cuáles realmente usó.',
-    data.getEngineSkills().map(skillTable).join(''));
+    `${data.getEngineSkills().map(skillTable).join('')}
+    <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+      <button class="btn-ghost" data-act="refreshSkills" style="border-style:dashed">Refrescar skills</button>
+    </div>`);
 }
 
 /* ---- coordinadores ---- */

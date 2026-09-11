@@ -20,6 +20,10 @@ const paths = require('./paths.js');
  * 3. Fallback to `~/.cute-agents-desk/accounts.json`.
  */
 function getAccountsConfigPath() {
+  if (process.env.CUTE_AGENTS_DESK_HOME) {
+    return path.join(paths.home, 'accounts.json');
+  }
+
   const exeDir = process.env.PORTABLE_EXECUTABLE_DIR
     || (process.versions?.electron ? path.dirname(process.execPath) : null);
 
@@ -98,4 +102,20 @@ function buildAccounts() {
   });
 }
 
-module.exports = { listGhAccounts, readAccountsConfig, buildAccounts, getAccountsConfigPath };
+function updateAccountColor(gh, color) {
+  const configPath = getAccountsConfigPath();
+  const accounts = readAccountsConfig();
+  const acc = accounts.find((a) => a.gh === gh);
+  if (acc) {
+    acc.color = color;
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+module.exports = { listGhAccounts, readAccountsConfig, buildAccounts, getAccountsConfigPath, updateAccountColor };

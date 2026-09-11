@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('desk', {
   /** Recurring tasks Claude Desktop and Antigravity have scheduled on this machine, outside this app — read-only. */
   scheduledTasks: () => ipcRenderer.invoke('desk:scheduledTasks'),
 
+  /** Skills installed for each CLI engine on this machine — read-only. */
+  skills: () => ipcRenderer.invoke('desk:skills'),
+
   /** @param {string} agentId  refused with `{error}` while that agent is still alive */
   reapWorktree: (agentId) => ipcRenderer.invoke('desk:reapWorktree', agentId),
 
@@ -57,6 +60,16 @@ contextBridge.exposeInMainWorld('desk', {
    * @param {{agentId: string, commitMessage?: string, prTitle?: string, prBody?: string}} o
    */
   deliver: (o) => ipcRenderer.invoke('desk:deliver', o),
+
+  /** Aggregated token usage and cost for today. */
+  usage: () => ipcRenderer.invoke('desk:usage'),
+
+  /**
+   * Update and persist an account's color in accounts.json.
+   * @param {string} accountId
+   * @param {string} color
+   */
+  setAccountColor: (accountId, color) => ipcRenderer.invoke('desk:setAccountColor', { accountId, color }),
 
   /**
    * Push channel for what the main process owns: agent state, and raw terminal output.

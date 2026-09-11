@@ -83,7 +83,7 @@ const ACTIONS = {
     if (state.ideActive === id) state.ideActive = state.ideOpen[state.ideOpen.length - 1] || null;
   },
   diffMode: (v) => { state.diffMode = v; },
-  openTerminal: (id) => { state.terminal = id || 'perf-tiles'; },
+  openTerminal: (id) => { state.terminal = id || null; },
   closeTerminal: () => { state.terminal = null; },
   openChat: (id) => { state.chat = id; state.chatTab = 'hilo'; state.tip = null; },
   closeChat: () => { state.chat = null; },
@@ -185,6 +185,9 @@ const ACTIONS = {
     if (result?.error) { state.error = result.error; render(); }
   },
   stopAgent: (id) => window.desk.stop(id),
+  refreshSkills: () => {
+    window.desk?.skills?.().then((skills) => { data.setLiveSkills(skills); render(); });
+  },
 
   /** Deliver an agent's work as a branch + draft PR. */
   deliverAgent: async (agentId) => {
@@ -207,6 +210,20 @@ const ACTIONS = {
       state.error = err.message || String(err);
     }
     render();
+  },
+  setAccountColor: async (arg) => {
+    if (!arg) return;
+    const [accountId, color] = arg.split('|');
+    if (!accountId || !color) return;
+    data.updateAccountColor(accountId, color);
+    render();
+    if (window.desk?.setAccountColor) {
+      const res = await window.desk.setAccountColor(accountId, color);
+      if (res?.accounts) {
+        data.setAccounts(res.accounts);
+        render();
+      }
+    }
   },
 };
 
@@ -380,10 +397,15 @@ if (window.desk?.isDesk) {
   window.desk.subscribe((patch) => {
     if (patch.agents) data.setLiveAgents(patch.agents);
     if (patch.output) data.pushOutput(patch.output.id, patch.output.chunk);
+    if (patch.usage) data.setLiveUsage(patch.usage);
+    if (patch.repoData) data.setLiveRepoData(patch.repoData);
     scheduleRender();
   });
   window.desk.agents().then((agents) => {
     if (agents.length) { data.setLiveAgents(agents); render(); }
+  });
+  window.desk.usage?.().then((usage) => {
+    if (usage) { data.setLiveUsage(usage); render(); }
   });
   // Scanned once on load, same as the agent list -- the tree does not need to re-scan on every
   // repaint, only when a folder is added or removed from Configuracion.
@@ -392,6 +414,7 @@ if (window.desk?.isDesk) {
   window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
   window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
   window.desk.delivered().then((deliv) => { data.setLiveDelivered(deliv); render(); });
+  window.desk.skills?.().then((skills) => { data.setLiveSkills?.(skills); render(); });
 
   // Unlike repos/worktrees/conversations, this reflects files Claude Desktop and Antigravity
   // write in the background -- fetch-once-on-load would go stale the moment either reschedules,
