@@ -9,6 +9,11 @@ import { esc } from './esc.js';
 /** @returns {string} */
 export function renderTerminal(state, data) {
   if (!state.terminal) {
+    const liveAgents = data.getAgents().filter((a) => a.live);
+    const openBtn = liveAgents.length
+      ? `<button class="chip" data-act="openTerminal" data-arg="${esc(liveAgents[0].id)}"
+          style="margin-left:auto">Abrir terminal (${esc(liveAgents[0].id)})</button>`
+      : '';
     return `
     <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;
          background:var(--app-surface-sunken);border:1px dashed var(--color-dark-border);
@@ -16,8 +21,7 @@ export function renderTerminal(state, data) {
       <span class="mono" style="font-size:11px;font-weight:600;color:var(--color-dark-text-3)">TERMINAL</span>
       <span style="font:400 10.5px var(--font-body);color:var(--color-dark-text-3)">
         No montada. Una sola a la vez, sólo al abrirla.</span>
-      <button class="chip" data-act="openTerminal" data-arg="perf-tiles"
-        style="margin-left:auto">Abrir en perf-tiles</button>
+      ${openBtn}
     </div>`;
   }
 

@@ -47,22 +47,7 @@ function readJson(filePath) {
   catch { return null; }
 }
 
-/**
- * Only the two scalar fields this feature needs -- a real YAML parser would be overkill for
- * `name:`/`description:` and nothing in this repo already depends on one.
- * @param {string} filePath
- */
-function readSkillFrontmatter(filePath) {
-  let text;
-  try { text = fs.readFileSync(filePath, 'utf8'); } catch { return { name: null, description: null }; }
-  const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!fm) return { name: null, description: null };
-  const grab = (/** @type {string} */ key) => {
-    const m = fm[1].match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
-    return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
-  };
-  return { name: grab('name'), description: grab('description') };
-}
+const { readSkillFrontmatter } = require('./frontmatter.js');
 
 /**
  * @param {any} raw  one entry of a `scheduled-tasks.json`'s `scheduledTasks` array
