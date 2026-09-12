@@ -10,6 +10,12 @@
 import { renderChat } from './chat.js';
 import { esc } from './esc.js';
 
+/**
+ * @param {string} body - HTML content of the modal body
+ * @param {number} width - Maximum width of the modal in pixels
+ * @param {string} closeAct - Action identifier dispatched to close the dialog
+ * @returns {string}
+ */
 function shell(body, width, closeAct) {
   return `
   <div role="dialog" aria-modal="true" data-act="${closeAct}" data-backdrop
@@ -21,6 +27,12 @@ function shell(body, width, closeAct) {
   </div>`;
 }
 
+/**
+ * @param {string} label
+ * @param {string} control
+ * @param {string} [hint]
+ * @returns {string}
+ */
 function field(label, control, hint) {
   return `
   <div style="display:flex;flex-direction:column;gap:5px">
@@ -35,12 +47,17 @@ const INPUT = 'width:100%;padding:9px 12px;border-radius:var(--radius-sm);'
   + 'border:1px solid var(--color-dark-border);background:var(--color-dark-bg);'
   + 'color:var(--color-dark-text-1);font:400 11.5px var(--font-body)';
 
-/** Queue a task. The account line is the point of this dialog: it says who will sign the push. */
+/**
+ * Queue a task. The account line is the point of this dialog: it says who will sign the push.
+ * @param {any} state
+ * @param {any} data
+ * @returns {string}
+ */
 function queueDialog(state, data) {
   const repos = data.getRepos();
-  const repo = state.queue ? (repos.find((r) => r.path === state.queue) || repos.find((r) => r.name === state.queue)) : null;
-  const account = repo ? data.getAccounts().find((a) => a.id === repo.accountId) : null;
-  const flows = data.getFlows().filter((f) => f.status !== 'archivado');
+  const repo = state.queue ? (repos.find((/** @type {any} */ r) => r.path === state.queue) || repos.find((/** @type {any} */ r) => r.name === state.queue)) : null;
+  const account = repo ? data.getAccounts().find((/** @type {any} */ a) => a.id === repo.accountId) : null;
+  const flows = data.getFlows().filter((/** @type {any} */ f) => f.status !== 'archivado');
 
   const engineId = state.queueEngine || 'claude';
   const models = (data.ENGINE_MODELS && data.ENGINE_MODELS[engineId]) || [];
@@ -55,7 +72,7 @@ function queueDialog(state, data) {
         <span class="mono" style="font-size:11.5px;font-weight:600">${esc(repo.name)}</span>
         <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(repo.relPath || repo.folder)}</span>
        </div>`
-    : `<select style="${INPUT}" data-act="queueRepo">${repos.slice(0, 20).map((r) => `<option value="${esc(r.path || r.name)}" ${(state.queueRepo === r.path || state.queueRepo === r.name) ? 'selected' : ''}>${esc(r.relPath || r.name)}</option>`).join('')}</select>`;
+    : `<select style="${INPUT}" data-act="queueRepo">${repos.slice(0, 20).map((/** @type {any} */ r) => `<option value="${esc(r.path || r.name)}" ${(state.queueRepo === r.path || state.queueRepo === r.name) ? 'selected' : ''}>${esc(r.relPath || r.name)}</option>`).join('')}</select>`;
 
   const modeHint = activeMode === 'read' ? 'En modo lectura los hooks niegan Edit y Write'
     : activeMode === 'plan' ? 'En modo planificación el agente diagnostica y diseña sin modificar código'
@@ -80,7 +97,7 @@ function queueDialog(state, data) {
         </select>`)}
         ${field('Coordinador', `<select style="${INPUT}" data-act="queueCoord">
           <option value="">Despacho directo (sin coordinador)</option>
-          ${flows.map((f) => `<option value="${esc(f.id)}" ${state.queueCoord === f.id ? 'selected' : ''}>Reutilizar · ${esc(f.short)}</option>`).join('')}
+          ${flows.map((/** @type {any} */ f) => `<option value="${esc(f.id)}" ${state.queueCoord === f.id ? 'selected' : ''}>Reutilizar · ${esc(f.short)}</option>`).join('')}
         </select>`, 'Reutilizar mantiene el contexto')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -88,15 +105,15 @@ function queueDialog(state, data) {
           value="${esc(state.queueModel || 'default')}" placeholder="default (ambient)">
           <datalist id="queue-models">
             <option value="default">Predeterminado (ambient)</option>
-            ${models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+            ${models.map((/** @type {any} */ m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
           </datalist>`, 'Alias o ID del modelo')}
         ${field('Nivel de esfuerzo / razonamiento', `<select style="${INPUT}" data-act="queueEffort">
           <option value="default" ${(!state.queueEffort || state.queueEffort === 'default') ? 'selected' : ''}>default (ambient)</option>
-          ${efforts.map((ef) => `<option value="${esc(ef)}" ${state.queueEffort === ef ? 'selected' : ''}>${esc(ef)}</option>`).join('')}
+          ${efforts.map((/** @type {any} */ ef) => `<option value="${esc(ef)}" ${state.queueEffort === ef ? 'selected' : ''}>${esc(ef)}</option>`).join('')}
         </select>`, 'Presupuesto de tokens de pensamiento')}
       </div>
       ${field('Modo', `<div style="display:flex;gap:7px;flex-wrap:wrap">
-        ${modes.map((m) => `<button class="chip" data-act="queueMode" data-arg="${esc(m.id)}" aria-pressed="${activeMode === m.id}">${esc(m.label)}</button>`).join('')}
+        ${modes.map((/** @type {any} */ m) => `<button class="chip" data-act="queueMode" data-arg="${esc(m.id)}" aria-pressed="${activeMode === m.id}">${esc(m.label)}</button>`).join('')}
       </div>`, modeHint)}
       ${account ? `
       <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;background:var(--color-dark-bg);
@@ -113,13 +130,18 @@ function queueDialog(state, data) {
     </div>`, 560, 'closeQueue');
 }
 
-/** Add a folder: scan it, then pick which of the repos found actually get managed. */
+/**
+ * Add a folder: scan it, then pick which of the repos found actually get managed.
+ * @param {any} state
+ * @param {any} data
+ * @returns {string}
+ */
 function scanDialog(state, data) {
-  const account = data.getAccounts().find((a) => a.id === state.scan);
+  const account = data.getAccounts().find((/** @type {any} */ a) => a.id === state.scan);
   if (!account) return '';
   const s = data.getScanSummary();
 
-  const rows = data.getScanCandidates().map((c) => {
+  const rows = data.getScanCandidates().map((/** @type {any} */ c) => {
     const tagColor = c.tag === 'ok' ? 'var(--color-dark-text-3)'
       : c.tag === 'sin remoto' ? 'var(--app-dirty)' : 'var(--state-approval)';
     return `
@@ -133,6 +155,7 @@ function scanDialog(state, data) {
     </div>`;
   }).join('');
 
+  /** @param {number} d */
   const depthChip = (d) => `<button class="chip" aria-pressed="${state.scanDepth === d}"
     data-act="scanDepth" data-arg="${d}">${d} niveles</button>`;
 
@@ -148,7 +171,7 @@ function scanDialog(state, data) {
       ${field('Ruta', `<input type="text" placeholder="~/ruta/a/repositorios" value="" style="${INPUT}">`)}
       ${field('Profundidad', `<div style="display:flex;gap:7px">${[1, 2, 3].map(depthChip).join('')}</div>`,
     'Más profundidad encuentra más repos y tarda más; los node_modules y .git anidados se saltan siempre')}
-      ${field(`Repos encontrados · ${data.getScanCandidates().filter((c) => c.picked).length} de ${data.getScanCandidates().length}`,
+      ${field(`Repos encontrados · ${data.getScanCandidates().filter((/** @type {any} */ c) => c.picked).length} de ${data.getScanCandidates().length}`,
     `<div style="display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto">${rows || '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0;text-align:center">Sin repositorios escaneados todavía.</div>'}</div>`,
     `último escaneo ${s.when} · ${s.took}`)}
     </div>
@@ -159,6 +182,11 @@ function scanDialog(state, data) {
     </div>`, 520, 'closeScan');
 }
 
+/**
+ * @param {any} state
+ * @param {any} _data
+ * @returns {string}
+ */
 function skillDialog(state, _data) {
   const sk = state.inspectedSkill;
   if (!sk) return '';
@@ -223,6 +251,11 @@ function skillDialog(state, _data) {
   `, 640, 'closeSkillInspector');
 }
 
+/**
+ * @param {any} state
+ * @param {any} _data
+ * @returns {string}
+ */
 function taskLogDialog(state, _data) {
   const tk = state.inspectedTask;
   if (!tk) return '';
@@ -266,7 +299,11 @@ function taskLogDialog(state, _data) {
   `, 680, 'closeTaskInspector');
 }
 
-/** @returns {string} */
+/** 
+ * @param {any} state
+ * @param {any} data
+ * @returns {string}
+ */
 export function renderDialogs(state, data) {
   if (state.chat) return shell(renderChat(state, data), 900, 'closeChat');
   if (state.inspectedSkill) return skillDialog(state, data);
