@@ -17,6 +17,8 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 const FAST = [
+  'verify-pure-units.js',
+  'verify-agent-lifecycle-mock.js',
   'verify-scheduler.js',
   'verify-trust-dialog.js',
   'verify-conversations.js',
@@ -39,6 +41,7 @@ const FAST = [
 ];
 
 const MANUAL = [
+  ['verify-dist-binary.js', 'node tools/verify-dist-binary.js'],
   ['verify-phase1.js', 'npm run verify'],
   ['verify-agy-phase1.js', 'node tools/verify-agy-phase1.js'],
   ['verify-read-mode.js', 'node_modules/electron/dist/electron.exe tools/verify-read-mode.js'],
