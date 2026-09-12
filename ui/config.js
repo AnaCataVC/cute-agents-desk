@@ -185,23 +185,41 @@ function enginesPanel(data) {
 
 /* ---- skills ---- */
 
+/**
+ * @param {{
+ *   engine: string,
+ *   color?: string,
+ *   path: string,
+ *   installed?: boolean,
+ *   rows: Array<[string, string, string, string, number?, string?, string?]>
+ * }} group
+ */
 function skillTable(group) {
   const emptyMsg = group.installed === false
     ? 'Directorio no detectado o motor no instalado.'
     : 'Sin skills instaladas en esta ruta.';
 
   const content = group.rows.length
-    ? group.rows.map(([name, desc, version, load]) => `
-      <div class="settings-row">
+    ? group.rows.map(([name, desc, version, load, tokenEstimate, filePath, folderPath]) => {
+      const tokensLabel = tokenEstimate ? `~${tokenEstimate} tok` : '';
+      return `
+      <div class="settings-row" style="cursor:pointer" data-act="inspectSkill"
+           data-name="${esc(name)}" data-desc="${esc(desc)}" data-version="${esc(version)}"
+           data-load="${esc(load)}" data-tokens="${tokenEstimate || 0}"
+           data-file="${esc(filePath || '')}" data-folder="${esc(folderPath || '')}"
+           data-engine="${esc(group.engine)}"
+           title="Clic para inspeccionar SKILL.md e impacto en contexto">
         <span class="mono" style="font-size:11px;font-weight:500;color:var(--color-dark-text-1);
               flex:none">${esc(name)}</span>
         <span style="font-size:10.5px;color:var(--color-dark-text-3);min-width:0;overflow:hidden;
               text-overflow:ellipsis;white-space:nowrap">${esc(desc)}</span>
-        <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3)">${esc(version)}</span>
+        ${tokensLabel ? `<span class="mono" style="margin-left:auto;font-size:9.5px;color:var(--color-lilac);background:var(--color-dark-surface);padding:1px 6px;border-radius:4px" title="Estimación de tokens">${esc(tokensLabel)}</span>` : ''}
+        <span class="mono" style="${tokensLabel ? '' : 'margin-left:auto;'}font-size:10px;color:var(--color-dark-text-3)">${esc(version)}</span>
         <span style="padding:1px 7px;border-radius:var(--radius-full);font:600 9px var(--font-body);
               background:${load === 'siempre' ? 'var(--app-on-accent)' : 'var(--color-dark-surface)'};
               color:${load === 'siempre' ? 'var(--color-lilac)' : 'var(--color-dark-text-3)'}">${esc(load)}</span>
-      </div>`).join('')
+      </div>`;
+    }).join('')
     : `<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:6px 0">${esc(emptyMsg)}</div>`;
 
   return `
