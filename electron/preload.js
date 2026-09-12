@@ -71,6 +71,15 @@ contextBridge.exposeInMainWorld('desk', {
    */
   setAccountColor: (accountId, color) => ipcRenderer.invoke('desk:setAccountColor', { accountId, color }),
 
+  /** Read persisted configuration with default schema merge. */
+  config: () => ipcRenderer.invoke('desk:config'),
+
+  /**
+   * Update and persist a configuration setting.
+   * @param {{section: string, key: string, value: any}} o
+   */
+  updateConfig: (o) => ipcRenderer.invoke('desk:updateConfig', o),
+
   /**
    * Push channel for what the main process owns: agent state, and raw terminal output.
    * Replaces the SSE stream the web version would have needed.

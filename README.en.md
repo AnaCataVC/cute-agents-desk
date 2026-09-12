@@ -127,7 +127,8 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `scheduler.js` | The parallelism cap, global and per-conversation, enforced before any spawn |
 | `conversations.js` | A conversation is a folder: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | The coordinator's prompt and the draining of its `spawn-requests` |
-| `discovery.js`, `accounts.js` | Real repo discovery by GitHub account, with mismatch detection |
+| `config.js` | Hardened configuration store (`config.json`): canonical defaults, deep merge, prototype pollution guards, numerical bounds clamping, and atomic replacement |
+| `discovery.js`, `accounts.js` | Real repo discovery by GitHub account, with mismatch detection, hierarchical relative paths and canonical disk resolution |
 | `scheduled-tasks.js` | Read-only discovery of Claude Desktop's and Antigravity's scheduled tasks on this machine |
 | `toy-repo.js` | The toy repo that the live `tools/verify-*.js` scripts use |
 
@@ -143,7 +144,7 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `esc.js` | Pure utility for safe HTML entity escaping against string injection in templates |
 | `robot.js` | The robot, defined once and parameterized by state |
 | `ring.js` | The token ring and its formatters |
-| `repo-tree.js`, `agent-card.js`, `terminal.js` | "Agent control" tab |
+| `repo-tree.js`, `agent-card.js`, `terminal.js` | "Agent control" tab: hierarchical collapsible directory tree with real-time bubble-up indicators, status filtering, and task queuing |
 | `boss-graph.js`, `timeline.js` | "Workflows" tab |
 | `editor.js` | "Editor" tab: the change tree and the diff |
 | `tokens-view.js` | "Usage" tab |
@@ -178,3 +179,5 @@ whole panel stays still, and color and labels still carry the same meaning.
 3. **Decoupled File-based IPC Mailbox:** The worker-to-coordinator messaging mechanism operates via on-disk JSON file queues (`events/` and `outbox/`). This avoids opening exposed TCP network sockets or local WebSocket ports, reducing the local attack surface to zero while offering persistence across process restarts.
 4. **Allowlists vs. Denylists for AI Tool Isolation:** In read-only mode, a denylist (`Edit|Write`) suffices for tools with a closed capability set (Claude Code), but fails for engines that expose arbitrary execution capabilities (`agy`). For the latter, the only secure defense-in-depth model is strictly inverting the evaluation to a closed allowlist of verified read-only tools (`view_file`, `list_dir`, `grep_search`, `find_by_name`).
 5. **Git Worktree Isolation:** When executing tasks in write mode, directly mutating the developer's working tree is unsafe. Each write agent provisions an isolated temporary worktree and branch (`agent/<id>`) in a dedicated directory, keeping the primary workspace untouched until changes are reviewed and approved.
+6. **Atomic Configuration Persistence and Prototype Pollution Defense in Desktop Runtimes:** Storing user preferences (`config.json`) using temporary buffers with process entropy nonces (`nonce = ${pid}.${Date.now()}.${random}`) and atomic filesystem replacements (`renameSync` with copy fallback) prevents 0-byte truncations during sudden power interruptions or crashes. Concurrently, strictly purging dangerous prototype properties (`__proto__`, `constructor`, `prototype`) and clamping numeric boundaries (`maxParallel: [1..20]`) neutralizes Denial of Service vectors or *fork bombs* before they can reach the process scheduler.
+7. **Hierarchical Directory Virtualization & Canonical Path Disambiguation:** In multi-account enterprise setups, flattening nested repositories under declared roots leads to unmanageable UI lists and silent process dispatch failures when resolving working directories (`cwd`). Converting flat collections into an on-demand N-level collapsible directory tree with single-pass metric accumulation ($O(N)$) and canonical absolute path tracking prevents dispatch collisions across identically-named repositories (e.g. `domain/infra` vs `core/infra`) while keeping rendering instant.

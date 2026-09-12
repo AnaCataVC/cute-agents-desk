@@ -152,13 +152,18 @@ function coordRow(flow) {
 }
 
 function accountRow(a) {
+  const tokenLabel = a.hasToday
+    ? `${esc(a.tokens)} · ${esc(a.cost)}`
+    : (a.allTimeTokens && a.allTimeTokens.trim() !== '0'
+      ? `0 hoy (hist: ${esc(a.allTimeTokens)})`
+      : `${esc(a.tokens)} · ${esc(a.cost)}`);
   return `
   <div>
     <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
       <span style="width:8px;height:8px;border-radius:var(--radius-full);background:${a.color}"></span>
       <span class="mono" style="font-size:11px">${esc(a.name)}</span>
       <span class="mono" style="margin-left:auto;font-size:10.5px;color:var(--color-dark-text-2)">
-        ${esc(a.tokens)} · ${esc(a.cost)}</span>
+        ${tokenLabel}</span>
     </div>
     <div style="display:flex;height:7px;border-radius:var(--radius-full);overflow:hidden;
          background:var(--color-dark-bg)">
@@ -186,8 +191,20 @@ export function renderUsage(state, data) {
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
-      ${statCard({ label: 'tokens hoy', value: u.today.total, claude: u.today.claude, agy: u.today.agy })}
-      ${statCard({ label: 'costo hoy', value: u.cost.total, claude: u.cost.claude, agy: u.cost.agy })}
+      ${statCard({
+    label: 'tokens hoy',
+    value: u.today.total,
+    claude: u.today.claude,
+    agy: u.today.agy,
+    hint: u.allTime ? `histórico: ${u.allTime.total}` : undefined,
+  })}
+      ${statCard({
+    label: 'costo hoy',
+    value: u.cost.total,
+    claude: u.cost.claude,
+    agy: u.cost.agy,
+    hint: u.allTime ? `histórico: ${u.allTime.cost}` : undefined,
+  })}
       ${statCard({
     label: 'ritmo ahora',
     // Ticks with the clock, so the number is visibly live rather than a stale snapshot.

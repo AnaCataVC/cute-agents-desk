@@ -118,8 +118,9 @@ function formatPrTitle(task, customTitle) {
  * @param {string} [o.effort]
  * @param {string} [o.filesChanged]
  * @param {string} [o.reportUrl]
+ * @param {boolean} [o.isDraft]
  */
-function formatPrBody({ agentId, task, engine, model, effort, filesChanged, reportUrl }) {
+function formatPrBody({ agentId, task, engine, model, effort, filesChanged, reportUrl, isDraft }) {
   const parts = [
     '## Cute Agents Desk · Entrega de Tarea',
     '',
@@ -136,7 +137,7 @@ function formatPrBody({ agentId, task, engine, model, effort, filesChanged, repo
     '```',
     '',
     '---',
-    '*Este Pull Request fue creado automáticamente en modo borrador (draft) por Cute Agents Desk.*',
+    `*Este Pull Request fue creado automáticamente${isDraft !== false ? ' en modo borrador (draft)' : ''} por Cute Agents Desk.*`,
   ].filter(Boolean);
 
   return parts.join('\n');
@@ -149,6 +150,7 @@ function formatPrBody({ agentId, task, engine, model, effort, filesChanged, repo
  * @param {string} [opts.commitMessage]
  * @param {string} [opts.prTitle]
  * @param {string} [opts.prBody]
+ * @param {boolean} [opts.draftPR]
  * @returns {Promise<{ ok: true, delivery: Record<string, any> } | { ok: false, error: string }>}
  */
 async function deliverAgent(opts) {
@@ -249,8 +251,9 @@ async function deliverAgent(opts) {
       return { ok: false, error: `Error al empujar la rama a origin: ${pushErr.message}` };
     }
 
-    // 4. Create Draft Pull Request
+    // 4. Create Pull Request
     const title = formatPrTitle(task, opts.prTitle);
+    const isDraft = opts.draftPR !== undefined ? Boolean(opts.draftPR) : true;
     const reportPath = paths.agent(agentId).report;
     const body = opts.prBody || formatPrBody({
       agentId,
@@ -260,17 +263,20 @@ async function deliverAgent(opts) {
       effort: agentManifest?.effort,
       filesChanged,
       reportUrl: fs.existsSync(reportPath) ? `file:///${reportPath.replace(/\\/g, '/')}` : undefined,
+      isDraft,
     });
 
     try {
-      const out = execFileSync('gh', [
-        'pr', 'create',
-        '--draft',
+      const prArgs = ['pr', 'create'];
+      if (isDraft) prArgs.push('--draft');
+      prArgs.push(
         '--head', branch,
         '--base', baseBranch,
         '--title', title,
         '--body', body,
-      ], {
+      );
+
+      const out = execFileSync('gh', prArgs, {
         cwd: worktreeDir,
         encoding: 'utf8',
         env: subprocessEnv,

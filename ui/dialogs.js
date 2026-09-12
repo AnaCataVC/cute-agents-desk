@@ -38,7 +38,7 @@ const INPUT = 'width:100%;padding:9px 12px;border-radius:var(--radius-sm);'
 /** Queue a task. The account line is the point of this dialog: it says who will sign the push. */
 function queueDialog(state, data) {
   const repos = data.getRepos();
-  const repo = state.queue ? repos.find((r) => r.name === state.queue) : null;
+  const repo = state.queue ? (repos.find((r) => r.path === state.queue) || repos.find((r) => r.name === state.queue)) : null;
   const account = repo ? data.getAccounts().find((a) => a.id === repo.accountId) : null;
   const flows = data.getFlows().filter((f) => f.status !== 'archivado');
 
@@ -50,11 +50,12 @@ function queueDialog(state, data) {
 
   const repoField = repo
     ? `<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--color-dark-bg);
-         border:1px solid var(--color-dark-border);border-radius:var(--radius-sm)">
+         border:1px solid var(--color-dark-border);border-radius:var(--radius-sm)"
+         title="${esc(repo.path || `${repo.folder}/${repo.name}`)}">
         <span class="mono" style="font-size:11.5px;font-weight:600">${esc(repo.name)}</span>
-        <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(repo.folder)}</span>
+        <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(repo.relPath || repo.folder)}</span>
        </div>`
-    : `<select style="${INPUT}" data-act="queueRepo">${repos.slice(0, 20).map((r) => `<option value="${esc(r.name)}" ${state.queueRepo === r.name ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>`;
+    : `<select style="${INPUT}" data-act="queueRepo">${repos.slice(0, 20).map((r) => `<option value="${esc(r.path || r.name)}" ${(state.queueRepo === r.path || state.queueRepo === r.name) ? 'selected' : ''}>${esc(r.relPath || r.name)}</option>`).join('')}</select>`;
 
   const modeHint = activeMode === 'read' ? 'En modo lectura los hooks niegan Edit y Write'
     : activeMode === 'plan' ? 'En modo planificación el agente diagnostica y diseña sin modificar código'

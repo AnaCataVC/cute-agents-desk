@@ -14,6 +14,17 @@ const paths = require('./paths.js');
 const conv = require('./conversations.js');
 const { toolNameOf } = require('./tool-name.js');
 const { drainJsonQueue, watchJsonQueue } = require('./json-queue.js');
+const { readAccountsConfig, accountIdForCwd } = require('./accounts.js');
+
+/** Check if an ISO timestamp occurred on the same calendar day (in local time). */
+function isSameLocalDay(isoString, refDate = new Date()) {
+  if (!isoString) return false;
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return false;
+  return d.getFullYear() === refDate.getFullYear() &&
+    d.getMonth() === refDate.getMonth() &&
+    d.getDate() === refDate.getDate();
+}
 
 /** How long a done/failed agent stays visible (in the live grid, in its conversation's
  * status.json) after it exits, before its record is dropped for good. Long enough to see the
@@ -99,6 +110,13 @@ class Registry {
       claude: { tokens: 0, costUsd: 0 },
       agy: { tokens: 0, costUsd: 0 },
     };
+    this.completedAllTime = {
+      claude: { tokens: 0, costUsd: 0 },
+      agy: { tokens: 0, costUsd: 0 },
+    };
+    this.completedByAccount = {};
+    this.completedByAccountAllTime = {};
+    this.completedHourlySeries = Array(24).fill(0);
     paths.ensure();
     this.loadTodayUsage();
   }
@@ -278,8 +296,32 @@ class Registry {
     if (!agent) return;
     if (agent.tokens || agent.costUsd) {
       const eng = agent.engine === 'agy' ? 'agy' : 'claude';
-      this.completedUsage[eng].tokens += (agent.tokens || 0);
-      this.completedUsage[eng].costUsd += (agent.costUsd || 0);
+      const tok = agent.tokens || 0;
+      const cost = agent.costUsd || 0;
+      this.completedUsage[eng].tokens += tok;
+      this.completedUsage[eng].costUsd += cost;
+      this.completedAllTime[eng].tokens += tok;
+      this.completedAllTime[eng].costUsd += cost;
+
+      const accounts = readAccountsConfig();
+      const acc = accountIdForCwd(agent.cwd, accounts);
+      if (acc) {
+        if (!this.completedByAccount[acc]) {
+          this.completedByAccount[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+        }
+        this.completedByAccount[acc].tokens += tok;
+        this.completedByAccount[acc].costUsd += cost;
+        if (eng === 'agy') this.completedByAccount[acc].agyTokens += tok;
+        else this.completedByAccount[acc].claudeTokens += tok;
+
+        if (!this.completedByAccountAllTime[acc]) {
+          this.completedByAccountAllTime[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+        }
+        this.completedByAccountAllTime[acc].tokens += tok;
+        this.completedByAccountAllTime[acc].costUsd += cost;
+        if (eng === 'agy') this.completedByAccountAllTime[acc].agyTokens += tok;
+        else this.completedByAccountAllTime[acc].claudeTokens += tok;
+      }
     }
     if (agent.failReason === 'token-cap') {
       agent.tool = `sesión cerrada por tope de tokens (${agent.tokens}/${agent.tokenCap})`;
@@ -337,15 +379,58 @@ class Registry {
     let claudeCost = this.completedUsage.claude.costUsd;
     let agyCost = this.completedUsage.agy.costUsd;
 
+    let allClaudeTokens = (this.completedAllTime?.claude?.tokens || 0);
+    let allAgyTokens = (this.completedAllTime?.agy?.tokens || 0);
+    let allClaudeCost = (this.completedAllTime?.claude?.costUsd || 0);
+    let allAgyCost = (this.completedAllTime?.agy?.costUsd || 0);
+
+    const accounts = readAccountsConfig();
+    const byAccount = {};
+    for (const [k, v] of Object.entries(this.completedByAccount || {})) {
+      byAccount[k] = { ...v };
+    }
+    const byAccountAllTime = {};
+    for (const [k, v] of Object.entries(this.completedByAccountAllTime || {})) {
+      byAccountAllTime[k] = { ...v };
+    }
+
+    const series = [...(this.completedHourlySeries || Array(24).fill(0))];
+    const currentHour = new Date().getHours();
+
     for (const a of this.agents.values()) {
       if (a.state === 'done' || a.state === 'failed') continue;
       const eng = a.engine === 'agy' ? 'agy' : 'claude';
+      const tok = a.tokens || 0;
+      const cost = a.costUsd || 0;
       if (eng === 'agy') {
-        agyTokens += (a.tokens || 0);
-        agyCost += (a.costUsd || 0);
+        agyTokens += tok;
+        agyCost += cost;
+        allAgyTokens += tok;
+        allAgyCost += cost;
       } else {
-        claudeTokens += (a.tokens || 0);
-        claudeCost += (a.costUsd || 0);
+        claudeTokens += tok;
+        claudeCost += cost;
+        allClaudeTokens += tok;
+        allClaudeCost += cost;
+      }
+
+      if (tok > 0 && currentHour >= 0 && currentHour < 24) {
+        series[currentHour] = (series[currentHour] || 0) + Math.round(tok / 1000);
+      }
+
+      const accId = accountIdForCwd(a.cwd, accounts);
+      if (accId) {
+        if (!byAccount[accId]) byAccount[accId] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+        byAccount[accId].tokens += tok;
+        byAccount[accId].costUsd += cost;
+        if (eng === 'agy') byAccount[accId].agyTokens += tok;
+        else byAccount[accId].claudeTokens += tok;
+
+        if (!byAccountAllTime[accId]) byAccountAllTime[accId] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+        byAccountAllTime[accId].tokens += tok;
+        byAccountAllTime[accId].costUsd += cost;
+        if (eng === 'agy') byAccountAllTime[accId].agyTokens += tok;
+        else byAccountAllTime[accId].claudeTokens += tok;
       }
     }
 
@@ -353,37 +438,127 @@ class Registry {
       claude: { tokens: claudeTokens, costUsd: claudeCost },
       agy: { tokens: agyTokens, costUsd: agyCost },
       total: { tokens: claudeTokens + agyTokens, costUsd: claudeCost + agyCost },
+      allTime: {
+        claude: { tokens: allClaudeTokens, costUsd: allClaudeCost },
+        agy: { tokens: allAgyTokens, costUsd: allAgyCost },
+        total: { tokens: allClaudeTokens + allAgyTokens, costUsd: allClaudeCost + allAgyCost },
+      },
+      byAccount,
+      byAccountAllTime,
+      series,
     };
   }
 
   loadTodayUsage() {
     try {
       if (!fs.existsSync(paths.eventsLog)) return;
-      const todayPrefix = new Date().toISOString().slice(0, 10);
       const lines = fs.readFileSync(paths.eventsLog, 'utf8').split('\n');
-      const latestAgentStatus = new Map();
+      const accounts = readAccountsConfig();
+      const latestAgentStatusToday = new Map();
+      const latestAgentStatusAllTime = new Map();
       const agentEngines = new Map();
+      const agentAccounts = new Map();
+      const hourlyTokens = Array(24).fill(0);
+      const prevAgentHourlyTokens = new Map();
 
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const entry = JSON.parse(line);
-          if (!entry.at || !entry.at.startsWith(todayPrefix)) continue;
+          if (!entry.at) continue;
+
           if (entry.event === 'AgentSpawned' && entry.agentId) {
             const isAgy = (entry.payload?.bin || entry.payload?.engine || '').includes('agy');
             agentEngines.set(entry.agentId, isAgy ? 'agy' : 'claude');
+            if (entry.payload?.cwd) {
+              const accId = accountIdForCwd(entry.payload.cwd, accounts);
+              if (accId) agentAccounts.set(entry.agentId, accId);
+            }
           }
+
           if (entry.event === 'Status' && entry.agentId && entry.payload) {
             const u = readUsage(entry.payload);
-            latestAgentStatus.set(entry.agentId, u);
+            const isToday = isSameLocalDay(entry.at);
+
+            if (!agentAccounts.has(entry.agentId)) {
+              const dirs = [
+                ...(entry.payload.workspace?.added_dirs || []),
+                entry.payload.workspace?.project_dir,
+                entry.payload.workspace?.current_dir,
+              ].filter(Boolean);
+              for (const dir of dirs) {
+                const accId = accountIdForCwd(dir, accounts);
+                if (accId) {
+                  agentAccounts.set(entry.agentId, accId);
+                  break;
+                }
+              }
+            }
+
+            latestAgentStatusAllTime.set(entry.agentId, u);
+
+            if (isToday) {
+              latestAgentStatusToday.set(entry.agentId, u);
+
+              const hour = new Date(entry.at).getHours();
+              if (hour >= 0 && hour < 24 && u.tokens) {
+                const prev = prevAgentHourlyTokens.get(entry.agentId) || 0;
+                if (u.tokens > prev) {
+                  hourlyTokens[hour] += (u.tokens - prev);
+                  prevAgentHourlyTokens.set(entry.agentId, u.tokens);
+                }
+              }
+            }
           }
         } catch { /* skip */ }
       }
 
-      for (const [agentId, u] of latestAgentStatus) {
+      this.completedHourlySeries = hourlyTokens.map((t) => Math.round(t / 1000));
+
+      this.completedUsage = {
+        claude: { tokens: 0, costUsd: 0 },
+        agy: { tokens: 0, costUsd: 0 },
+      };
+      this.completedByAccount = {};
+
+      for (const [agentId, u] of latestAgentStatusToday) {
         const eng = agentEngines.get(agentId) || 'claude';
         this.completedUsage[eng].tokens += (u.tokens || 0);
         this.completedUsage[eng].costUsd += (u.costUsd || 0);
+
+        const acc = agentAccounts.get(agentId);
+        if (acc) {
+          if (!this.completedByAccount[acc]) {
+            this.completedByAccount[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+          }
+          this.completedByAccount[acc].tokens += (u.tokens || 0);
+          this.completedByAccount[acc].costUsd += (u.costUsd || 0);
+          if (eng === 'agy') this.completedByAccount[acc].agyTokens += (u.tokens || 0);
+          else this.completedByAccount[acc].claudeTokens += (u.tokens || 0);
+        }
+      }
+
+      this.completedAllTime = {
+        claude: { tokens: 0, costUsd: 0 },
+        agy: { tokens: 0, costUsd: 0 },
+      };
+      this.completedByAccountAllTime = {};
+
+      for (const [agentId, u] of latestAgentStatusAllTime) {
+        const eng = agentEngines.get(agentId) || 'claude';
+        this.completedAllTime[eng].tokens += (u.tokens || 0);
+        this.completedAllTime[eng].costUsd += (u.costUsd || 0);
+
+        const acc = agentAccounts.get(agentId);
+        if (acc) {
+          if (!this.completedByAccountAllTime[acc]) {
+            this.completedByAccountAllTime[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+          }
+          this.completedByAccountAllTime[acc].tokens += (u.tokens || 0);
+          this.completedByAccountAllTime[acc].costUsd += (u.costUsd || 0);
+          if (eng === 'agy') this.completedByAccountAllTime[acc].agyTokens += (u.tokens || 0);
+          else this.completedByAccountAllTime[acc].claudeTokens += (u.tokens || 0);
+        }
       }
     } catch { /* convenience only */ }
   }

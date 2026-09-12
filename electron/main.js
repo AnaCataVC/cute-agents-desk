@@ -210,10 +210,13 @@ function createWindow() {
  * @param {import('electron').BrowserWindow} win
  */
 function wireAgents(win) {
+  const config = require('./config.js');
+  const appConfig = config.readConfig();
+
   registry = new Registry((agents, usage) => {
     if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage });
   });
-  const scheduler = new Scheduler();
+  const scheduler = new Scheduler({ globalCap: appConfig.exec?.maxParallel || 5 });
 
   /**
    * The lifecycle wiring a plain worker and a coordinator both need: forward output through
@@ -245,6 +248,15 @@ function wireAgents(win) {
   ipcMain.handle('desk:repos', () => getRepoData());
 
   ipcMain.handle('desk:usage', () => registry.getUsage());
+
+  ipcMain.handle('desk:config', () => config.readConfig());
+  ipcMain.handle('desk:updateConfig', (_ev, { section, key, value }) => {
+    const res = config.updateConfigKey(section, key, value);
+    if (res.ok && section === 'exec' && key === 'maxParallel') {
+      scheduler.globalCap = res.config.exec.maxParallel;
+    }
+    return res;
+  });
 
   ipcMain.handle('desk:setAccountColor', async (_ev, { accountId, color }) => {
     const { updateAccountColor, buildAccounts } = require('./accounts.js');
@@ -347,7 +359,16 @@ function wireAgents(win) {
       onNotice: (kind, detail) => registry.note(id, kind, detail),
     });
     running.set(id, agent);
-    registry.register(agent, { conversationId, replyTo, model: agent.model, effort: agent.effort, mode: agent.mode });
+    const engKey = effectiveBin.startsWith('agy') ? 'agy' : 'claude';
+    const dynamicTokenCap = config.readConfig().engines?.[engKey]?.contextCap;
+    registry.register(agent, {
+      conversationId,
+      replyTo,
+      model: agent.model,
+      effort: agent.effort,
+      mode: agent.mode,
+      tokenCap: dynamicTokenCap,
+    });
     return id;
   }
 
@@ -429,9 +450,14 @@ function wireAgents(win) {
 
   ipcMain.handle('desk:delivered', () => delivery.listDeliveries());
   ipcMain.handle('desk:deliver', async (_ev, opts) => {
-    const res = await delivery.deliverAgent(opts || {});
+    const appCfg = config.readConfig();
+    const effectiveOpts = {
+      ...opts,
+      draftPR: opts?.draftPR !== undefined ? opts.draftPR : appCfg.deliver?.draftPR,
+    };
+    const res = await delivery.deliverAgent(effectiveOpts);
     if (res.ok && res.delivery) {
-      registry.note(opts.agentId, 'AgentDelivered', res.delivery);
+      registry.note(opts?.agentId, 'AgentDelivered', res.delivery);
     }
     return res;
   });

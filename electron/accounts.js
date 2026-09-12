@@ -118,4 +118,18 @@ function updateAccountColor(gh, color) {
   return false;
 }
 
-module.exports = { listGhAccounts, readAccountsConfig, buildAccounts, getAccountsConfigPath, updateAccountColor };
+/**
+ * Find the account owning a cwd based on registered account folders.
+ * @param {string} [cwd]
+ * @param {Array<{gh: string, folders: {path: string, depth: number}[]}>} [accounts]
+ */
+function accountIdForCwd(cwd, accounts = readAccountsConfig()) {
+  if (!cwd || !accounts) return undefined;
+  const normalized = cwd.replace(/\\/g, '/').toLowerCase();
+  const owner = accounts.find((acc) => (acc.folders || [])
+    .some((f) => normalized.startsWith(f.path.replace(/\\/g, '/').toLowerCase())));
+  return owner?.gh;
+}
+
+module.exports = { listGhAccounts, readAccountsConfig, buildAccounts, getAccountsConfigPath, updateAccountColor, accountIdForCwd };
+

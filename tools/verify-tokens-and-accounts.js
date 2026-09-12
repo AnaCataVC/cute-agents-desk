@@ -50,12 +50,19 @@ const usage = registry.getUsage();
 assert.strictEqual(usage.total.tokens, 1500, 'Total tokens should be 1500');
 assert.strictEqual(usage.total.costUsd, 0.15, 'Total cost should be 0.15');
 assert.strictEqual(usage.claude.tokens, 1500, 'Claude tokens should be 1500');
+assert.ok(Array.isArray(usage.series) && usage.series.length === 24, 'Usage should include 24-hour series');
+assert.ok(usage.allTime, 'Usage should include allTime metrics');
+assert.strictEqual(usage.allTime.total.tokens, 1500, 'All-time total tokens should match 1500');
+assert.ok(typeof usage.byAccount === 'object', 'Usage should include byAccount mapping');
+assert.ok(typeof usage.byAccountAllTime === 'object', 'Usage should include byAccountAllTime mapping');
 
 // When agent exits, usage is preserved in completedUsage
 registry.exited('token-probe', 0);
 const usageAfterExit = registry.getUsage();
 assert.strictEqual(usageAfterExit.claude.tokens, 1500, 'Completed usage should retain tokens after agent exit');
 assert.strictEqual(usageAfterExit.claude.costUsd, 0.15, 'Completed usage should retain cost after agent exit');
+assert.strictEqual(usageAfterExit.allTime.claude.tokens, 1500, 'Completed all-time usage should retain tokens');
+
 
 // 3. Verify updateAccountColor functionality
 const configPath = getAccountsConfigPath();

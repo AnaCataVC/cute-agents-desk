@@ -50,7 +50,7 @@ In `electron/accounts.js`:
 | Function | Previous (Mock Artboard) | Target (Zero-Mock Seam) |
 | :--- | :--- | :--- |
 | `getFlows()` | Static array with `icarus`, `governance`, `mapas` coordinators and fake agents. | `[]` when no active coordinator has been spawned. |
-| `getUsage()` | Hardcoded `1.58 M` tokens, static 24h series, hardcoded accounts array. | Dynamic accounts mapped from `getAccounts()`, 0 tokens, 0 cost, zeroed series until live metrics report. |
+| `getUsage()` | Hardcoded `1.58 M` tokens, static 24h series, hardcoded accounts array. | Dynamic accounts mapped from `getAccounts()`, real daily tokens + all-time totals, per-account attribution, and 24h series reconstructed from `events.jsonl`. |
 | `getMismatches()` | Hardcoded `sdk-python` and `slack-apps` entries. | Dynamic filtering of live scanned repositories: `getRepos().filter(r => r.mismatch)`. |
 | `getScanSummary()` | Static `folders: 4, repos: 65, dirty: 9...`. | Computed dynamically from live scanned accounts and repositories. |
 | `getDiffs()` | Static mock TypeScript files and diff hunks. | `{}` when no pending uncommitted agent work exists. |
@@ -76,8 +76,10 @@ In `electron/accounts.js`:
 
 ### 4.3 Tokens & Usage View (`ui/tokens-view.js`)
 - Render account usage cards dynamically based on configured accounts.
+- Display today's token usage alongside cumulative all-time metrics (`allTime`) from `events.jsonl` so zero-day states provide context.
 - Show clean empty state when `flows.length === 0` in the coordinator breakdown card.
 
 ### 4.4 Settings & Configuration (`ui/config.js`)
 - When `mismatches.length === 0`, display positive clean banner:
   *"Sin desajustes detectados. Todas las rutas coinciden con el email de sus cuentas."*
+

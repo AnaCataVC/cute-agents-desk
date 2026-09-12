@@ -128,7 +128,8 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `scheduler.js` | El tope de paralelismo, global y por conversación, impuesto antes de cualquier spawn |
 | `conversations.js` | Una conversación es una carpeta: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | El prompt del coordinador y el drenado de sus `spawn-requests` |
-| `discovery.js`, `accounts.js` | Escaneo real de repos por cuenta de GitHub, con detección de desajuste |
+| `config.js` | Almacén endurecido de configuración (`config.json`): defaults canónicos, deep merge, guardas contra Prototype Pollution, acotamiento numérico y reemplazo atómico |
+| `discovery.js`, `accounts.js` | Escaneo real de repos por cuenta de GitHub, con detección de desajuste, rutas relativas jerárquicas y resolución canónica en disco |
 | `scheduled-tasks.js` | Descubre, solo lectura, las tareas programadas de Claude Desktop y de Antigravity en esta máquina |
 | `toy-repo.js` | El repo de juguete que usan los `tools/verify-*.js` en vivo |
 
@@ -144,7 +145,7 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `esc.js` | Utilidad pura para escape seguro de cadenas contra inyecciones HTML en plantillas |
 | `robot.js` | El robot, definido una sola vez y parametrizado por estado |
 | `ring.js` | El anillo de tokens y los formateadores |
-| `repo-tree.js`, `agent-card.js`, `terminal.js` | Pestaña «Control de agentes» |
+| `repo-tree.js`, `agent-card.js`, `terminal.js` | Pestaña «Control de agentes»: árbol de directorios jerárquico colapsable con burbujeo de estado en tiempo real, filtros y cola de tareas |
 | `boss-graph.js`, `timeline.js` | Pestaña «Flujos de trabajo» |
 | `editor.js` | Pestaña «Editor»: el árbol de cambios y el diff |
 | `tokens-view.js` | Pestaña «Uso» |
@@ -180,3 +181,5 @@ siguen contando lo mismo.
 3. **Buzón IPC desacoplado por archivos:** La arquitectura de mensajería entre agentes obreros y el coordinador opera mediante colas JSON en disco (`events/` y `outbox/`). Esto prescinde de sockets de red y puertos locales expuestos, eliminando vectores de ataque y garantizando persistencia ante reinicios.
 4. **Listas blancas vs. listas negras en agentes de IA:** Para el modo de sólo lectura, una lista negra (`Edit|Write`) es suficiente en motores con herramientas cerradas (Claude Code), pero resulta insuficiente en motores con ejecución de comandos arbitrarios (`agy`). Para estos últimos, la única aproximación segura es invertir la validación a una lista blanca estricta (`view_file`, `list_dir`, `grep_search`, `find_by_name`).
 5. **Aislamiento por Git Worktree:** En tareas con permisos de escritura, la mutación directa del checkout de trabajo del usuario es inaceptable. Cada tarea crea un worktree temporal y rama propia (`agent/<id>`) en una ruta de trabajo dedicada, manteniendo el checkout base intacto hasta que los cambios sean revisados formalmente.
+6. **Persistencia atómica y blindaje contra Prototype Pollution en configuración de escritorio:** Guardar preferencias mutables (`config.json`) mediante buffers temporales con nonce aleatorio (`nonce = ${pid}.${Date.now()}.${random}`) y reemplazo atómico (`renameSync` con fallback a copia) previene el truncado a 0 bytes en caídas abruptas. Asimismo, filtrar rigurosamente propiedades mágicas (`__proto__`, `constructor`, `prototype`) y acotar rangos numéricos (`maxParallel: [1..20]`) neutraliza vectores de DoS o *fork bombs* antes de que alcancen el planificador de procesos.
+7. **Virtualización jerárquica y desambiguación canónica de repositorios:** En entornos con múltiples cuentas y repositorios anidados, aplanar la estructura bajo las raíces declaradas genera listas inmanejables de 50+ elementos y errores silenciosos de validación de directorio de trabajo (`cwd`). Construir un árbol jerárquico N-ario colapsable con acumulación de métricas y banderas en una única pasada lineal ($O(N)$), junto con el rastreo canónico de rutas absolutas, previene el secuestro de tareas entre repositorios con nombres idénticos (ej. `simplit/infra/infra-k8s` vs `simplit/paul/infra-k8s`) y mantiene el repintado de la interfaz instantáneo.

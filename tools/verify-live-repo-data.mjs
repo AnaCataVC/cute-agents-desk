@@ -42,6 +42,7 @@ const nested = gotRepos.find((r) => r.name === 'munder-difflin');
 assert.strictEqual(nested.folder, 'C:/Users/mockuser/Work/Repositories',
   'un repo anidado debe quedar etiquetado con la raiz declarada, no con su carpeta padre real');
 assert.strictEqual(nested.accountId, 'work-account');
+assert.strictEqual(nested.path, 'C:/Users/mockuser/Work/Repositories/external/munder-difflin');
 assert.strictEqual(nested.noRemote, false);
 
 const noRemoteRepo = gotRepos.find((r) => r.name === 'cute-agents-desk');

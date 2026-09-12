@@ -34,6 +34,8 @@ const FAST = [
   'verify-delivery.js',
   'verify-skills.js',
   'verify-tokens-and-accounts.js',
+  'verify-config.js',
+  'verify-hierarchical-repo-tree.mjs',
 ];
 
 const MANUAL = [
