@@ -1,33 +1,66 @@
 # Dependencies
+# Third-party packages and external libraries managed by package managers.
+# Rebuilt locally by running 'npm install'.
+# ------------------------------------------------------------------------------
 node_modules/
 
-# Build and distribution
+# ------------------------------------------------------------------------------
+# Build & Distribution Artifacts
+# Compiled bundles, packaged Electron/desktop binaries, installers, and build outputs.
+# Excluded to avoid bloating the Git repository with generated binary assets.
+# ------------------------------------------------------------------------------
 dist/
 releases/
 build/
 
-# Internal data & scratch
+# ------------------------------------------------------------------------------
+# Internal Data, Test Sandboxes & Scratch Assets
+# - .cute-agents-desk/: Default local runtime directory when running the app or
+#   tests locally. Contains test databases, sandbox agent worktrees (wt/),
+#   toy-repo fixture, task outboxes, and events.jsonl.
+# - design-ref/: Local UI/UX design mockups, reference screenshots, and scratchpad
+#   assets not meant for production distribution.
+# ------------------------------------------------------------------------------
 .cute-agents-desk/
 design-ref/
 
-# Logs & temporary files
+# ------------------------------------------------------------------------------
+# Test & Execution Logs, Crash Dumps & Package Manager Traces
+# - *.log: All execution logs, test output dumps (e.g. test scheduler logs created
+#   during verify-scheduled-tasks.js, agent pty.log terminal outputs, and any
+#   ad-hoc test trace generated in the repo).
+# - npm-debug.log*, yarn-debug.log*, yarn-error.log*: Failure reports generated
+#   when npm/yarn install or test commands fail locally.
+# ------------------------------------------------------------------------------
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment & local settings
+# ------------------------------------------------------------------------------
+# Environment Variables, Secrets & Local Credentials
+# Environment variables, machine-specific overrides, and sensitive local credentials
+# (such as API keys, account tokens, or local settings in accounts.json / config.json).
+# WARNING: Keep out of version control to prevent credential leakage.
+# ------------------------------------------------------------------------------
 .env
 .env*.local
 accounts.json
 config.json
 
-# Operating System & IDE
+# ------------------------------------------------------------------------------
+# Operating System Metadata
+# System-generated indexing and folder layout metadata from macOS and Windows.
+# ------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ------------------------------------------------------------------------------
+# IDE & Code Editor Configurations
+# Developer-specific workspace settings (VS Code, JetBrains IDEs) and temporary swap files.
+# ------------------------------------------------------------------------------
 .idea/
 .vscode/
 *.swp
 *.swo
-
