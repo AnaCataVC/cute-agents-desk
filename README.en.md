@@ -81,16 +81,16 @@ isolation, read-only mode, the full `agy` engine), and pure `node:assert` unit t
 state-machine logic (token cap, scheduler, conversations, mailbox draining).
 
 ```bash
-npm test        # runs the 15 fast scripts that need no real CLI and no window, in one shot
+npm test        # runs the 21 fast scripts that need no real CLI and no window, in one shot
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 15 `verify-*.js` scripts MEASURED to finish in
-seconds under plain `node`. The rest need a real CLI turn and/or an Electron window — slow, real
-API cost, and the window-dependent ones never finish at all in a headless shell
-(`app.whenReady()` never resolves there). Those stay manual, run one at a time:
+`npm test` (`tools/verify-all.js`) runs the 21 `verify-*.js` scripts MEASURED to finish in
+seconds under plain `node`. The rest need a real CLI turn, an Electron window, or packaged
+binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay manual, run one at a time:
 
 ```bash
+node tools/verify-dist-binary.js                                     # validates packaged executable in dist/
 node tools/verify-phase1.js                                          # a real claude agent, end to end
 node tools/verify-agy-phase1.js                                      # the same, with agy
 npx electron tools/verify-read-mode.js
@@ -98,8 +98,7 @@ npx electron tools/verify-hook-isolation.js
 npx electron tools/verify-coordinator-e2e.js
 ```
 
-`npm run verify` still only runs `verify-phase1.js`, the oldest of the group — not the full
-suite; `npm test` is, for its fast half.
+For test philosophy, virtual harness architecture, and step-by-step authoring guidelines, see [docs/testing-guidelines.md](docs/testing-guidelines.md).
 
 ## How it's built
 
