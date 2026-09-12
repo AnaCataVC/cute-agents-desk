@@ -248,6 +248,10 @@ function wireAgents(win) {
   ipcMain.handle('desk:repos', () => getRepoData());
 
   ipcMain.handle('desk:usage', () => registry.getUsage());
+  ipcMain.handle('desk:quotas', (_ev, opts) => {
+    const { getQuotas } = require('./quotas.js');
+    return getQuotas(opts);
+  });
 
   ipcMain.handle('desk:config', () => config.readConfig());
   ipcMain.handle('desk:updateConfig', (_ev, { section, key, value }) => {

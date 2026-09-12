@@ -63,7 +63,17 @@ const app = /** @type {HTMLElement} */ (document.getElementById('app'));
 
 /** Actions, keyed by the `data-act` value. Each one mutates state; render() follows. */
 const ACTIONS = {
-  view: (v) => { state.view = v; },
+  view: (v) => {
+    state.view = v;
+    if (v === 'usage' && window.desk?.quotas) {
+      window.desk.quotas().then((q) => { if (q) { data.setLiveQuotas(q); render(); } });
+    }
+  },
+  refreshQuotas: () => {
+    if (window.desk?.quotas) {
+      window.desk.quotas({ forceRefresh: true }).then((q) => { if (q) { data.setLiveQuotas(q); render(); } });
+    }
+  },
   flowView: (v) => { state.flowView = v; },
   cfgTab: (v) => { state.cfgTab = v; },
   toggleNode: (key) => { state.open[key] = !state.open[key]; },
@@ -338,7 +348,7 @@ app.addEventListener('click', (ev) => {
   const act = ACTIONS[el.dataset.act || ''];
   if (!act) return;
   ev.preventDefault();
-  act(el.dataset.arg);
+  act(el.dataset.arg, el);
   render();
 });
 
@@ -508,6 +518,9 @@ if (window.desk?.isDesk) {
   });
   window.desk.usage?.().then((usage) => {
     if (usage) { data.setLiveUsage(usage); render(); }
+  });
+  window.desk.quotas?.().then((quotas) => {
+    if (quotas) { data.setLiveQuotas(quotas); render(); }
   });
   // Scanned once on load, same as the agent list -- the tree does not need to re-scan on every
   // repaint, only when a folder is added or removed from Configuracion.

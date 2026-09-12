@@ -66,6 +66,61 @@ function hourlyChart(series) {
   </div>`;
 }
 
+function quotaBar(label, pctUsed, color, detail = '') {
+  const safePct = Math.max(0, Math.min(100, pctUsed));
+  return `
+  <div style="margin-bottom:8px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px">
+      <span style="font:500 11px var(--font-body);color:var(--color-dark-text-1)">${esc(label)}</span>
+      <span class="mono" style="font-size:10.5px;color:var(--color-dark-text-2)">${safePct}% usado</span>
+    </div>
+    <div style="height:6px;border-radius:var(--radius-full);background:var(--color-dark-bg);overflow:hidden">
+      <div style="width:${safePct}%;height:100%;background:${color}"></div>
+    </div>
+    ${detail ? `<div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);margin-top:2px">${esc(detail)}</div>` : ''}
+  </div>`;
+}
+
+function quotasSection(quotas) {
+  if (!quotas) {
+    return `
+    <div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:6px 0">
+      Consultando cuotas oficiales de CLIs...
+    </div>`;
+  }
+
+  const rows = [];
+  if (quotas.claude) {
+    const c = quotas.claude;
+    const weekUsed = c.weekAllModelsUsedPct ?? 0;
+    const detail = c.weekResetsAt ? `reinicio: ${c.weekResetsAt}` : '';
+    rows.push(quotaBar('Claude Code (Semana)', weekUsed, weekUsed >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));
+  }
+
+  if (quotas.agy) {
+    const ag = quotas.agy;
+    if (ag.gemini && ag.gemini.weeklyRemainingPct !== null) {
+      const used = 100 - ag.gemini.weeklyRemainingPct;
+      const detail = ag.gemini.fiveHourRemainingPct !== null ? `${ag.gemini.fiveHourRemainingPct}% disponible en ventana 5h` : '';
+      rows.push(quotaBar('AGY (Gemini semanal)', used, used >= 90 ? 'var(--app-dirty)' : 'var(--color-blue)', detail));
+    }
+    if (ag.claude && ag.claude.weeklyRemainingPct !== null) {
+      const used = 100 - ag.claude.weeklyRemainingPct;
+      const detail = ag.claude.fiveHourRemainingPct !== null ? `${ag.claude.fiveHourRemainingPct}% disponible en ventana 5h` : '';
+      rows.push(quotaBar('AGY (Claude/GPT semanal)', used, used >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));
+    }
+  }
+
+  if (!rows.length) {
+    return `
+    <div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:6px 0">
+      No se pudo obtener información de /usage desde los CLIs.
+    </div>`;
+  }
+
+  return `<div style="display:flex;flex-direction:column;gap:4px">${rows.join('')}</div>`;
+}
+
 function budgetRow(b) {
   const pct = Math.round(b.used * 100);
   return `
@@ -207,8 +262,7 @@ export function renderUsage(state, data) {
   })}
       ${statCard({
     label: 'ritmo ahora',
-    // Ticks with the clock, so the number is visibly live rather than a stale snapshot.
-    value: `${u.rate.total + (state.tick % 7) * 40} tok/min`,
+    value: `${u.rate.total} tok/min`,
     claude: `${u.rate.claude}`,
     agy: `${u.rate.agy}`,
   })}
@@ -218,15 +272,20 @@ export function renderUsage(state, data) {
   })}
     </div>
 
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;margin-top:14px;align-items:start">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;margin-top:14px;align-items:start">
       ${hourlyChart(u.series)}
       <div class="panel" style="padding:14px 15px">
-        <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
-             text-transform:uppercase;margin-bottom:11px">Tope diario</div>
-        <div style="display:flex;flex-direction:column;gap:13px">${u.budgets.map(budgetRow).join('')}</div>
-        <div style="font:400 10px/1.55 var(--font-body);color:var(--color-dark-text-3);margin-top:12px">
-          Al llegar al tope no se abren sesiones nuevas; las vivas terminan lo que tienen y escriben
-          su reporte.
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+          <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
+               text-transform:uppercase">Cuotas oficiales (CLI)</div>
+          <button class="btn btn-secondary" style="font-size:10px;padding:2px 7px" data-act="refreshQuotas"
+                  title="Consulta /usage directamente en claude y agy">Actualizar</button>
+        </div>
+        ${quotasSection(data.getQuotas())}
+        <div style="margin-top:14px;padding-top:11px;border-top:1px solid var(--color-dark-border)">
+          <div class="font-display" style="font:600 10.5px var(--font-display);letter-spacing:.05em;
+               text-transform:uppercase;color:var(--color-dark-text-3);margin-bottom:8px">Tope diario del arnés</div>
+          <div style="display:flex;flex-direction:column;gap:10px">${u.budgets.map(budgetRow).join('')}</div>
         </div>
       </div>
     </div>

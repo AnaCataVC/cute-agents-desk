@@ -304,6 +304,11 @@ let liveServerUsage = null;
 /** @param {object} usage */
 export function setLiveUsage(usage) { liveServerUsage = usage; }
 
+let liveQuotas = null;
+/** @param {object} quotas */
+export function setLiveQuotas(quotas) { liveQuotas = quotas; }
+export function getQuotas() { return liveQuotas; }
+
 function fmtTokens(n) {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)} M`;
   if (n >= 1000) return `${Math.round(n / 1000)} k`;
