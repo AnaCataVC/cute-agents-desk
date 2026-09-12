@@ -13,9 +13,141 @@ function matches(repo, state, agentRepos) {
   if (state.accFilter !== 'all' && repo.accountId !== state.accFilter) return false;
   if (state.stFilter === 'dirty' && !repo.dirty) return false;
   if (state.stFilter === 'clean' && repo.dirty) return false;
-  if (state.stFilter === 'agent' && !agentRepos.includes(repo.name)) return false;
-  if (state.search && !repo.name.includes(state.search.toLowerCase())) return false;
+  const hasAgent = agentRepos instanceof Set ? agentRepos.has(repo.name) : (agentRepos || []).includes(repo.name);
+  if (state.stFilter === 'agent' && !hasAgent) return false;
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    const matchesName = repo.name.toLowerCase().includes(q);
+    const matchesRel = repo.relPath && repo.relPath.toLowerCase().includes(q);
+    if (!matchesName && !matchesRel) return false;
+  }
   return true;
+}
+
+/**
+ * Represents a directory in the tree containing subfolders and/or leaf repos.
+ */
+class FolderTreeNode {
+  /**
+   * @param {string} name
+   * @param {string} fullSubpath
+   */
+  constructor(name, fullSubpath) {
+    this.name = name;
+    this.fullSubpath = fullSubpath;
+    /** @type {Map<string, FolderTreeNode>} */
+    this.subfolders = new Map();
+    /** @type {any[]} */
+    this.repos = [];
+    this.count = 0;
+    this.hasBusy = false;
+    this.hasDirty = false;
+  }
+}
+
+/**
+ * Builds a hierarchical tree from a flat list of repos belonging to a declared folder root.
+ * Precomputes counts and active/dirty bubble-up flags in a single O(N) pass.
+ * @param {any[]} repos
+ * @param {Set<string>} agentRepos
+ * @returns {FolderTreeNode}
+ */
+function buildFolderTree(repos, agentRepos) {
+  const root = new FolderTreeNode('', '');
+  for (const repo of repos) {
+    const isBusy = agentRepos.has(repo.name);
+    const isDirty = Boolean(repo.dirty);
+
+    const sub = (repo.subfolder || '').trim();
+    if (!sub) {
+      root.repos.push(repo);
+      root.count++;
+      if (isBusy) root.hasBusy = true;
+      if (isDirty) root.hasDirty = true;
+      continue;
+    }
+
+    const parts = sub.split('/').filter(Boolean);
+    let current = root;
+    let pathAcc = '';
+    const lineage = [root];
+
+    for (const part of parts) {
+      pathAcc = pathAcc ? `${pathAcc}/${part}` : part;
+      if (!current.subfolders.has(part)) {
+        current.subfolders.set(part, new FolderTreeNode(part, pathAcc));
+      }
+      current = current.subfolders.get(part);
+      lineage.push(current);
+    }
+
+    current.repos.push(repo);
+
+    for (const node of lineage) {
+      node.count++;
+      if (isBusy) node.hasBusy = true;
+      if (isDirty) node.hasDirty = true;
+    }
+  }
+  return root;
+}
+
+/**
+ * Recursively renders subfolders and leaf repos.
+ * @param {FolderTreeNode} node
+ * @param {number} depth
+ * @param {string} folderRootPath
+ * @param {any} state
+ * @param {Set<string>} agentRepos
+ * @param {string[]} rows
+ */
+function renderFolderNode(node, depth, folderRootPath, state, agentRepos, rows) {
+  const sortedSubfolders = Array.from(node.subfolders.values())
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const sub of sortedSubfolders) {
+    const nodeKey = `${folderRootPath.replace(/\\/g, '/')}::${sub.fullSubpath}`;
+    const isNodeOpen = state.open[nodeKey] !== undefined
+      ? !!state.open[nodeKey]
+      : Boolean(state.search || sub.hasBusy);
+    const padLeft = 18 + depth * 11;
+
+    rows.push(`
+    <div data-act="toggleNode" data-arg="${esc(nodeKey)}" title="${esc(sub.fullSubpath)}"
+      style="display:flex;align-items:center;gap:6px;padding:5px 9px 5px ${padLeft}px;cursor:pointer;
+             background:transparent;border-radius:6px;user-select:none">
+      <span style="font:400 9px var(--font-body);color:var(--color-dark-text-3);width:9px">${isNodeOpen ? '▾' : '▸'}</span>
+      <span class="mono" style="font-size:10.5px;font-weight:600;color:var(--color-dark-text-2);flex:1;
+            min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sub.name)}/</span>
+      ${sub.hasBusy ? '<span class="r-antenna" style="width:7px;height:7px;border-radius:50%;background:var(--color-dark-accent);margin-right:2px"></span>' : ''}
+      ${sub.hasDirty ? '<span style="font:400 8px var(--font-body);color:var(--app-dirty);margin-right:2px">●</span>' : ''}
+      <span class="mono" style="font-size:9.5px;color:var(--color-dark-text-3)">${sub.count}</span>
+    </div>`);
+
+    if (isNodeOpen) {
+      renderFolderNode(sub, depth + 1, folderRootPath, state, agentRepos, rows);
+    }
+  }
+
+  // Render direct repos in this folder node
+  const repoPadLeft = node.fullSubpath === '' ? 32 : (18 + depth * 11 + 10);
+  for (const repo of node.repos) {
+    const busy = agentRepos.has(repo.name);
+    const bg = busy
+      ? 'background:var(--app-surface-mine);box-shadow:inset 0 0 0 1px var(--color-dark-accent)'
+      : 'background:transparent';
+    const titlePath = repo.path || (repo.relPath ? `${repo.folder}/${repo.relPath}` : `${repo.folder}/${repo.name}`);
+    rows.push(`
+    <div data-act="openQueue" data-arg="${esc(repo.path || repo.name)}" title="${esc(titlePath)}"
+      style="display:flex;align-items:center;gap:7px;padding:5px 9px 5px ${repoPadLeft}px;cursor:pointer;
+             border-radius:7px;${bg}">
+      <span class="${busy ? 'r-antenna' : ''}" style="width:9px;font:400 7px var(--font-body);
+            color:var(--color-dark-accent)">${busy ? '●' : ''}</span>
+      <span class="mono" style="font-size:10.5px;color:${busy ? 'var(--color-dark-text-1)' : 'var(--color-dark-text-2)'};
+            flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(repo.name)}</span>
+      <span style="font:400 9px var(--font-body);color:var(--app-dirty)">${repo.dirty ? '●' : ''}</span>
+    </div>`);
+  }
 }
 
 function filterBlock(state, data, visibleCount) {
@@ -59,7 +191,7 @@ function filterBlock(state, data, visibleCount) {
 /** @returns {string} */
 export function renderRepoTree(state, data) {
   const repos = data.getRepos();
-  const agentRepos = data.getAgents().map((a) => a.repo);
+  const agentRepos = new Set(data.getAgents().map((a) => a.repo));
   const visible = repos.filter((r) => matches(r, state, agentRepos));
 
   const rows = [];
@@ -105,24 +237,8 @@ export function renderRepoTree(state, data) {
 
       if (!fOpen) continue;
 
-      for (const repo of kids) {
-        const busy = agentRepos.includes(repo.name);
-        // A repo with an agent on it gets an inset ring and a pulsing antenna dot, so the
-        // eye finds "where is something happening" without reading a single label.
-        const bg = busy
-          ? 'background:var(--app-surface-mine);box-shadow:inset 0 0 0 1px var(--color-dark-accent)'
-          : 'background:transparent';
-        rows.push(`
-        <div data-act="openQueue" data-arg="${esc(repo.name)}" title="${esc(`${repo.folder}/${repo.name}`)}"
-          style="display:flex;align-items:center;gap:7px;padding:5px 9px 5px 32px;cursor:pointer;
-                 border-radius:7px;${bg}">
-          <span class="${busy ? 'r-antenna' : ''}" style="width:9px;font:400 7px var(--font-body);
-                color:var(--color-dark-accent)">${busy ? '●' : ''}</span>
-          <span class="mono" style="font-size:10.5px;color:${busy ? 'var(--color-dark-text-1)' : 'var(--color-dark-text-2)'};
-                flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(repo.name)}</span>
-          <span style="font:400 9px var(--font-body);color:var(--app-dirty)">${repo.dirty ? '●' : ''}</span>
-        </div>`);
-      }
+      const tree = buildFolderTree(kids, agentRepos);
+      renderFolderNode(tree, 1, folder.path, state, agentRepos, rows);
     }
   }
 

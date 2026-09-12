@@ -52,11 +52,17 @@ async function inspectRepo(repoPath, account, folderRoot) {
     tryGitAsync(repoPath, ['remote', 'get-url', 'origin']),
     tryGitAsync(repoPath, ['config', 'user.email']),
   ]);
+  const rel = path.relative(folderRoot, repoPath).replace(/\\/g, '/');
+  const lastSlash = rel.lastIndexOf('/');
+  const subfolder = (lastSlash !== -1 && !rel.startsWith('..')) ? rel.slice(0, lastSlash) : '';
+
   return {
     path: repoPath,
     name: path.basename(repoPath),
     accountGh: account.gh,
     folder: folderRoot,
+    relPath: rel,
+    subfolder,
     branch: branch || '(sin HEAD)',
     dirty: dirty !== null && dirty !== '',
     remote,

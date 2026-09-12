@@ -111,9 +111,9 @@ const ACTIONS = {
     const task = (state.queueTask || '').trim();
     if (!task) return;
     const repos = data.getRepos();
-    const repoName = state.queueRepo || state.queue;
-    const repo = repos.find((r) => r.name === repoName);
-    const cwd = repo ? (repo.folder ? `${repo.folder}/${repo.name}` : repo.name) : undefined;
+    const repoIdentifier = state.queueRepo || state.queue;
+    const repo = repos.find((r) => r.path === repoIdentifier || r.name === repoIdentifier);
+    const cwd = repo ? (repo.path || (repo.folder ? `${repo.folder}/${repo.name}` : repo.name)) : undefined;
     const model = (state.queueModel && state.queueModel !== 'default') ? state.queueModel.trim() : undefined;
     const effort = (state.queueEffort && state.queueEffort !== 'default') ? state.queueEffort.trim() : undefined;
 
@@ -221,6 +221,32 @@ const ACTIONS = {
       const res = await window.desk.setAccountColor(accountId, color);
       if (res?.accounts) {
         data.setAccounts(res.accounts);
+        render();
+      }
+    }
+  },
+  toggleConfig: async (arg) => {
+    if (!arg) return;
+    const [section, key] = arg.split('|');
+    if (!section || !key) return;
+
+    const current = data.getLiveConfig() || {};
+    let oldVal = current[section]?.[key];
+    if (typeof oldVal !== 'boolean') {
+      const allSettings = data.getSettings();
+      const subtab = allSettings[section];
+      const match = subtab?.find((r) => r[3] === key);
+      oldVal = match && typeof match[1] === 'boolean' ? match[1] : false;
+    }
+    const newVal = !oldVal;
+
+    data.updateLiveConfigKey(section, key, newVal);
+    render();
+
+    if (window.desk?.updateConfig) {
+      const res = await window.desk.updateConfig({ section, key, value: newVal });
+      if (res?.config) {
+        data.setLiveConfig(res.config);
         render();
       }
     }
@@ -415,6 +441,7 @@ if (window.desk?.isDesk) {
   window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
   window.desk.delivered().then((deliv) => { data.setLiveDelivered(deliv); render(); });
   window.desk.skills?.().then((skills) => { data.setLiveSkills?.(skills); render(); });
+  window.desk.config?.().then((cfg) => { if (cfg) { data.setLiveConfig(cfg); render(); } });
 
   // Unlike repos/worktrees/conversations, this reflects files Claude Desktop and Antigravity
   // write in the background -- fetch-once-on-load would go stale the moment either reschedules,

@@ -61,7 +61,7 @@ let liveScheduledTasks = null;
 export function setLiveScheduledTasks(tasks) { liveScheduledTasks = tasks; }
 export function getScheduledTasks() { return liveScheduledTasks ?? []; }
 
-/** @returns {{name:string, index:number, accountId:string, folder:string, dirty:boolean, noRemote:boolean}[]} */
+/** @returns {{name:string, index:number, accountId:string, folder:string, path?:string, relPath?:string, subfolder?:string, dirty:boolean, noRemote:boolean}[]} */
 export function getRepos() {
   if (!liveRepos) return [];
   return liveRepos.map((r, i) => ({
@@ -69,6 +69,9 @@ export function getRepos() {
     index: i,
     accountId: r.accountGh,
     folder: r.folder,
+    path: r.path,
+    relPath: r.relPath || r.name,
+    subfolder: r.subfolder || '',
     dirty: r.dirty,
     noRemote: !r.remote,
     mismatch: r.mismatch,
@@ -144,7 +147,7 @@ function fromLive(a) {
     accountId: accountIdForCwd(a.cwd),
     state: a.state === 'spawning' ? 'thinking' : a.state,
     tokens: a.tokens || 0,
-    tokenCap: CONTEXT_CAP,
+    tokenCap: a.tokenCap || liveConfig?.engines?.[a.engine === 'agy' ? 'agy' : 'claude']?.contextCap || CONTEXT_CAP,
     elapsed: a.elapsed || 0,
     boss: a.role === 'coordinator' ? 'coordinador de esta conversación' : (a.replyTo || 'sin coordinador'),
     tool: a.tool || '',
@@ -223,18 +226,24 @@ export const ENGINE_MODES = {
 
 /** Engines. `hooks` is what the CLI really reports, which drives the degraded card. */
 export function getEngines() {
+  const claudeCfg = liveConfig?.engines?.claude;
+  const agyCfg = liveConfig?.engines?.agy;
   return [
     {
-      id: 'claude', name: 'claude cli',
-      command: 'claude [--model <m>] [--effort <e>] [--permission-mode <p>] --settings <agente>/settings.json',
-      hooks: 'full', hooksLabel: 'hooks completos',
-      contextCap: '200k', warnAt: '85%', branchPrefix: 'claude/',
+      id: 'claude', name: claudeCfg?.name || 'claude cli',
+      command: claudeCfg?.command || 'claude [--model <m>] [--effort <e>] [--permission-mode <p>] --settings <agente>/settings.json',
+      hooks: claudeCfg?.hooks || 'full', hooksLabel: claudeCfg?.hooksLabel || 'hooks completos',
+      contextCap: claudeCfg?.contextCap ? `${Math.round(claudeCfg.contextCap / 1000)}k` : '200k',
+      warnAt: claudeCfg?.warnAtPercent ? `${claudeCfg.warnAtPercent}%` : '80%',
+      branchPrefix: claudeCfg?.branchPrefix || 'claude/',
     },
     {
-      id: 'agy', name: 'agy cli',
-      command: 'agy [--model <m>] [--effort <e>] [--mode <p>] --add-dir <repo>',
-      hooks: 'partial', hooksLabel: 'hooks parciales · sin SessionStart ni Notification',
-      contextCap: '200k', warnAt: '85%', branchPrefix: 'agy/',
+      id: 'agy', name: agyCfg?.name || 'agy cli',
+      command: agyCfg?.command || 'agy [--model <m>] [--effort <e>] [--mode <p>] --add-dir <repo>',
+      hooks: agyCfg?.hooks || 'partial', hooksLabel: agyCfg?.hooksLabel || 'hooks parciales · sin SessionStart ni Notification',
+      contextCap: agyCfg?.contextCap ? `${Math.round(agyCfg.contextCap / 1000)}k` : '200k',
+      warnAt: agyCfg?.warnAtPercent ? `${agyCfg.warnAtPercent}%` : '80%',
+      branchPrefix: agyCfg?.branchPrefix || 'agy/',
     },
   ];
 }
@@ -354,27 +363,49 @@ export function getUsage() {
   const rawAccounts = getAccounts();
   const byAcc = new Map();
   for (const acc of rawAccounts) {
-    byAcc.set(acc.id, { tokens: 0, cost: 0, claudeTokens: 0, agyTokens: 0 });
+    const sAcc = liveServerUsage?.byAccount?.[acc.id];
+    const sAllTime = liveServerUsage?.byAccountAllTime?.[acc.id];
+    byAcc.set(acc.id, {
+      tokens: sAcc?.tokens || 0,
+      cost: sAcc?.costUsd || 0,
+      claudeTokens: sAcc?.claudeTokens || 0,
+      agyTokens: sAcc?.agyTokens || 0,
+      allTimeTokens: sAllTime?.tokens || 0,
+      allTimeCost: sAllTime?.costUsd || 0,
+    });
   }
-  for (const a of agents) {
-    if (a.accountId && byAcc.has(a.accountId)) {
-      const rec = byAcc.get(a.accountId);
-      rec.tokens += (a.tokens || 0);
-      rec.cost += (a.costUsd || 0);
-      if (a.engine.includes('agy')) rec.agyTokens += (a.tokens || 0);
-      else rec.claudeTokens += (a.tokens || 0);
+  if (!liveServerUsage) {
+    for (const a of agents) {
+      if (a.accountId && byAcc.has(a.accountId)) {
+        const rec = byAcc.get(a.accountId);
+        rec.tokens += (a.tokens || 0);
+        rec.cost += (a.costUsd || 0);
+        rec.allTimeTokens += (a.tokens || 0);
+        rec.allTimeCost += (a.costUsd || 0);
+        if (a.engine.includes('agy')) rec.agyTokens += (a.tokens || 0);
+        else rec.claudeTokens += (a.tokens || 0);
+      }
     }
   }
 
+  const allTimeTotalTokens = liveServerUsage?.allTime?.total?.tokens || totalTokens;
   const accounts = rawAccounts.map((a) => {
-    const rec = byAcc.get(a.id) || { tokens: 0, cost: 0, claudeTokens: 0, agyTokens: 0 };
-    const share = totalTokens > 0 ? rec.tokens / totalTokens : 0;
-    const claudeShare = rec.tokens > 0 ? rec.claudeTokens / rec.tokens : 0.5;
+    const rec = byAcc.get(a.id) || { tokens: 0, cost: 0, claudeTokens: 0, agyTokens: 0, allTimeTokens: 0, allTimeCost: 0 };
+    const hasToday = rec.tokens > 0;
+    const share = totalTokens > 0
+      ? rec.tokens / totalTokens
+      : (allTimeTotalTokens > 0 ? rec.allTimeTokens / allTimeTotalTokens : 0);
+    const claudeShare = rec.tokens > 0
+      ? rec.claudeTokens / rec.tokens
+      : (rec.allTimeTokens > 0 ? (rec.claudeTokens / rec.allTimeTokens) : 0.5);
     return {
       name: a.name || a.id,
       color: a.color || 'var(--color-lilac)',
       tokens: fmtTokens(rec.tokens),
       cost: fmtCost(rec.cost),
+      allTimeTokens: fmtTokens(rec.allTimeTokens),
+      allTimeCost: fmtCost(rec.allTimeCost),
+      hasToday,
       share,
       claude: fmtTokens(rec.claudeTokens),
       agy: fmtTokens(rec.agyTokens),
@@ -382,9 +413,11 @@ export function getUsage() {
     };
   });
 
-  const currentHour = new Date().getHours();
-  const series = Array(24).fill(0);
-  if (totalTokens > 0) {
+  let series = Array(24).fill(0);
+  if (liveServerUsage?.series && Array.isArray(liveServerUsage.series) && liveServerUsage.series.length === 24) {
+    series = liveServerUsage.series;
+  } else if (totalTokens > 0) {
+    const currentHour = new Date().getHours();
     series[currentHour] = Math.max(1, Math.round(totalTokens / 1000));
   }
 
@@ -401,6 +434,12 @@ export function getUsage() {
       total: fmtCost(totalCost),
       claude: fmtCost(claudeCost),
       agy: fmtCost(agyCost),
+    },
+    allTime: {
+      total: fmtTokens(liveServerUsage?.allTime?.total?.tokens ?? totalTokens),
+      cost: fmtCost(liveServerUsage?.allTime?.total?.costUsd ?? totalCost),
+      claude: fmtTokens(liveServerUsage?.allTime?.claude?.tokens ?? claudeTokens),
+      agy: fmtTokens(liveServerUsage?.allTime?.agy?.tokens ?? agyTokens),
     },
     rate: {
       total: rateTotal,
@@ -419,6 +458,7 @@ export function getUsage() {
     ],
     accounts,
   };
+
 }
 
 /** Mismatches: repo sits under one account's folder, git config says the other. */
@@ -467,14 +507,25 @@ export function getTimeline() {
   };
 }
 
+let liveConfig = null;
+/** @param {Record<string, any>} config */
+export function setLiveConfig(config) { liveConfig = config; }
+export function getLiveConfig() { return liveConfig; }
+export function updateLiveConfigKey(section, key, value) {
+  if (!liveConfig) liveConfig = {};
+  if (!liveConfig[section]) liveConfig[section] = {};
+  liveConfig[section][key] = value;
+}
+
 export function getSummary() {
   const agents = getAgents();
+  const maxParallel = Number(liveConfig?.exec?.maxParallel) || 5;
   return {
     repos: getRepos().length,
     accounts: getAccounts().length,
     coordinators: getFlows().filter((f) => f.status !== 'archivado').length,
     running: agents.filter((a) => a.state === 'thinking' || a.state === 'tool').length,
-    maxParallel: 5,
+    maxParallel,
     blocked: agents.filter((a) => a.state === 'blocked').length,
     queued: 0,
   };
@@ -482,48 +533,54 @@ export function getSummary() {
 
 /** Settings shown in the config tabs, grouped exactly as the design groups them. */
 export function getSettings() {
+  const c = liveConfig?.coordinators || {};
+  const e = liveConfig?.exec || {};
+  const d = liveConfig?.deliver || {};
+  const p = liveConfig?.perf || {};
+  const a = liveConfig?.advanced || {};
+
   return {
     coordinators: [
-      ['Sesiones que puede abrir', '3'],
-      ['Motor por defecto', 'claude cli'],
-      ['Preguntar antes de abrir sesiones', false],
-      ['Permitir enlaces entre agentes', false],
-      ['Reutilizar coordinador del mismo repo', true],
-      ['Reportar al coordinador cada', 'herramienta'],
-      ['Archivar al entregar', true],
-      ['Cerrar agentes idle tras', '15 min'],
+      ['Sesiones que puede abrir', String(c.maxSessionsPerCoordinator ?? 3), 'coordinators', 'maxSessionsPerCoordinator'],
+      ['Motor por defecto', c.defaultEngine ?? 'claude cli', 'coordinators', 'defaultEngine'],
+      ['Preguntar antes de abrir sesiones', c.askBeforeSpawning ?? false, 'coordinators', 'askBeforeSpawning'],
+      ['Permitir enlaces entre agentes', c.allowAgentLinks ?? false, 'coordinators', 'allowAgentLinks'],
+      ['Reutilizar coordinador del mismo repo', c.reuseCoordinatorSameRepo ?? true, 'coordinators', 'reuseCoordinatorSameRepo'],
+      ['Reportar al coordinador cada', c.reportInterval ?? 'herramienta', 'coordinators', 'reportInterval'],
+      ['Archivar al entregar', c.archiveOnDeliver ?? true, 'coordinators', 'archiveOnDeliver'],
+      ['Cerrar agentes idle tras', `${c.idleTimeoutMinutes ?? 15} min`, 'coordinators', 'idleTimeoutMinutes'],
     ],
     exec: [
-      ['Sesiones en paralelo', '5'],
-      ['Marcar bloqueado sin avance', '5 min'],
-      ['Pedir aprobación para push', true],
-      ['Pedir aprobación para bash', true],
-      ['Auto-aprobar lecturas', true],
+      ['Sesiones en paralelo', String(e.maxParallel ?? 5), 'exec', 'maxParallel'],
+      ['Marcar bloqueado sin avance', `${e.blockedTimeoutMinutes ?? 5} min`, 'exec', 'blockedTimeoutMinutes'],
+      ['Pedir aprobación para push', e.requirePushApproval ?? true, 'exec', 'requirePushApproval'],
+      ['Pedir aprobación para bash', e.requireBashApproval ?? true, 'exec', 'requireBashApproval'],
+      ['Auto-aprobar lecturas', e.autoApproveReads ?? true, 'exec', 'autoApproveReads'],
     ],
     deliver: [
-      ['PR siempre en borrador', true],
-      ['Bloquear push a main', true],
-      ['Adjuntar reporte al PR', true],
-      ['Un PR por repo', true],
-      ['Título del PR', '<tipo>: <tarea>'],
+      ['PR siempre en borrador', d.draftPR ?? true, 'deliver', 'draftPR'],
+      ['Bloquear push a main', d.blockPushToMain ?? true, 'deliver', 'blockPushToMain'],
+      ['Adjuntar reporte al PR', d.attachReportToPR ?? true, 'deliver', 'attachReportToPR'],
+      ['Un PR por repo', d.singlePRPerRepo ?? true, 'deliver', 'singlePRPerRepo'],
+      ['Título del PR', d.prTitleTemplate ?? '<tipo>: <tarea>', 'deliver', 'prTitleTemplate'],
     ],
     perf: [
-      ['Terminales montadas a la vez', '1'],
-      ['Scrollback por terminal', '2000 líneas'],
-      ['Refresco de tarjetas', '1 s'],
-      ['Animaciones de estado', true],
-      ['Ventana del timeline', '30 min'],
-      ['Rotar el registro de eventos', '50 MB'],
+      ['Terminales montadas a la vez', String(p.maxMountedTerminals ?? 1), 'perf', 'maxMountedTerminals'],
+      ['Scrollback por terminal', `${p.terminalScrollbackLines ?? 2000} líneas`, 'perf', 'terminalScrollbackLines'],
+      ['Refresco de tarjetas', `${(p.cardRefreshIntervalMs ?? 1000) / 1000} s`, 'perf', 'cardRefreshIntervalMs'],
+      ['Animaciones de estado', p.statusAnimations ?? true, 'perf', 'statusAnimations'],
+      ['Ventana del timeline', `${p.timelineWindowMinutes ?? 30} min`, 'perf', 'timelineWindowMinutes'],
+      ['Rotar el registro de eventos', `${p.eventLogRotationMb ?? 50} MB`, 'perf', 'eventLogRotationMb'],
     ],
     advanced: [
-      ['Directorio del harness', '~/.cute-agents-desk'],
-      ['Worktrees fuera del repo', true],
-      ['Sanear variables CLAUDE* al lanzar', true],
-      ['Aislar la configuración del agente', true],
-      ['Serializar operaciones remotas', true],
-      ['Reconciliar procesos al arrancar', true],
-      ['Protocolo de ventana', 'app://desk'],
-      ['Instancia única de Electron', true],
+      ['Directorio del harness', a.harnessDir ?? '~/.cute-agents-desk', 'advanced', 'harnessDir'],
+      ['Worktrees fuera del repo', a.worktreesOutsideRepo ?? true, 'advanced', 'worktreesOutsideRepo'],
+      ['Sanear variables CLAUDE* al lanzar', a.sanitizeClaudeEnv ?? true, 'advanced', 'sanitizeClaudeEnv'],
+      ['Aislar la configuración del agente', a.isolateAgentConfig ?? true, 'advanced', 'isolateAgentConfig'],
+      ['Serializar operaciones remotas', a.serializeRemoteOps ?? true, 'advanced', 'serializeRemoteOps'],
+      ['Reconciliar procesos al arrancar', a.reconcileOnStartup ?? true, 'advanced', 'reconcileOnStartup'],
+      ['Protocolo de ventana', a.windowProtocol ?? 'app://desk', 'advanced', 'windowProtocol'],
+      ['Instancia única de Electron', a.singleInstance ?? true, 'advanced', 'singleInstance'],
     ],
   };
 }
