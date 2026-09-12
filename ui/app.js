@@ -55,6 +55,8 @@ const state = {
   newConvTopic: '',
   tick: 0,
   error: null,                 // last IPC refusal (scheduler cap, still-alive agent, ...), or null
+  inspectedSkill: null,        // data for currently inspected skill in dialog
+  inspectedTask: null,         // data for currently inspected scheduled task in dialog
 };
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -249,6 +251,80 @@ const ACTIONS = {
         data.setLiveConfig(res.config);
         render();
       }
+    }
+  },
+
+  inspectSkill: (_arg, el) => {
+    if (!el) return;
+    const name = el.dataset.name || '';
+    const desc = el.dataset.desc || '';
+    const version = el.dataset.version || '';
+    const load = el.dataset.load || 'a demanda';
+    const tokens = Number(el.dataset.tokens || 0);
+    const filePath = el.dataset.file || '';
+    const folderPath = el.dataset.folder || '';
+    const engine = el.dataset.engine || '';
+
+    state.inspectedSkill = {
+      name, desc, version, load, tokens, filePath, folder: folderPath, engine,
+      content: '', loading: !!filePath, error: null,
+    };
+    render();
+
+    if (filePath && window.desk?.readSkill) {
+      window.desk.readSkill(filePath).then((res) => {
+        if (state.inspectedSkill && state.inspectedSkill.name === name) {
+          state.inspectedSkill.loading = false;
+          if (res?.error) state.inspectedSkill.error = res.error;
+          else state.inspectedSkill.content = res?.content || '';
+          render();
+        }
+      });
+    }
+  },
+  closeSkillInspector: () => {
+    state.inspectedSkill = null;
+    render();
+  },
+
+  inspectTask: (_arg, el) => {
+    if (!el) return;
+    const id = el.dataset.id || '';
+    const name = el.dataset.name || '';
+    const engine = el.dataset.engine || '';
+    const sourcePath = el.dataset.source || '';
+
+    state.inspectedTask = {
+      id, name, engine, source: sourcePath,
+      logs: '', loading: true, error: null,
+    };
+    render();
+
+    if (sourcePath && window.desk?.taskLogs) {
+      window.desk.taskLogs({ sourcePath, engine, taskId: id }).then((res) => {
+        if (state.inspectedTask && state.inspectedTask.id === id) {
+          state.inspectedTask.loading = false;
+          if (res?.error) state.inspectedTask.error = res.error;
+          else state.inspectedTask.logs = res?.logs || '';
+          render();
+        }
+      });
+    }
+  },
+  closeTaskInspector: () => {
+    state.inspectedTask = null;
+    render();
+  },
+
+  openFolderInExplorer: (_arg, el) => {
+    const target = el?.dataset?.target;
+    if (target && window.desk?.openPath) {
+      window.desk.openPath(target).then((res) => {
+        if (res?.error) {
+          state.error = res.error;
+          render();
+        }
+      });
     }
   },
 };

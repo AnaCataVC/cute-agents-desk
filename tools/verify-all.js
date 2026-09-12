@@ -38,6 +38,7 @@ const FAST = [
   'verify-tokens-and-accounts.js',
   'verify-config.js',
   'verify-hierarchical-repo-tree.mjs',
+  'verify-quotas.js',
 ];
 
 const MANUAL = [

@@ -123,10 +123,26 @@ Content
   assert.strictEqual(testTaskRow[1], 'A disposable test skill');
   assert.strictEqual(testTaskRow[2], 'v1');
   assert.strictEqual(testTaskRow[3], 'a demanda');
+  assert.ok(testTaskRow[4] > 0, 'tokenEstimate should be > 0');
+  assert.strictEqual(testTaskRow[5], path.join(claudeDir, 'test-task', 'SKILL.md'));
+  assert.strictEqual(testTaskRow[6], path.join(claudeDir, 'test-task'));
 
   const orphanRow = claudeGroup.rows.find((r) => r[0] === 'orphan-skill');
   assert.ok(orphanRow);
   assert.strictEqual(orphanRow[1], '(Sin SKILL.md válido)');
+  assert.strictEqual(orphanRow[4], 0);
+  assert.strictEqual(orphanRow[5], null);
+  assert.strictEqual(orphanRow[6], path.join(claudeDir, 'orphan-skill'));
+
+  // Test readSkillContent
+  const { readSkillContent } = require('../electron/skills.js');
+  const readRes = readSkillContent(testTaskRow[5]);
+  assert.ok(readRes.content.includes('A disposable test skill'));
+  assert.strictEqual(readRes.error, undefined);
+
+  const missingRes = readSkillContent(path.join(tempHome, 'non-existent.md'));
+  assert.strictEqual(missingRes.content, '');
+  assert.ok(missingRes.error);
 
   // Agy results: installed but empty
   const agyGroup = results.find((r) => r.engine === 'agy cli');

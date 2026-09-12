@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld('desk', {
   /** Skills installed for each CLI engine on this machine — read-only. */
   skills: () => ipcRenderer.invoke('desk:skills'),
 
+  /** Read a SKILL.md file content. */
+  readSkill: (filePath) => ipcRenderer.invoke('desk:readSkill', filePath),
+
+  /** Read the latest logs or JSON events for a scheduled task. */
+  taskLogs: (opts) => ipcRenderer.invoke('desk:taskLogs', opts),
+
+  /** Open a directory or file in the native system file explorer. */
+  openPath: (targetPath) => ipcRenderer.invoke('desk:openPath', targetPath),
+
   /** @param {string} agentId  refused with `{error}` while that agent is still alive */
   reapWorktree: (agentId) => ipcRenderer.invoke('desk:reapWorktree', agentId),
 
@@ -63,6 +72,9 @@ contextBridge.exposeInMainWorld('desk', {
 
   /** Aggregated token usage and cost for today. */
   usage: () => ipcRenderer.invoke('desk:usage'),
+
+  /** Live official subscription quotas from CLIs (claude and agy). */
+  quotas: (opts) => ipcRenderer.invoke('desk:quotas', opts),
 
   /**
    * Update and persist an account's color in accounts.json.

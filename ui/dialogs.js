@@ -159,10 +159,120 @@ function scanDialog(state, data) {
     </div>`, 520, 'closeScan');
 }
 
+function skillDialog(state, _data) {
+  const sk = state.inspectedSkill;
+  if (!sk) return '';
+  const tokensDesc = sk.tokens && Number(sk.tokens) > 0
+    ? `~${sk.tokens} tokens estimados (${Math.round(sk.tokens * 4 / 1024)} KB)`
+    : 'No medible (sin archivo o vacío)';
+
+  const contentDisplay = sk.loading
+    ? `<div style="padding:24px;text-align:center;color:var(--color-dark-text-3);font:400 12px var(--font-body)">Cargando SKILL.md…</div>`
+    : sk.error
+      ? `<div style="padding:16px;color:var(--app-on-warning);background:var(--who-system-bg);border-radius:8px;font:400 11px var(--font-body)">${esc(sk.error)}</div>`
+      : `<pre class="mono" style="margin:0;padding:12px;max-height:360px;overflow-y:auto;background:var(--color-dark-bg);border:1px solid var(--color-dark-border);border-radius:8px;font-size:11px;line-height:1.6;color:var(--color-dark-text-1);white-space:pre-wrap;word-break:break-word">${esc(sk.content || '(Archivo vacío)')}</pre>`;
+
+  return shell(`
+    <div style="padding:16px 18px;border-bottom:1px solid var(--color-dark-border);display:flex;align-items:flex-start;justify-content:space-between">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="mono" style="font:600 14px var(--font-mono);color:var(--color-dark-text-1)">${esc(sk.name)}</span>
+          <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(sk.version || '—')}</span>
+          <span style="padding:1px 7px;border-radius:var(--radius-full);font:600 9px var(--font-body);
+                background:${sk.load === 'siempre' ? 'var(--app-on-accent)' : 'var(--color-dark-surface)'};
+                color:${sk.load === 'siempre' ? 'var(--color-lilac)' : 'var(--color-dark-text-3)'}">${esc(sk.load)}</span>
+        </div>
+        <div style="font:400 11.5px var(--font-body);color:var(--color-dark-text-2);margin-top:4px;max-width:540px">
+          ${esc(sk.desc)}
+        </div>
+      </div>
+      <button class="btn-ghost" data-act="closeSkillInspector" style="padding:4px 8px;font-size:11px">✕</button>
+    </div>
+
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;background:var(--color-dark-bg);padding:10px 14px;border-radius:8px;border:1px solid var(--color-dark-border)">
+        <div>
+          <span style="font:600 9.5px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3);display:block">Motor</span>
+          <span class="mono" style="font-size:11px;color:var(--color-lilac)">${esc(sk.engine)}</span>
+        </div>
+        <div>
+          <span style="font:600 9.5px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3);display:block">Impacto en Contexto</span>
+          <span class="mono" style="font-size:11px;color:var(--color-mint)">${esc(tokensDesc)}</span>
+        </div>
+      </div>
+
+      <div>
+        <span style="font:600 9.5px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3);margin-bottom:6px;display:block">
+          Contenido de SKILL.md
+        </span>
+        ${contentDisplay}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:9px;justify-content:space-between;align-items:center;padding:12px 18px;
+         border-top:1px solid var(--color-dark-border);background:var(--app-surface-sunken)">
+      ${sk.folder ? `
+        <button class="btn-ghost" data-act="openFolderInExplorer" data-target="${esc(sk.folder)}"
+                style="display:flex;align-items:center;gap:6px;font-size:11px"
+                title="Abrir directorio en el Explorador de Windows">
+          <span>Abrir carpeta en Explorador</span>
+        </button>
+      ` : '<div></div>'}
+      <button class="btn-ghost" data-act="closeSkillInspector">Cerrar</button>
+    </div>
+  `, 640, 'closeSkillInspector');
+}
+
+function taskLogDialog(state, _data) {
+  const tk = state.inspectedTask;
+  if (!tk) return '';
+
+  const contentDisplay = tk.loading
+    ? `<div style="padding:24px;text-align:center;color:var(--color-dark-text-3);font:400 12px var(--font-body)">Leyendo logs…</div>`
+    : tk.error
+      ? `<div style="padding:16px;color:var(--app-on-warning);background:var(--who-system-bg);border-radius:8px;font:400 11px var(--font-body)">${esc(tk.error)}</div>`
+      : `<pre class="mono" style="margin:0;padding:12px;max-height:360px;overflow-y:auto;background:var(--color-dark-bg);border:1px solid var(--color-dark-border);border-radius:8px;font-size:10.5px;line-height:1.55;color:var(--color-dark-text-1);white-space:pre-wrap;word-break:break-all">${esc(tk.logs || '(Sin líneas de log)')}</pre>`;
+
+  return shell(`
+    <div style="padding:16px 18px;border-bottom:1px solid var(--color-dark-border);display:flex;align-items:flex-start;justify-content:space-between">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="mono" style="font:600 14px var(--font-mono);color:var(--color-dark-text-1)">${esc(tk.name)}</span>
+          <span style="font:500 9.5px var(--font-body);color:var(--app-on-accent);background:var(--color-lilac);
+                padding:2px 8px;border-radius:var(--radius-full)">${esc(tk.engine)}</span>
+        </div>
+        <div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);margin-top:3px">
+          Registro de ejecución reciente y estado en disco
+        </div>
+      </div>
+      <button class="btn-ghost" data-act="closeTaskInspector" style="padding:4px 8px;font-size:11px">✕</button>
+    </div>
+
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+      ${contentDisplay}
+    </div>
+
+    <div style="display:flex;gap:9px;justify-content:space-between;align-items:center;padding:12px 18px;
+         border-top:1px solid var(--color-dark-border);background:var(--app-surface-sunken)">
+      ${tk.source ? `
+        <button class="btn-ghost" data-act="openFolderInExplorer" data-target="${esc(tk.source)}"
+                style="display:flex;align-items:center;gap:6px;font-size:11px"
+                title="Abrir ubicación de la tarea en el Explorador de Windows">
+          <span>Abrir ubicación en Explorador</span>
+        </button>
+      ` : '<div></div>'}
+      <button class="btn-ghost" data-act="closeTaskInspector">Cerrar</button>
+    </div>
+  `, 680, 'closeTaskInspector');
+}
+
 /** @returns {string} */
 export function renderDialogs(state, data) {
   if (state.chat) return shell(renderChat(state, data), 900, 'closeChat');
+  if (state.inspectedSkill) return skillDialog(state, data);
+  if (state.inspectedTask) return taskLogDialog(state, data);
   if (state.queue !== null) return queueDialog(state, data);
   if (state.scan) return scanDialog(state, data);
   return '';
 }
+

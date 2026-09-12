@@ -91,9 +91,35 @@ try {
   const empty = getScheduledTasks({ localAppData: path.join(root, 'no-existe'), geminiHome: path.join(root, 'tampoco') });
   assert.deepStrictEqual(empty, [], 'ninguno de los dos motores instalado -> []');
 
-  console.log('scheduled-tasks OK: descubre tareas de claude (local y VM) y de agy, sin caerse por archivos ausentes');
-  cleanup();
-  process.exit(0);
+  // ---- readTaskLogs verification ----
+  const { readTaskLogs } = require('../electron/scheduled-tasks.js');
+  const agyLogRes = readTaskLogs(agyTaskDir, 'agy');
+  assert.ok(agyLogRes.logs.includes('0 11 * * 5'));
+
+  const claudeLogRes = readTaskLogs(path.join(claudeRoot, 'claude-code-sessions', 'acct1', 'org1', 'scheduled-tasks.json'), 'claude', 'task-1');
+  assert.ok(claudeLogRes.logs.includes('30 9,16 * * 1-5'));
+
+  // ---- calculateNextRun verification ----
+  const { pathToFileURL } = require('node:url');
+  const viewModulePath = pathToFileURL(path.join(__dirname, '..', 'ui', 'scheduled-tasks-view.js')).href;
+  import(viewModulePath).then(({ calculateNextRun }) => {
+    const nextCron = calculateNextRun({ cronExpression: '0 9 * * 1-5' });
+    assert.ok(nextCron, 'debe calcular proxima corrida para cron de lunes a viernes');
+
+    const nextFireAt = calculateNextRun({ fireAt: Date.now() + 600000 });
+    assert.ok(nextFireAt && nextFireAt.includes('min'), 'debe calcular tiempo restante para fireAt futuro');
+
+    const pastFireAt = calculateNextRun({ fireAt: Date.now() - 10000 });
+    assert.strictEqual(pastFireAt, 'vencida');
+
+    console.log('scheduled-tasks OK: descubre tareas de claude (local y VM) y de agy, logs y calculo de corrida correctos');
+    cleanup();
+    process.exit(0);
+  }).catch((err) => {
+    console.error(err);
+    cleanup();
+    process.exit(1);
+  });
 } catch (err) {
   console.error(err);
   cleanup();

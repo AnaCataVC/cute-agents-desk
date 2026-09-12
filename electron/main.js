@@ -33,8 +33,8 @@ const conv = require('./conversations.js');
 const coordinator = require('./coordinator.js');
 const paths = require('./paths.js');
 const worktree = require('./worktree.js');
-const { getScheduledTasks } = require('./scheduled-tasks.js');
-const { scanSkills } = require('./skills.js');
+const { getScheduledTasks, readTaskLogs } = require('./scheduled-tasks.js');
+const { scanSkills, readSkillContent } = require('./skills.js');
 const delivery = require('./delivery.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -440,6 +440,30 @@ function wireAgents(win) {
   // background whenever Claude Desktop or Antigravity fire or reschedule a task, outside this app.
   ipcMain.handle('desk:scheduledTasks', () => getScheduledTasks());
   ipcMain.handle('desk:skills', () => scanSkills());
+  ipcMain.handle('desk:readSkill', (_ev, filePath) => readSkillContent(filePath));
+  ipcMain.handle('desk:taskLogs', (_ev, { sourcePath, engine, taskId }) => readTaskLogs(sourcePath, engine, taskId));
+  ipcMain.handle('desk:openPath', async (_ev, targetPath) => {
+    if (!targetPath || typeof targetPath !== 'string') return { error: 'Ruta no válida' };
+    try {
+      if (!fs.existsSync(targetPath)) return { error: 'La ruta no existe en disco' };
+
+      // Prevent accidental execution of binary files; open their parent directory instead
+      const stat = fs.statSync(targetPath);
+      let pathToOpen = targetPath;
+      if (stat.isFile()) {
+        const ext = path.extname(targetPath).toLowerCase();
+        const executableExts = ['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.msi'];
+        if (executableExts.includes(ext)) {
+          pathToOpen = path.dirname(targetPath);
+        }
+      }
+
+      await shell.openPath(pathToOpen);
+      return { ok: true };
+    } catch (err) {
+      return { error: err && err.message ? err.message : String(err) };
+    }
+  });
 
   ipcMain.handle('desk:worktrees', () => worktree.listWorktrees());
   ipcMain.handle('desk:reapWorktree', (_ev, agentId) => {

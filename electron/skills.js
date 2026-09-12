@@ -119,7 +119,7 @@ function scanSkills(roots = defaultRoots(), homeDir = os.homedir()) {
       continue;
     }
 
-    /** @type {Array<[string, string, string, string]>} */
+    /** @type {Array<[string, string, string, string, number, string|null, string]>} */
     const rows = [];
 
     for (const entry of entries) {
@@ -140,9 +140,16 @@ function scanSkills(roots = defaultRoots(), homeDir = os.homedir()) {
         const desc = fm.description || '(Sin descripción)';
         const version = fm.version || '—';
         const load = fm.load || 'a demanda';
-        rows.push([name, desc, version, load]);
+        let tokenEstimate = 0;
+        try {
+          const stats = fs.statSync(skillFile);
+          tokenEstimate = Math.ceil(stats.size / 4);
+        } catch {
+          tokenEstimate = 0;
+        }
+        rows.push([name, desc, version, load, tokenEstimate, skillFile, skillDir]);
       } else {
-        rows.push([entry.name, '(Sin SKILL.md válido)', '—', 'a demanda']);
+        rows.push([entry.name, '(Sin SKILL.md válido)', '—', 'a demanda', 0, null, skillDir]);
       }
     }
 
@@ -161,8 +168,39 @@ function scanSkills(roots = defaultRoots(), homeDir = os.homedir()) {
   return result;
 }
 
+/**
+ * Safely reads a SKILL.md file content up to 64 KB.
+ * @param {string} filePath
+ * @returns {{ content: string, error?: string }}
+ */
+function readSkillContent(filePath) {
+  if (!filePath || typeof filePath !== 'string') {
+    return { content: '', error: 'Ruta no válida' };
+  }
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { content: '', error: 'Archivo no encontrado' };
+    }
+    const stat = fs.statSync(filePath);
+    const limit = 64 * 1024;
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(Math.min(stat.size, limit));
+    fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    let content = buf.toString('utf8');
+    if (stat.size > limit) {
+      content += '\n\n... [Contenido truncado a 64 KB]';
+    }
+    return { content };
+  } catch (err) {
+    return { content: '', error: err && err.message ? err.message : String(err) };
+  }
+}
+
 module.exports = {
   defaultRoots,
   sanitizePath,
   scanSkills,
+  readSkillContent,
 };
+

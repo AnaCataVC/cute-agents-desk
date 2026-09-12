@@ -154,4 +154,63 @@ function getScheduledTasks(overrides) {
   return [...getClaudeScheduledTasks(roots), ...getAgyScheduledTasks(roots)];
 }
 
-module.exports = { getScheduledTasks, getClaudeScheduledTasks, getAgyScheduledTasks };
+/**
+ * Safely reads the latest log lines or payload events for a scheduled task.
+ * @param {string} sourcePath
+ * @param {string} engine
+ * @param {string} [taskId]
+ * @returns {{ logs: string, error?: string }}
+ */
+function readTaskLogs(sourcePath, engine, taskId) {
+  if (!sourcePath || typeof sourcePath !== 'string') {
+    return { logs: '', error: 'Ruta no válida' };
+  }
+  try {
+    if (engine === 'agy') {
+      const logsDir = path.join(sourcePath, 'logs');
+      const files = listFiles(logsDir, '.log');
+      if (!files.length) {
+        // Fallback: check events folder
+        const eventsDir = path.join(sourcePath, 'events');
+        const evFiles = listFiles(eventsDir, '.json');
+        if (!evFiles.length) return { logs: '(No hay archivos de log ni eventos registrados para esta tarea)' };
+        const lastEv = readJson(path.join(eventsDir, evFiles[evFiles.length - 1]));
+        return { logs: JSON.stringify(lastEv, null, 2) };
+      }
+      const newestLog = path.join(logsDir, files[files.length - 1]);
+      const stat = fs.statSync(newestLog);
+      const maxBytes = 64 * 1024; // 64 KB tail limit
+      let text = '';
+      if (stat.size <= maxBytes) {
+        text = fs.readFileSync(newestLog, 'utf8');
+      } else {
+        const fd = fs.openSync(newestLog, 'r');
+        const buf = Buffer.alloc(maxBytes);
+        fs.readSync(fd, buf, 0, maxBytes, stat.size - maxBytes);
+        fs.closeSync(fd);
+        text = '... [Log truncado a los últimos 64 KB]\n' + buf.toString('utf8');
+      }
+      const lines = text.split(/\r?\n/);
+      const tail = lines.slice(-60).join('\n');
+      return { logs: tail || '(Archivo de log vacío)' };
+    } else if (engine === 'claude') {
+      if (fs.existsSync(sourcePath)) {
+        const stat = fs.statSync(sourcePath);
+        if (stat.isFile()) {
+          const parsed = readJson(sourcePath);
+          if (parsed && Array.isArray(parsed.scheduledTasks)) {
+            const task = taskId ? parsed.scheduledTasks.find((t) => t.id === taskId) : parsed.scheduledTasks[0];
+            return { logs: JSON.stringify(task || parsed, null, 2) };
+          }
+        }
+      }
+      return { logs: '(No hay registro de ejecución disponible en disco para esta tarea de Claude Desktop)' };
+    }
+    return { logs: '(Motor no soportado)' };
+  } catch (err) {
+    return { logs: '', error: err && err.message ? err.message : String(err) };
+  }
+}
+
+module.exports = { getScheduledTasks, getClaudeScheduledTasks, getAgyScheduledTasks, readTaskLogs };
+
