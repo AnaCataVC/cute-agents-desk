@@ -20,7 +20,7 @@ The testing framework is split into two primary tiers:
 
 ## 2. Test Inventory
 
-### Fast Tier (`npm test` / `tools/verify-all.js` - 21 Scripts)
+### Fast Tier (`npm test` / `tools/verify-all.js` - 22 Scripts)
 | Script | Scope & Verification Target |
 | :--- | :--- |
 | `verify-pure-units.js` | Pure unit tests: `toolNameOf`, `frontmatter.js` (UTF-8 BOM handling, DoS safety bounds) and JSON mailboxes (`json-queue.js`). |
@@ -44,6 +44,7 @@ The testing framework is split into two primary tiers:
 | `verify-tokens-and-accounts.js` | Account credential schema validation from `accounts.json`. |
 | `verify-config.js` | Schema validation, default settings, and thread-safe persistence. |
 | `verify-hierarchical-repo-tree.mjs` | Hierarchical account and repository tree structure in UI. |
+| `verify-quotas.js` | Subscription quota parsers and TTL cache for `claude -p /usage` and `agy -p /usage`. |
 
 ### Isolation & Packaged Binary Tier (`MANUAL`)
 | Script | Execution Command | When to Run |
@@ -123,4 +124,4 @@ Before submitting or committing changes, execute:
 ```powershell
 npm test
 ```
-The test suite must report `21/21 verify scripts OK` (or higher) with zero failures.
+The test suite must report `22/22 verify scripts OK` (or higher) with zero failures.

@@ -28,7 +28,7 @@ guesses status by reading the terminal.
 - **Multi-Account GitHub Governance & Repo Discovery:** Automatic discovery and strict mapping of local workspaces bound to authenticated GitHub accounts (`accounts.json`). Prevents cross-account leaks and context bleed between personal and corporate profiles, enforcing workspace trust boundaries per registered path.
 - **File-Based Decoupled Mailbox & Autonomous Coordination:** Asynchronous inter-process messaging utilizing disk-backed JSON queues (`events/`, `outbox/`) without exposing local TCP ports or network sockets. The coordinator agent delegates subtasks via atomic `spawn-requests`, while worker agents report lifecycle transitions (born, blocked, done, and arbitrary updates) directly into the coordinator's interactive PTY session.
 - **Automated Delivery Pipeline & Draft Pull Requests:** Robust, auditable delivery lifecycle upon task completion. Changes in the worktree are committed using the exact author identity (name and email) configured in `accounts.json`, securely pushed to `origin`, and registered via GitHub CLI as a draft Pull Request (`gh pr create --draft`) containing linked task reports and persisted audit trails in `deliveries.json`.
-- **Resource Governance, Token Budgets & Parallelism Limits:** Integrated task scheduler (`scheduler.js`) enforcing strict concurrency ceilings globally and per conversation. Live token tracking and budget caps halt runaway execution before cost overruns, reinforced by defense-in-depth read-only policies (denylist for Claude Code vs. strict tool allowlist for Antigravity CLI).
+- **Resource Governance, Token Budgets & Parallelism Limits:** Integrated task scheduler (`scheduler.js`) enforcing strict concurrency ceilings globally and per conversation. Real-time telemetry tracking official subscription quotas directly from CLIs (`claude -p /usage` and `agy -p /usage`) with live weekly usage, 5-hour rolling windows, and reset timestamps, backed by local safety caps and defensive read-only policies (denylist for Claude Code vs. strict tool allowlist for Antigravity CLI).
 
 ### The two engines, in practice
 
@@ -81,11 +81,11 @@ isolation, read-only mode, the full `agy` engine), and pure `node:assert` unit t
 state-machine logic (token cap, scheduler, conversations, mailbox draining).
 
 ```bash
-npm test        # runs the 21 fast scripts that need no real CLI and no window, in one shot
+npm test        # runs the 22 fast scripts that need no real CLI and no window, in one shot
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 21 `verify-*.js` scripts MEASURED to finish in
+`npm test` (`tools/verify-all.js`) runs the 22 `verify-*.js` scripts MEASURED to finish in
 seconds under plain `node`. The rest need a real CLI turn, an Electron window, or packaged
 binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay manual, run one at a time:
 
@@ -128,7 +128,9 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `coordinator.js` | The coordinator's prompt and the draining of its `spawn-requests` |
 | `config.js` | Hardened configuration store (`config.json`): canonical defaults, deep merge, prototype pollution guards, numerical bounds clamping, and atomic replacement |
 | `discovery.js`, `accounts.js` | Real repo discovery by GitHub account, with mismatch detection, hierarchical relative paths and canonical disk resolution |
-| `scheduled-tasks.js` | Read-only discovery of Claude Desktop's and Antigravity's scheduled tasks on this machine |
+| `scheduled-tasks.js` | Read-only discovery of Claude Desktop's and Antigravity's scheduled tasks on this machine, with interactive execution log inspection |
+| `skills.js` | Discovers installed skills across Claude and AGY directories, reads `SKILL.md` content, and computes token impact estimates |
+| `quotas.js` | Non-interactive background runner with strict timeouts, Windows process tree termination (`taskkill`), and 60-second TTL caching for Claude and AGY `/usage` |
 | `toy-repo.js` | The toy repo that the live `tools/verify-*.js` scripts use |
 
 ### Frontend (`ui/`)
@@ -146,9 +148,9 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `repo-tree.js`, `agent-card.js`, `terminal.js` | "Agent control" tab: hierarchical collapsible directory tree with real-time bubble-up indicators, status filtering, and task queuing |
 | `boss-graph.js`, `timeline.js` | "Workflows" tab |
 | `editor.js` | "Editor" tab: the change tree and the diff |
-| `tokens-view.js` | "Usage" tab |
-| `scheduled-tasks-view.js` | "Scheduled Tasks" tab: what Claude Desktop and Antigravity have scheduled, outside this harness |
-| `config.js`, `dialogs.js`, `chat.js` | "Settings" tab and the dialogs, including an agent's Card/Thread/Diff panel |
+| `tokens-view.js` | "Usage" tab: live telemetry, engine/account splits, measured rate, and official CLI subscription quotas |
+| `scheduled-tasks-view.js` | "Scheduled Tasks" tab: what Claude Desktop and Antigravity have scheduled, with interactive log inspector |
+| `config.js`, `dialogs.js`, `chat.js` | "Settings" tab, modal inspectors (`SKILL.md`, cron logs, Explorer reveal), and agent Card/Thread/Diff panel |
 
 ### Web Showcase (`website/`)
 
@@ -180,3 +182,5 @@ whole panel stays still, and color and labels still carry the same meaning.
 5. **Git Worktree Isolation:** When executing tasks in write mode, directly mutating the developer's working tree is unsafe. Each write agent provisions an isolated temporary worktree and branch (`agent/<id>`) in a dedicated directory, keeping the primary workspace untouched until changes are reviewed and approved.
 6. **Atomic Configuration Persistence and Prototype Pollution Defense in Desktop Runtimes:** Storing user preferences (`config.json`) using temporary buffers with process entropy nonces (`nonce = ${pid}.${Date.now()}.${random}`) and atomic filesystem replacements (`renameSync` with copy fallback) prevents 0-byte truncations during sudden power interruptions or crashes. Concurrently, strictly purging dangerous prototype properties (`__proto__`, `constructor`, `prototype`) and clamping numeric boundaries (`maxParallel: [1..20]`) neutralizes Denial of Service vectors or *fork bombs* before they can reach the process scheduler.
 7. **Hierarchical Directory Virtualization & Canonical Path Disambiguation:** In multi-account enterprise setups, flattening nested repositories under declared roots leads to unmanageable UI lists and silent process dispatch failures when resolving working directories (`cwd`). Converting flat collections into an on-demand N-level collapsible directory tree with single-pass metric accumulation ($O(N)$) and canonical absolute path tracking prevents dispatch collisions across identically-named repositories (e.g. `domain/infra` vs `core/infra`) while keeping rendering instant.
+8. **Safe Bounded I/O Consumption & Context Estimation in System Tools:** When exposing interactive inspection of on-disk engine artifacts (`SKILL.md` and live sidecar logs), reading unbounded files into memory risks freezing the main Node thread on oversized or malformed files. Enforcing strict file-descriptor buffers (clamped to 64 KB for `SKILL.md` and bounded tail-window reads for `.log` streams), neutralizing executable extensions prior to invoking `shell.openPath`, and finite horizon lookaheads (14-day projection limit for cron evaluation) guarantees that developer inspection remains instant, resilient, and immune to memory exhaustion or main-thread stalls.
+

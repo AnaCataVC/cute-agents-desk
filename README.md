@@ -28,7 +28,7 @@ para cada uno — la tarjeta nunca adivina el estado leyendo la terminal.
 - **Gobernanza multicuenta de GitHub y descubrimiento local:** Detección y mapeo estricto de repositorios locales vinculados a identidades de GitHub (`accounts.json`). Previene fugas de contexto o autoría cruzada entre perfiles personales y profesionales, restringiendo el alcance de ejecución de los agentes exclusivamente a sus carpetas asignadas.
 - **Buzón desacoplado basado en archivos y coordinación autónoma:** Arquitectura de comunicación asíncrona sin puertos TCP ni sockets expuestos en red. El agente coordinador delega subtareas generando `spawn-requests` en colas JSON vigiladas en disco. Los workers reportan su estado (nacimiento, bloqueo, finalización y mensajes libres) inyectando entradas directamente en la terminal interactiva del coordinador.
 - **Pipeline automatizado de entrega y Pull Requests:** Ciclo de cierre seguro y auditable. Al finalizar una tarea en worktree, el sistema realiza commit con el autor y correo correspondientes a la cuenta asociada, realiza push seguro de la rama a `origin` sin tocar `main`, y crea automáticamente un Pull Request en borrador (`gh pr create --draft`) enlazando el informe de ejecución y persistiendo el registro en `deliveries.json`.
-- **Gobernanza de recursos, cuotas de tokens y paralelismo:** Programador de tareas (`scheduler.js`) con límites estrictos de concurrencia a nivel global y por conversación. Medición de consumo de tokens y costos en tiempo real con topes preventivos que detienen agentes antes de exceder presupuestos, complementado con políticas defensivas de sólo lectura (listas negras en Claude vs. listas blancas estrictas en Antigravity).
+- **Gobernanza de recursos, cuotas de tokens y paralelismo:** Programador de tareas (`scheduler.js`) con límites estrictos de concurrencia a nivel global y por conversación. Telemetría de cuotas oficiales de suscripción consultadas directamente en los CLIs (`claude -p /usage` y `agy -p /usage`) con reporte en tiempo real de porcentaje semanal, ventanas de 5h y fechas de reinicio, complementado con topes diarios locales de seguridad y políticas defensivas de sólo lectura (listas negras en Claude vs. listas blancas estrictas en Antigravity).
 
 ### Los dos motores, en la práctica
 
@@ -82,11 +82,11 @@ puras de `node:assert` para lógica de máquina de estados (tope de tokens, sche
 conversaciones, el drenado del buzón).
 
 ```bash
-npm test        # corre de un tiro los 21 que son rápidos y no necesitan un CLI real ni ventana
+npm test        # corre de un tiro los 22 que son rápidos y no necesitan un CLI real ni ventana
 npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm test` (`tools/verify-all.js`) corre los 21 `verify-*.js` que MEDIDO tardan segundos bajo
+`npm test` (`tools/verify-all.js`) corre los 22 `verify-*.js` que MEDIDO tardan segundos bajo
 `node` puro. Los que quedan afuera necesitan un turno real de CLI, una ventana de Electron o validación
 del binario empaquetado (`verify-dist-binary.js` tras `npm run dist`). Esos se corren aparte, uno a la vez:
 
@@ -128,8 +128,9 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `conversations.js` | Una conversación es una carpeta: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | El prompt del coordinador y el drenado de sus `spawn-requests` |
 | `config.js` | Almacén endurecido de configuración (`config.json`): defaults canónicos, deep merge, guardas contra Prototype Pollution, acotamiento numérico y reemplazo atómico |
-| `discovery.js`, `accounts.js` | Escaneo real de repos por cuenta de GitHub, con detección de desajuste, rutas relativas jerárquicas y resolución canónica en disco |
-| `scheduled-tasks.js` | Descubre, solo lectura, las tareas programadas de Claude Desktop y de Antigravity en esta máquina |
+| `scheduled-tasks.js` | Descubre, solo lectura, las tareas programadas de Claude Desktop y de Antigravity en esta máquina, e inspecciona sus logs de ejecución |
+| `skills.js` | Descubre las skills instaladas en los directorios de Claude y AGY, lee su contenido (`SKILL.md`) y estima su impacto en tokens |
+| `quotas.js` | Módulo de consulta no interactiva con timeout estricto, terminación forzada en Windows (`taskkill`) y caché TTL (60s) para `/usage` de Claude y AGY |
 | `toy-repo.js` | El repo de juguete que usan los `tools/verify-*.js` en vivo |
 
 ### Frontend (`ui/`)
@@ -147,9 +148,9 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `repo-tree.js`, `agent-card.js`, `terminal.js` | Pestaña «Control de agentes»: árbol de directorios jerárquico colapsable con burbujeo de estado en tiempo real, filtros y cola de tareas |
 | `boss-graph.js`, `timeline.js` | Pestaña «Flujos de trabajo» |
 | `editor.js` | Pestaña «Editor»: el árbol de cambios y el diff |
-| `tokens-view.js` | Pestaña «Uso» |
-| `scheduled-tasks-view.js` | Pestaña «Tareas programadas»: lo que Claude Desktop y Antigravity tienen agendado, fuera de este harness |
-| `config.js`, `dialogs.js`, `chat.js` | Pestaña «Configuración» y los diálogos, incluido el panel Ficha/Hilo/Diff de un agente |
+| `tokens-view.js` | Pestaña «Uso»: métricas en vivo, desglose por motor/cuenta, ritmo medido y panel de cuotas oficiales de CLI |
+| `scheduled-tasks-view.js` | Pestaña «Tareas programadas»: lo que Claude Desktop y Antigravity tienen agendado, con inspección interactiva de logs |
+| `config.js`, `dialogs.js`, `chat.js` | Pestaña «Configuración» e inspectores modales (`SKILL.md`, logs de cron, apertura en Explorer) y panel Ficha/Hilo/Diff |
 
 ### Vitrina Web (`website/`)
 
@@ -182,3 +183,5 @@ siguen contando lo mismo.
 5. **Aislamiento por Git Worktree:** En tareas con permisos de escritura, la mutación directa del checkout de trabajo del usuario es inaceptable. Cada tarea crea un worktree temporal y rama propia (`agent/<id>`) en una ruta de trabajo dedicada, manteniendo el checkout base intacto hasta que los cambios sean revisados formalmente.
 6. **Persistencia atómica y blindaje contra Prototype Pollution en configuración de escritorio:** Guardar preferencias mutables (`config.json`) mediante buffers temporales con nonce aleatorio (`nonce = ${pid}.${Date.now()}.${random}`) y reemplazo atómico (`renameSync` con fallback a copia) previene el truncado a 0 bytes en caídas abruptas. Asimismo, filtrar rigurosamente propiedades mágicas (`__proto__`, `constructor`, `prototype`) y acotar rangos numéricos (`maxParallel: [1..20]`) neutraliza vectores de DoS o *fork bombs* antes de que alcancen el planificador de procesos.
 7. **Virtualización jerárquica y desambiguación canónica de repositorios:** En entornos con múltiples cuentas y repositorios anidados, aplanar la estructura bajo las raíces declaradas genera listas inmanejables de 50+ elementos y errores silenciosos de validación de directorio de trabajo (`cwd`). Construir un árbol jerárquico N-ario colapsable con acumulación de métricas y banderas en una única pasada lineal ($O(N)$), junto con el rastreo canónico de rutas absolutas, previene el secuestro de tareas entre repositorios con nombres idénticos (ej. `simplit/infra/infra-k8s` vs `simplit/paul/infra-k8s`) y mantiene el repintado de la interfaz instantáneo.
+8. **Consumo seguro de I/O y estimación acotada de contexto en herramientas del sistema:** Al exponer la inspección interactiva de artefactos locales (`SKILL.md`, logs de sidecars en ejecución), cargar archivos arbitrarios en memoria expone a la aplicación a bloqueos del hilo principal de Node ante archivos gigabíticos o malformados. Implementar lecturas mediante descriptores de archivo con búferes fijos (64 KB para `SKILL.md` y lectura acotada del tail para archivos `.log`), neutralización de extensiones ejecutables antes de invocar `shell.openPath`, y algoritmos de proyección temporal finita (horizonte de 14 días para expresiones cron) garantiza que la inspección sea instantánea, hermética y libre de fugas de memoria o DoS.
+
