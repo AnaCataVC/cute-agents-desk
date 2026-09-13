@@ -206,6 +206,52 @@ Provides structured inter-agent message histories, visual timeline projection, a
 
 ---
 
+### 2.7 Conversations & Workflow Coordination Subsystem
+
+Manages high-level conversation scopes, coordinator lifecycle, and atomic state archiving.
+
+#### `desk:conversations`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** None
+* **Returns:** `Promise<Array<Conversation>>`
+* **Schema:**
+  ```typescript
+  interface Conversation {
+    id: string;                      // e.g. "c000abc"
+    title: string;                   // Human-readable initiative label
+    topic?: string;                  // Scope or repository focus
+    cap: number;                     // Max simultaneous workers (e.g. 3)
+    createdAt: string;               // ISO 8601 timestamp
+    status: 'active' | 'archived';
+    archivedAt?: string;
+  }
+  ```
+
+#### `desk:createConversation`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** `{ title: string, topic?: string, cap?: number }`
+* **Returns:** `Promise<Conversation>`
+* **Behavior:** Initializes directory structure `<appData>/conversations/<id>/`, creates `conversation.json`, and initializes empty `status.json`.
+
+#### `desk:archiveConversation`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** `id: string`
+* **Returns:** `Promise<Conversation | { error: string }>`
+* **Invariants:**
+  - Non-destructive atomic update of `conversation.json`.
+  - Sets `status: 'archived'` and timestamps `archivedAt`.
+
+#### `desk:spawnCoordinator`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** `{ conversationId: string, bin?: string, engine?: string, model?: string, effort?: string, mode?: string }`
+* **Returns:** `Promise<string | { error: string }>`
+* **Invariants:**
+  - Idempotent: returns existing active coordinator agent ID if already running in `conversationId`.
+  - Gates spawn against global scheduler concurrency.
+  - Spawns coordinator with PTY cwd in conversation mailbox, wiring filesystem queues (`spawn-requests/`).
+
+---
+
 ## 3. Asynchronous Main-to-Renderer Push Channels
 
 The main process broadcasts state mutations reactively to all active `BrowserWindow` instances using `webContents.send()`:
