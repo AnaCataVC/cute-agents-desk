@@ -42,7 +42,6 @@ const FAST = [
   'verify-quotas.js',
   'verify-flows-synthesis.mjs',
   'verify-chat-input.js',
-  'verify-timeline.js',
   'verify-scheduler-dag.js',
   'verify-external-editor.js',
   'verify-syntax-highlight.js',

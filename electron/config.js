@@ -43,7 +43,6 @@ const DEFAULT_CONFIG = {
     terminalScrollbackLines: 2000,
     cardRefreshIntervalMs: 1000,
     statusAnimations: true,
-    timelineWindowMinutes: 30,
     eventLogRotationMb: 50,
   },
   advanced: {
@@ -161,8 +160,7 @@ function validateAndSanitize(section, key, value) {
       clamped = Math.max(100, Math.min(10000, Math.round(num)));
     } else if (section === 'perf' && key === 'cardRefreshIntervalMs') {
       clamped = Math.max(250, Math.min(10000, Math.round(num)));
-    } else if (section === 'perf' && key === 'timelineWindowMinutes') {
-      clamped = Math.max(5, Math.min(180, Math.round(num)));
+
     } else if (section === 'perf' && key === 'eventLogRotationMb') {
       clamped = Math.max(1, Math.min(500, Math.round(num)));
     }

@@ -82,11 +82,11 @@ isolation, read-only mode, the full `agy` engine), and pure `node:assert` unit t
 state-machine logic (token cap, scheduler, conversations, mailbox draining).
 
 ```bash
-npm test        # runs the 29 fast scripts that need no real CLI and no window, in one shot
+npm test        # runs the 28 fast scripts that need no real CLI and no window, in one shot
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 29 `verify-*.js` scripts MEASURED to finish in
+`npm test` (`tools/verify-all.js`) runs the 28 `verify-*.js` scripts MEASURED to finish in
 seconds under plain `node`. The rest need a real CLI turn, an Electron window, or packaged
 binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay manual, run one at a time:
 
@@ -147,7 +147,7 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `robot.js` | The robot, defined once and parameterized by state |
 | `ring.js` | The token ring and its formatters |
 | `repo-tree.js`, `agent-card.js`, `terminal.js` | "Agent control" tab: hierarchical collapsible directory tree with real-time bubble-up indicators, status filtering, and task queuing |
-| `boss-graph.js`, `timeline.js` | "Workflows" tab |
+| `boss-graph.js` | "Workflows" tab |
 | `visualizer.js`, `highlight.js` | "Visualizer" tab: unintegrated change tree, approval diff with lightweight syntax highlighting and external editor launch |
 | `tokens-view.js` | "Usage" tab: live telemetry, engine/account splits, measured rate, and official CLI subscription quotas |
 | `scheduled-tasks-view.js` | "Scheduled Tasks" tab: what Claude Desktop and Antigravity have scheduled, with interactive log inspector |

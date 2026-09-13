@@ -48,7 +48,6 @@ The testing framework is split into two primary tiers:
 | `verify-quotas.js` | Subscription quota parsers and TTL cache for `claude -p /usage` and `agy -p /usage`. |
 | `verify-flows-synthesis.mjs` | Workflow state synthesis, active coordinator preservation, and inter-agent dependency DAG links. |
 | `verify-chat-input.js` | Live interactive terminal PTY input injection and sanitization. |
-| `verify-timeline.js` | Chronological telemetry lane aggregation and interval compression. |
 | `verify-scheduler-dag.js` | Dependency graph validation and topological worker dispatch. |
 | `verify-external-editor.js` | External editor resolution (VS Code / Antigravity IDE / System), account preferences, and path privacy. |
 | `verify-syntax-highlight.js` | Lightweight diff tokenization, language auto-detection, XSS prevention, and high-volume performance. |

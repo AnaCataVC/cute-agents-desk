@@ -156,7 +156,7 @@ Extracts official subscription limits and usage windows directly from CLI binari
 
 ### 2.6 Agent Interaction, Threads & Task DAG Subsystem
 
-Provides structured inter-agent message histories, visual timeline projection, and interactive user input injection.
+Provides structured inter-agent message histories and interactive user input injection.
 
 #### `desk:threads`
 * **Direction:** Renderer $\to$ Main (Invoke / Handle)
@@ -170,27 +170,6 @@ Provides structured inter-agent message histories, visual timeline projection, a
     kind: 'user' | 'agent' | 'event' | 'tool';
     text: string;                    // Sanitized message content
     time: string;                    // HH:MM timestamp
-  }
-  ```
-
-#### `desk:timeline`
-* **Direction:** Renderer $\to$ Main (Invoke / Handle)
-* **Arguments:** None
-* **Returns:** `Promise<TimelineData>`
-* **Schema:**
-  ```typescript
-  interface TimelineData {
-    window: string;                  // e.g. "últimos 30 min"
-    ticks: string[];                 // Time markers
-    lanes: Array<{
-      id: string;                    // Agent identifier
-      name: string;                  // Display name
-      runs: Array<{
-        state: 'running' | 'tool' | 'idle' | 'blocked' | 'done';
-        startPct: number;            // 0 - 100% relative to window start
-        widthPct: number;            // 0 - 100% relative duration
-      }>;
-    }>;
   }
   ```
 
@@ -258,6 +237,6 @@ The main process broadcasts state mutations reactively to all active `BrowserWin
 
 | Channel | Trigger Event | Payload Description |
 | :--- | :--- | :--- |
-| `desk:patch` | Agent state changes, token increments, threads, or timeline updates | Incremental state diff object applied optimistically in `ui/data.js`. |
+| `desk:patch` | Agent state changes, token increments, or threads updates | Incremental state diff object applied optimistically in `ui/data.js`. |
 | `desk:agent-log` | Worker or coordinator PTY output chunk | `{ agentId: string, chunk: string }` stream for live terminal views. |
 | `desk:task-status` | Scheduled task execution start / completion | `{ taskId: string, status: string, timestamp: number }`. |

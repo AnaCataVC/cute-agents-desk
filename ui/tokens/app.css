@@ -10,7 +10,7 @@
   --app-on-accent: #2A1B5E;
 
   /* Agent states. These five are the vocabulary of the whole dashboard: the card
-     border, the timeline bar and the graph edge all read from the same token. */
+     border and the graph edge all read from the same token. */
   --state-thinking: #A855F7;
   --state-tool: #C8F3E0;
   --state-approval: #E9B872;

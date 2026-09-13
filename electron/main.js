@@ -232,8 +232,8 @@ function wireAgents(win) {
   const config = require('./config.js');
   const appConfig = config.readConfig();
 
-  registry = new Registry((agents, usage, threads, timeline) => {
-    if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage, threads, timeline });
+  registry = new Registry((agents, usage, threads) => {
+    if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage, threads });
   });
   const scheduler = new Scheduler({ globalCap: appConfig.exec?.maxParallel || 5 });
 
@@ -606,7 +606,6 @@ function wireAgents(win) {
   });
 
   ipcMain.handle('desk:threads', () => (registry ? registry.getThreads() : {}));
-  ipcMain.handle('desk:timeline', () => (registry ? registry.getTimelineData() : { window: 'últimos 30 min', ticks: [], lanes: [] }));
   ipcMain.handle('desk:sendInput', async (_ev, { agentId, text } = {}) => {
     if (!agentId || typeof text !== 'string' || !text.trim()) {
       return { ok: false, error: 'Mensaje inválido' };
