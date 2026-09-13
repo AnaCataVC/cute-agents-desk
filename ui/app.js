@@ -61,6 +61,9 @@ const state = {
   inspectedSkill: null,        // data for currently inspected skill in dialog
   inspectedTask: null,         // data for currently inspected scheduled task in dialog
   chatInput: '',               // active input text in chat modal
+  editConfig: null,            // data for currently edited non-boolean config key
+  toast: null,                 // { message, type, id } for transient save confirmation
+  toastTimer: null,            // timeout id for dismissing toast
 };
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -408,8 +411,106 @@ const ACTIONS = {
       const res = await window.desk.updateConfig({ section, key, value: newVal });
       if (res?.config) {
         data.setLiveConfig(res.config);
+        showToast(`Configuración guardada: ${key} = ${newVal ? 'activo' : 'inactivo'}`);
+      } else if (res?.error) {
+        showToast(res.error, 'error');
+      }
+    } else {
+      showToast(`Configuración actualizada: ${key} = ${newVal ? 'activo' : 'inactivo'}`);
+    }
+  },
+
+  editConfigValue: (arg) => {
+    if (!arg) return;
+    const [section, key] = arg.split('|');
+    if (!section || !key) return;
+
+    const meta = CONFIG_META[`${section}.${key}`] || {};
+    const rawVal = getConfigRawValue(section, key);
+
+    state.editConfig = {
+      section,
+      key,
+      label: meta.label || key,
+      currentValue: rawVal,
+      type: meta.type || (typeof rawVal === 'number' ? 'number' : 'text'),
+      min: meta.min,
+      max: meta.max,
+      step: meta.step,
+      unit: meta.unit,
+      options: meta.options,
+      isPath: meta.isPath,
+      placeholder: meta.placeholder,
+      hint: meta.hint,
+      error: null,
+    };
+    render();
+  },
+
+  closeEditConfig: () => {
+    state.editConfig = null;
+    render();
+  },
+
+  browseEditConfigPath: async () => {
+    if (!state.editConfig) return;
+    if (window.desk?.pickDirectory) {
+      const folder = await window.desk.pickDirectory();
+      if (folder) {
+        state.editConfig.currentValue = folder;
+        state.editConfig.error = null;
         render();
       }
+    }
+  },
+
+  submitEditConfig: async () => {
+    const cfg = state.editConfig;
+    if (!cfg) return;
+
+    let finalVal = cfg.currentValue;
+    if (cfg.type === 'number') {
+      const num = Number(finalVal);
+      if (Number.isNaN(num)) {
+        cfg.error = 'Por favor ingresa un número válido.';
+        render();
+        return;
+      }
+      if (cfg.min !== undefined && num < cfg.min) {
+        cfg.error = `El valor mínimo permitido es ${cfg.min}.`;
+        render();
+        return;
+      }
+      if (cfg.max !== undefined && num > cfg.max) {
+        cfg.error = `El valor máximo permitido es ${cfg.max}.`;
+        render();
+        return;
+      }
+      finalVal = num;
+    } else if (typeof finalVal === 'string') {
+      finalVal = finalVal.trim();
+      if (!finalVal && cfg.min !== undefined) {
+        cfg.error = 'El valor no puede estar vacío.';
+        render();
+        return;
+      }
+    }
+
+    const { section, key, label } = cfg;
+    data.updateLiveConfigKey(section, key, finalVal);
+    state.editConfig = null;
+    render();
+
+    if (window.desk?.updateConfig) {
+      const res = await window.desk.updateConfig({ section, key, value: finalVal });
+      if (res?.config) {
+        data.setLiveConfig(res.config);
+        showToast(`Guardado: ${label}`);
+      } else if (res?.error) {
+        showToast(res.error, 'error');
+      }
+    } else {
+      showToast(`Guardado: ${label}`);
     }
   },
 
@@ -511,6 +612,10 @@ app.addEventListener('input', (ev) => {
   if (el.dataset.act === 'queueModel') { state.queueModel = el.value; }
   if (el.dataset.act === 'scanPath') { state.scanPath = el.value; state.scanError = null; }
   if (el.dataset.act === 'chatInput') { state.chatInput = el.value; }
+  if (el.dataset.act === 'editConfigInput' && state.editConfig) {
+    state.editConfig.currentValue = el.value;
+    state.editConfig.error = null;
+  }
 });
 
 app.addEventListener('submit', (ev) => {
@@ -527,6 +632,10 @@ app.addEventListener('submit', (ev) => {
 
 app.addEventListener('change', (ev) => {
   const el = /** @type {HTMLInputElement|HTMLSelectElement} */ (ev.target);
+  if (el.dataset.act === 'editConfigInput' && state.editConfig) {
+    state.editConfig.currentValue = el.value;
+    state.editConfig.error = null;
+  }
   if (el.dataset.act === 'queueEngine') {
     state.queueEngine = el.value;
     if (state.queueEngine === 'agy') {
@@ -544,7 +653,8 @@ app.addEventListener('change', (ev) => {
 document.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Escape') return;
   // One key closes whatever is on top, innermost first.
-  if (state.chat) state.chat = null;
+  if (state.editConfig) state.editConfig = null;
+  else if (state.chat) state.chat = null;
   else if (state.queue !== null) state.queue = null;
   else if (state.scan) state.scan = null;
   else if (state.tip) state.tip = null;
@@ -670,7 +780,8 @@ function paint() {
         ${(VIEWS[state.view] || dispatch)()}
       </div>
     </div>
-    ${renderDialogs(state, data)}`;
+    ${renderDialogs(state, data)}
+    ${toastContainer()}`;
 }
 
 /**

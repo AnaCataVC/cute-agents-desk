@@ -43,6 +43,7 @@ The testing framework is split into two primary tiers:
 | `verify-skills.js` | Dynamic zero-mock discovery of agent skills across configuration folders. |
 | `verify-tokens-and-accounts.js` | Account credential schema validation from `accounts.json`. |
 | `verify-config.js` | Schema validation, default settings, and thread-safe persistence. |
+| `verify-config-ui.js` | Interactive configuration controls, edit modal schema, CSS and toast save feedback. |
 | `verify-hierarchical-repo-tree.mjs` | Hierarchical account and repository tree structure in UI. |
 | `verify-quotas.js` | Subscription quota parsers and TTL cache for `claude -p /usage` and `agy -p /usage`. |
 | `verify-flows-synthesis.mjs` | Workflow state synthesis, active coordinator preservation, and inter-agent dependency DAG links. |

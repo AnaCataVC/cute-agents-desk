@@ -13,14 +13,19 @@ import { esc } from './esc.js';
 const SWATCHES = ['var(--color-mint)', 'var(--color-lilac)', 'var(--color-blue)',
   'var(--color-pink)', 'var(--state-approval)'];
 
-/** A settings row: label on the left, a mono value pill or a toggle on the right. */
+/** A settings row: label on the left, an editable mono value pill or a toggle on the right. */
 function settingsRow([label, value, section, key]) {
   const isBool = typeof value === 'boolean';
-  const dataAct = isBool && section && key ? `data-act="toggleConfig" data-arg="${esc(section)}|${esc(key)}"` : '';
-  const cursorStyle = isBool && section && key ? 'cursor:pointer;' : '';
-  const control = isBool
-    ? `<span class="toggle-track" ${dataAct} data-on="${value}" style="${cursorStyle}"><span class="toggle-knob" data-on="${value}"></span></span>`
-    : `<span class="value-pill mono">${esc(String(value))}</span>`;
+  let control = '';
+  if (isBool) {
+    const dataAct = section && key ? `data-act="toggleConfig" data-arg="${esc(section)}|${esc(key)}"` : '';
+    const cursorStyle = section && key ? 'cursor:pointer;' : '';
+    control = `<span class="toggle-track" ${dataAct} data-on="${value}" style="${cursorStyle}"><span class="toggle-knob" data-on="${value}"></span></span>`;
+  } else if (section && key) {
+    control = `<button class="value-pill mono" data-act="editConfigValue" data-arg="${esc(section)}|${esc(key)}" title="Haz clic para editar este valor" style="border:1px solid var(--color-dark-border);background:var(--color-dark-surface);color:var(--color-dark-text-1)">${esc(String(value))} ✎</button>`;
+  } else {
+    control = `<span class="value-pill mono">${esc(String(value))}</span>`;
+  }
   return `<div class="settings-row"><span>${esc(label)}</span><span style="margin-left:auto">${control}</span></div>`;
 }
 

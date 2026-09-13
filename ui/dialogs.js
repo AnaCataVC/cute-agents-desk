@@ -304,6 +304,67 @@ function taskLogDialog(state, _data) {
   `, 680, 'closeTaskInspector');
 }
 
+/**
+ * Dialog to edit non-boolean config properties (numbers, paths, dropdowns, strings).
+ * @param {any} state
+ * @param {any} _data
+ * @returns {string}
+ */
+function editConfigDialog(state, _data) {
+  const cfg = state.editConfig;
+  if (!cfg) return '';
+
+  let controlHtml = '';
+  if (cfg.options && Array.isArray(cfg.options)) {
+    controlHtml = `<select data-act="editConfigInput" style="${INPUT}">
+      ${cfg.options.map((opt) => `<option value="${esc(opt.value)}" ${opt.value === String(cfg.currentValue) ? 'selected' : ''}>${esc(opt.label)}</option>`).join('')}
+    </select>`;
+  } else if (cfg.type === 'number') {
+    controlHtml = `<div style="display:flex;align-items:center;gap:8px">
+      <input type="number" data-act="editConfigInput" value="${esc(String(cfg.currentValue))}"
+        min="${cfg.min ?? ''}" max="${cfg.max ?? ''}" step="${cfg.step ?? '1'}" style="${INPUT};flex:1">
+      ${cfg.unit ? `<span class="mono" style="font-size:11px;color:var(--color-dark-text-3)">${esc(cfg.unit)}</span>` : ''}
+    </div>`;
+  } else if (cfg.isPath) {
+    controlHtml = `<div style="display:flex;gap:8px;align-items:center">
+      <input type="text" data-act="editConfigInput" value="${esc(String(cfg.currentValue))}" placeholder="${esc(cfg.placeholder || '')}" style="${INPUT};flex:1">
+      <button class="btn-ghost" data-act="browseEditConfigPath" type="button" style="flex:none;padding:7px 12px;font-size:11px">Examinar…</button>
+    </div>`;
+  } else {
+    controlHtml = `<input type="text" data-act="editConfigInput" value="${esc(String(cfg.currentValue))}" placeholder="${esc(cfg.placeholder || '')}" style="${INPUT}">`;
+  }
+
+  const boundsHint = (cfg.min !== undefined && cfg.max !== undefined)
+    ? `Rango permitido: ${cfg.min} a ${cfg.max}${cfg.unit ? ` ${cfg.unit}` : ''}`
+    : (cfg.hint || '');
+
+  return shell(`
+    <div style="padding:16px 18px;border-bottom:1px solid var(--color-dark-border);display:flex;align-items:baseline;justify-content:space-between">
+      <div>
+        <div class="font-display" style="font:600 14px var(--font-display)">Editar Configuración</div>
+        <div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);margin-top:3px">
+          ${esc(cfg.section)} · <span class="mono" style="color:var(--color-dark-text-1)">${esc(cfg.key)}</span>
+        </div>
+      </div>
+      <button class="btn-ghost" data-act="closeEditConfig" style="padding:4px 8px;font-size:11px">✕</button>
+    </div>
+    <form data-act="submitEditConfig" style="margin:0">
+      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+        ${field(cfg.label, controlHtml, boundsHint)}
+        ${cfg.error ? `
+          <div style="padding:8px 12px;background:var(--who-system-bg);border:1px solid var(--state-blocked);border-radius:var(--radius-sm);font:500 11px var(--font-body);color:var(--state-blocked)">
+            ${esc(cfg.error)}
+          </div>` : ''}
+      </div>
+      <div style="display:flex;gap:9px;justify-content:flex-end;padding:13px 18px;
+           border-top:1px solid var(--color-dark-border);background:var(--app-surface-sunken)">
+        <button type="button" class="btn-ghost" data-act="closeEditConfig">Cancelar</button>
+        <button type="submit" class="btn-primary" style="padding:9px 18px">Guardar cambios</button>
+      </div>
+    </form>
+  `, 480, 'closeEditConfig');
+}
+
 /** 
  * @param {any} state
  * @param {any} data
@@ -311,10 +372,12 @@ function taskLogDialog(state, _data) {
  */
 export function renderDialogs(state, data) {
   if (state.chat) return shell(renderChat(state, data), 900, 'closeChat');
+  if (state.editConfig) return editConfigDialog(state, data);
   if (state.inspectedSkill) return skillDialog(state, data);
   if (state.inspectedTask) return taskLogDialog(state, data);
   if (state.queue !== null) return queueDialog(state, data);
   if (state.scan) return scanDialog(state, data);
   return '';
 }
+
 

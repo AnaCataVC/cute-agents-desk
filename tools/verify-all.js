@@ -37,6 +37,7 @@ const FAST = [
   'verify-skills.js',
   'verify-tokens-and-accounts.js',
   'verify-config.js',
+  'verify-config-ui.js',
   'verify-hierarchical-repo-tree.mjs',
   'verify-quotas.js',
   'verify-flows-synthesis.mjs',
