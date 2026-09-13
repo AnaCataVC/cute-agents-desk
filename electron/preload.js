@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('desk', {
   /** @param {{title: string, topic?: string, cap?: number}} o */
   createConversation: (o) => ipcRenderer.invoke('desk:createConversation', o),
 
+  /** @param {string} id */
+  archiveConversation: (id) => ipcRenderer.invoke('desk:archiveConversation', id),
+
   /**
    * Start an agent on a repo. Returns its id, or `{ error }` if the scheduler refused it.
    * @param {{cwd?: string, task: string, conversationId?: string, bin?: string, engine?: string, model?: string, effort?: string, mode?: 'write'|'read'|'plan'|'auto'}} o

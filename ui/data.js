@@ -151,7 +151,7 @@ function fromLive(a) {
     elapsed: a.elapsed || 0,
     boss: a.role === 'coordinator' ? 'coordinador de esta conversación' : (a.replyTo || 'sin coordinador'),
     tool: a.tool || '',
-    messages: 0,
+    messages: liveThreads[a.id]?.length || 0,
     ring: true,
     live: true,
     costUsd: a.costUsd || 0,
@@ -208,6 +208,7 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
             role: a.role || 'worker',
             task: a.task,
             tool: a.tool,
+            dependsOn: a.dependsOn || [],
           });
         }
       }
@@ -240,13 +241,36 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
       return fullAgent?.accountId;
     })?.accountId || (accounts[0]?.id || '—');
 
+    const links = [];
+    for (const r of roster) {
+      if (Array.isArray(r.dependsOn)) {
+        for (const dep of r.dependsOn) {
+          if (roster.some((other) => other.id === dep)) {
+            links.push([dep, r.id]);
+          }
+        }
+      }
+    }
+
     flows.push({
       id: conv.id,
       name: conv.title || `Conversación ${conv.id}`,
+      short: conv.title || conv.id,
       split: reposList.length > 1 ? 'por repo' : 'por tema',
       engine: engineLabel,
       accountId,
       repos: reposList.length ? reposList.join(', ') : (conv.topic || '—'),
+      coordinator: coordinator ? {
+        id: coordinator.id,
+        state: coordinator.state || 'idle',
+        tokens: coordinator.tokens || 0,
+        tokenCap: coordinator.tokenCap || 0,
+        ctxPct: coordinator.tokenCap > 0 ? Math.round(((coordinator.tokens || 0) / coordinator.tokenCap) * 100) : 0,
+        costUsd: coordinator.costUsd || 0,
+        tool: coordinator.tool || 'coordinando',
+        task: coordinator.task,
+        engine: coordinator.engine,
+      } : null,
       roster,
       defined: conv.cap || 3,
       turns: `${roster.length + (coordinator ? 1 : 0)} turnos`,
@@ -254,7 +278,7 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
       rate: roster.reduce((sum, r) => sum + (r.state === 'thinking' || r.state === 'tool' ? 120 : 0), 0),
       hooks: (roster.length + (coordinator ? 1 : 0)) * 3,
       loops: [],
-      links: [],
+      links,
       status,
     });
   }
@@ -282,6 +306,7 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
     flows.push({
       id: 'direct-dispatch',
       name: 'Sesiones directas',
+      short: 'Sesiones directas',
       split: reposList.length > 1 ? 'por repo' : 'por tema',
       engine: 'claude / agy',
       accountId: orphanAgents[0]?.accountId || (accounts[0]?.id || '—'),

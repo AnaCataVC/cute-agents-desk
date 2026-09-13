@@ -91,4 +91,22 @@ function writeStatus(id, summaryByAgentId) {
   fs.writeFileSync(conversationPaths(id).status, JSON.stringify(summaryByAgentId, null, 2));
 }
 
-module.exports = { createConversation, listConversations, getConversation, runningInConversation, writeStatus, conversationPaths };
+/**
+ * Marks a conversation as archived.
+ * @param {string} id
+ */
+function archiveConversation(id) {
+  const p = conversationPaths(id);
+  try {
+    if (!fs.existsSync(p.conversation)) return { error: `Conversación no encontrada: ${id}` };
+    const conv = JSON.parse(fs.readFileSync(p.conversation, 'utf8'));
+    conv.status = 'archived';
+    conv.archivedAt = new Date().toISOString();
+    fs.writeFileSync(p.conversation, JSON.stringify(conv, null, 2));
+    return conv;
+  } catch (err) {
+    return { error: err && err.message ? err.message : String(err) };
+  }
+}
+
+module.exports = { createConversation, listConversations, getConversation, archiveConversation, runningInConversation, writeStatus, conversationPaths };

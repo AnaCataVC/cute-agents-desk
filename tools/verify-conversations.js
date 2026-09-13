@@ -38,5 +38,10 @@ conv.writeStatus(created.id, { a1: { state: 'thinking' } });
 const status = JSON.parse(fs.readFileSync(conv.conversationPaths(created.id).status, 'utf8'));
 assert.deepStrictEqual(status, { a1: { state: 'thinking' } });
 
+const archived = conv.archiveConversation(created.id);
+assert.strictEqual(archived.status, 'archived');
+assert.ok(archived.archivedAt);
+assert.strictEqual(conv.getConversation(created.id).status, 'archived');
+
 fs.rmSync(conv.conversationPaths(created.id).dir, { recursive: true, force: true });
-console.log('conversaciones OK: crear, listar, leer y contar agentes vivos por conversacion');
+console.log('conversaciones OK: crear, listar, leer, archivar y contar agentes vivos por conversacion');

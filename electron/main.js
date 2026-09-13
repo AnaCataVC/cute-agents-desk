@@ -352,7 +352,19 @@ function wireAgents(win) {
    * @param {string} [o.effort]
    * @returns {Promise<string | { error: string }>}
    */
-  async function spawnWorker({ cwd, task, conversationId, replyTo, mode, bin, engine, model, effort, id: customId }) {
+  async function spawnWorker(opts = {}) {
+    let { cwd, task, conversationId, replyTo, bin, engine, model, effort, mode, id: customId, dependsOn } = opts;
+
+    // Auto-resolve replyTo to the active coordinator if conversationId is given without explicit replyTo
+    if (conversationId && !replyTo) {
+      for (const a of registry.agents.values()) {
+        if (a.conversationId === conversationId && a.role === 'coordinator' && a.state !== 'done' && a.state !== 'failed') {
+          replyTo = a.id;
+          break;
+        }
+      }
+    }
+
     const rawBin = bin || engine || 'claude';
     const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
 
@@ -432,6 +444,7 @@ function wireAgents(win) {
       effort: agent.effort,
       mode: agent.mode,
       tokenCap: dynamicTokenCap,
+      dependsOn: opts.dependsOn || dependsOn || [],
     });
     return id;
   }
@@ -440,10 +453,18 @@ function wireAgents(win) {
 
   ipcMain.handle('desk:conversations', () => conv.listConversations());
   ipcMain.handle('desk:createConversation', (_ev, o) => conv.createConversation(o));
+  ipcMain.handle('desk:archiveConversation', (_ev, id) => conv.archiveConversation(id));
 
   ipcMain.handle('desk:spawnCoordinator', async (_ev, { conversationId, bin, engine, model, effort, mode } = {}) => {
     const conversation = conv.getConversation(conversationId);
     if (!conversation) return { error: `conversacion desconocida: ${conversationId}` };
+
+    // Reuse coordinator if one is already alive for this conversation
+    for (const a of registry.agents.values()) {
+      if (a.conversationId === conversationId && a.role === 'coordinator' && a.state !== 'done' && a.state !== 'failed') {
+        return a.id;
+      }
+    }
     // A coordinator is a real PTY process in the same `running` map the global cap is measured
     // against — desk:spawn already gates on it, and this path was the one caller that didn't.
     const gate = scheduler.canSpawn(running.size);
@@ -509,6 +530,7 @@ function wireAgents(win) {
         bin: taskReq.bin || taskReq.engine,
         model: taskReq.model,
         effort: taskReq.effort,
+        dependsOn: taskReq.dependsOn,
       }));
       if (!enqueueRes.ok) {
         registry.notifyCoordinator(agent.id, 'scheduler', `pedido rechazado: ${enqueueRes.reason}`);

@@ -91,12 +91,20 @@ function graph({ flow, agents, width, height, scale, labels = true, simple = fal
       + label + hit;
   }).join('');
 
+  const coord = flow.coordinator;
+  const coordSkin = coord ? (STATE_ROBOT[coord.state] || STATE_ROBOT.idle) : STATE_ROBOT.idle;
+  const coordColor = coord ? coordSkin.color : 'var(--color-dark-accent)';
+  const coordDim = coord && coord.state === 'blocked' ? 0.6 : 1;
+  const coordHit = coord ? `<circle cx="${cx}" cy="${cy}" r="32" fill="transparent" style="cursor:pointer"
+    data-act="tip" data-arg="${esc(`${flow.id}|${coord.id}`)}"></circle>` : '';
+
   const hub = `
     <circle cx="${cx}" cy="${cy}" r="${(r * 0.36).toFixed(1)}" fill="none"
-      style="stroke:var(--color-dark-accent);transform-origin:${cx}px ${cy}px;animation:ringSpin 16s linear infinite"
+      style="stroke:${coordColor};transform-origin:${cx}px ${cy}px;animation:ringSpin 16s linear infinite"
       stroke-width="1" stroke-dasharray="4 11" opacity="0.4"></circle>
     <circle cx="${cx}" cy="${cy}" r="${(r * 0.26).toFixed(1)}" style="fill:var(--color-dark-surface)"></circle>
-    ${robot({ x: cx, y: cy, scale: scale * 1.9, color: 'var(--color-dark-accent)', variant: 'coordinator', simple })}`;
+    ${robot({ x: cx, y: cy, scale: scale * 1.9, color: coordColor, variant: 'coordinator', opacity: coordDim, simple })}
+    ${coordHit}`;
 
   return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}"
     preserveAspectRatio="xMidYMid meet" style="display:block">
@@ -115,7 +123,17 @@ function tooltip(flow, agents, state, states) {
   if (!state.tip) return '';
   const [flowId, agentId] = state.tip.split('|');
   if (flowId !== flow.id) return '';
-  const agent = agents.find((a) => a.id === agentId);
+  let agent = agents.find((a) => a.id === agentId);
+  if (!agent && flow.coordinator && flow.coordinator.id === agentId) {
+    agent = {
+      id: flow.coordinator.id,
+      state: flow.coordinator.state,
+      repo: flow.repos || 'coordinación',
+      branch: 'coordinador',
+      tokens: flow.coordinator.tokens,
+      ctxPct: flow.coordinator.ctxPct,
+    };
+  }
   if (!agent) return '';
   const st = states[agent.state] || states.idle;
 
@@ -199,7 +217,7 @@ function detailCard(flow, state, states, data) {
     <div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);margin-bottom:9px">
       ${esc(account)} · ${esc(flow.repos || '—')}</div>
     ${metaRow(flow)}
-    ${live.length
+    ${(live.length || (flow.coordinator && LIVE.includes(flow.coordinator.state)))
     ? graph({ flow, agents: live, width: 464, height: 330, scale: 0.78 })
     : `<div style="padding:38px 12px;text-align:center;font:400 11px var(--font-body);
          color:var(--color-dark-text-3)">Sin sesiones activas: todo entregado o en espera.</div>`}
@@ -276,7 +294,7 @@ function toolbar(state, flows, total, accounts = []) {
     ${accChip('all', 'Todas')}${accountChips}
     <button class="chip" aria-pressed="${state.showArch}" data-act="showArch">Ver archivados</button>
     <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${flows.length} de ${total}</span>
-    <button class="btn-primary" data-act="openQueue" data-arg="" style="margin-left:auto">
+    <button class="btn-primary" data-act="toggleNewConversation" style="margin-left:auto">
       <span style="font-size:15px;line-height:1">+</span>Crear coordinador</button>
   </div>`;
 }

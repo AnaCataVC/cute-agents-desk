@@ -50,7 +50,18 @@ function newConversationForm(state) {
   </div>`;
 }
 
-function conversationRow(conv) {
+function conversationRow(conv, data) {
+  const coord = (data?.getAgents() || []).find((a) => a.conversationId === conv.id && a.role === 'coordinator' && a.state !== 'done' && a.state !== 'failed');
+  const coordButton = coord
+    ? `<button class="chip" data-act="openChat" data-arg="${esc(coord.id)}"
+        title="Ver hilo del coordinador" style="font-size:9.5px;padding:3px 8px;border-color:var(--color-lilac);color:var(--color-lilac)">
+        coordinando · ver hilo
+      </button>`
+    : `<button class="chip" data-act="openCoordinator" data-arg="${esc(conv.id)}"
+        title="Abrir coordinador" style="font-size:9.5px;padding:3px 8px">
+        abrir coordinador
+      </button>`;
+
   return `
   <div style="display:flex;flex-direction:column;gap:3px;padding:8px 9px;border-radius:var(--radius-sm);
        background:var(--app-surface-tree)">
@@ -63,10 +74,7 @@ function conversationRow(conv) {
       text-overflow:ellipsis;white-space:nowrap">${esc(conv.topic)}</div>` : ''}
     <div style="display:flex;align-items:center;gap:7px;margin-top:2px">
       <span class="mono" style="font-size:9px;color:var(--color-dark-text-3);flex:1">${esc(relTime(conv.createdAt))}</span>
-      <button class="chip" data-act="openCoordinator" data-arg="${esc(conv.id)}"
-        title="Abrir coordinador" style="font-size:9.5px;padding:3px 8px">
-        abrir coordinador
-      </button>
+      ${coordButton}
     </div>
   </div>`;
 }
@@ -76,7 +84,7 @@ export function renderSidebar(state, data) {
   const conversations = data.getConversations();
 
   const list = conversations.length
-    ? `<div style="display:flex;flex-direction:column;gap:7px">${conversations.map(conversationRow).join('')}</div>`
+    ? `<div style="display:flex;flex-direction:column;gap:7px">${conversations.map((c) => conversationRow(c, data)).join('')}</div>`
     : `<div class="mono" style="font-size:10px;line-height:1.5;color:var(--color-dark-text-3);
          padding:9px;background:var(--color-dark-bg);border:1px dashed var(--color-dark-border);
          border-radius:var(--radius-sm)">

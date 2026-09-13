@@ -74,13 +74,31 @@ function testCoordinatorWithWorkers() {
   const f = flows[0];
   assert.strictEqual(f.id, 'c-test1');
   assert.strictEqual(f.name, 'Refactor Auth Subsystem');
+  assert.strictEqual(f.short, 'Refactor Auth Subsystem', 'Flow short name must match conversation title');
   assert.strictEqual(f.status, 'activo', 'Flow should be activo when an agent is thinking or tool');
   assert.strictEqual(f.roster.length, 2, 'Coordinator must be hub; roster should only include the 2 workers');
   assert.strictEqual(f.cost, 0.25, 'Total cost must sum coordinator + workers: 0.05 + 0.12 + 0.08 = 0.25');
   assert.strictEqual(f.roster[0].ctxPct, 30, 'Worker 1 context percentage: 15000 / 50000 = 30%');
   assert.strictEqual(f.roster[1].ctxPct, 16, 'Worker 2 context percentage: 8000 / 50000 = 16%');
+  assert.ok(f.coordinator, 'Coordinator object must be preserved in flow');
+  assert.strictEqual(f.coordinator.id, 'co-1');
+  assert.strictEqual(f.coordinator.state, 'thinking');
 
   console.log('testCoordinatorWithWorkers OK');
+}
+
+function testCoordinatorLinksFromDependsOn() {
+  const conversations = [{ id: 'c-dag', title: 'DAG Pipeline', cap: 3 }];
+  const agents = [
+    { id: 'co-dag', role: 'coordinator', conversationId: 'c-dag', state: 'thinking' },
+    { id: 'w-a', role: 'worker', conversationId: 'c-dag', state: 'done' },
+    { id: 'w-b', role: 'worker', conversationId: 'c-dag', state: 'tool', dependsOn: ['w-a'] },
+  ];
+
+  const flows = synthesizeFlows(agents, conversations, []);
+  assert.strictEqual(flows.length, 1);
+  assert.deepStrictEqual(flows[0].links, [['w-a', 'w-b']], 'Links must be synthesized from dependsOn');
+  console.log('testCoordinatorLinksFromDependsOn OK');
 }
 
 function testBlockedStatePropagation() {
@@ -150,6 +168,7 @@ function testGetFlowsFallback() {
 
 testEmptyState();
 testCoordinatorWithWorkers();
+testCoordinatorLinksFromDependsOn();
 testBlockedStatePropagation();
 testOrphanAgentsFlow();
 testGetFlowsFallback();

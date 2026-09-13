@@ -243,6 +243,7 @@ class Registry {
       conversationId: opts.conversationId,
       replyTo: opts.replyTo,
       role: opts.role,
+      dependsOn: opts.dependsOn || [],
     });
     this.handles.set(agent.id, { write: agent.write, kill: agent.kill });
     this.watch(agent.id);
@@ -306,10 +307,10 @@ class Registry {
     drainJsonQueue(outbox, (body) => {
       if (!body || typeof body.message !== 'string') return false;
       const agent = this.agents.get(id);
-      this.recordMessage(id, 'sub', 'agente', body.message);
       if (agent?.replyTo) {
         this.notifyCoordinator(agent.replyTo, id, `mensaje: ${body.message}`);
       } else {
+        this.recordMessage(id, 'sub', 'agente', body.message);
         // A worker with nowhere to send this (e.g. a bare desk:spawn call) -- not an error, just
         // worth a line in events.jsonl so it isn't silently lost.
         this.note(id, 'OutboxDropped', { reason: 'no-coordinator', message: body.message });

@@ -244,7 +244,12 @@ const ACTIONS = {
     const topic = (state.newConvTopic || '').trim();
     state.newConvOpen = false;
     window.desk?.createConversation?.({ title, topic: topic || undefined })
-      .then(() => window.desk.conversations())
+      .then((created) => {
+        if (created?.id) {
+          window.desk?.spawnCoordinator?.({ conversationId: created.id });
+        }
+        return window.desk.conversations();
+      })
       .then((conversations) => { data.setLiveConversations(conversations); render(); });
   },
   dismissError: () => { state.error = null; },
@@ -256,10 +261,24 @@ const ACTIONS = {
       if (result?.error) { state.error = result.error; render(); }
     });
   },
-  // Declared but inert until the main process owns them: archiving and closing sessions are
-  // its calls, not the window's.
-  archive: () => {},
-  closeIdle: () => {},
+  archive: (conversationId) => {
+    if (!conversationId) return;
+    window.desk?.archiveConversation?.(conversationId).then((res) => {
+      if (res?.error) { state.error = res.error; render(); return; }
+      return window.desk.conversations().then((conversations) => {
+        data.setLiveConversations(conversations);
+        render();
+      });
+    });
+  },
+  closeIdle: (flowId) => {
+    const agents = data.getAgents();
+    for (const a of agents) {
+      if ((a.conversationId === flowId || a.boss?.includes(flowId)) && (a.state === 'idle' || a.state === 'done')) {
+        window.desk?.stop?.(a.id);
+      }
+    }
+  },
 
   /** Manual reap, per the plan: never automatic, so losing an agent's uncommitted work is never
    * a side effect of something else finishing. The IPC handler itself refuses a still-live agent. */
