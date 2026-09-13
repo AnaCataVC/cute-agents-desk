@@ -60,6 +60,18 @@ function swatchButton(ac, color) {
     border:${selected ? '2px solid var(--color-dark-text-1)' : '1px solid var(--color-dark-border)'}"></button>`;
 }
 
+function editorButton(ac, id, label) {
+  const current = ac.editor || 'vscode';
+  const selected = current === id;
+  return `<button data-act="setAccountEditor" data-arg="${esc(ac.id)}|${id}" class="tab"
+    aria-checked="${selected}"
+    style="padding:3px 9px;font-size:10px;border-radius:var(--radius-sm);border:1px solid ${selected ? 'var(--color-lilac)' : 'var(--color-dark-border)'};
+           background:${selected ? 'var(--color-dark-surface-2)' : 'transparent'};
+           color:${selected ? 'var(--color-dark-text-1)' : 'var(--color-dark-text-3)'};cursor:pointer">
+    ${label}
+  </button>`;
+}
+
 function folderRow(f, data, accountId) {
   const repoCount = data.getRepos().filter((r) => r.folder === f.path).length;
   return `
@@ -84,6 +96,14 @@ function accountCard(ac, data) {
     <div class="settings-row" style="margin-top:11px">
       <span style="font-size:10.5px;color:var(--color-dark-text-3)">Color de la cuenta</span>
       <div style="display:flex;gap:6px;margin-left:auto">${SWATCHES.map((v) => swatchButton(ac, v)).join('')}</div>
+    </div>
+    <div class="settings-row" style="margin-top:7px">
+      <span style="font-size:10.5px;color:var(--color-dark-text-3)">Editor externo</span>
+      <div style="display:flex;gap:4px;margin-left:auto" role="radiogroup">
+        ${editorButton(ac, 'vscode', 'VS Code')}
+        ${editorButton(ac, 'antigravity', 'Antigravity IDE')}
+        ${editorButton(ac, 'system', 'Explorador')}
+      </div>
     </div>
     <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
       ${(ac.folders || []).map((f) => folderRow(f, data, ac.id)).join('')}

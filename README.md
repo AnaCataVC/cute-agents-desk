@@ -83,11 +83,11 @@ puras de `node:assert` para lógica de máquina de estados (tope de tokens, sche
 conversaciones, el drenado del buzón).
 
 ```bash
-npm test        # corre de un tiro los 26 que son rápidos y no necesitan un CLI real ni ventana
+npm test        # corre de un tiro los 28 que son rápidos y no necesitan un CLI real ni ventana
 npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm test` (`tools/verify-all.js`) corre los 26 `verify-*.js` que MEDIDO tardan segundos bajo
+`npm test` (`tools/verify-all.js`) corre los 28 `verify-*.js` que MEDIDO tardan segundos bajo
 `node` puro. Los que quedan afuera necesitan un turno real de CLI, una ventana de Electron o validación
 del binario empaquetado (`verify-dist-binary.js` tras `npm run dist`). Esos se corren aparte, uno a la vez:
 
@@ -148,7 +148,7 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `ring.js` | El anillo de tokens y los formateadores |
 | `repo-tree.js`, `agent-card.js`, `terminal.js` | Pestaña «Control de agentes»: árbol de directorios jerárquico colapsable con burbujeo de estado en tiempo real, filtros y cola de tareas |
 | `boss-graph.js`, `timeline.js` | Pestaña «Flujos de trabajo» |
-| `editor.js` | Pestaña «Editor»: el árbol de cambios y el diff |
+| `visualizer.js`, `highlight.js` | Pestaña «Visualizador»: árbol de cambios sin integrar, diff de aprobación con resaltado ligero de sintaxis y apertura en editor externo |
 | `tokens-view.js` | Pestaña «Uso»: métricas en vivo, desglose por motor/cuenta, ritmo medido y panel de cuotas oficiales de CLI |
 | `scheduled-tasks-view.js` | Pestaña «Tareas programadas»: lo que Claude Desktop y Antigravity tienen agendado, con inspección interactiva de logs |
 | `config.js`, `dialogs.js`, `chat.js` | Pestaña «Configuración» e inspectores modales (`SKILL.md`, logs de cron, apertura en Explorer) y panel Ficha/Hilo/Diff |

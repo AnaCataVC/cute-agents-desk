@@ -43,6 +43,8 @@ const FAST = [
   'verify-chat-input.js',
   'verify-timeline.js',
   'verify-scheduler-dag.js',
+  'verify-external-editor.js',
+  'verify-syntax-highlight.js',
 ];
 
 const MANUAL = [

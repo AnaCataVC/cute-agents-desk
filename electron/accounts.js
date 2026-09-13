@@ -96,6 +96,7 @@ function buildAccounts() {
       name: c.name || c.alias || c.label || c.gh,
       email: c.email,
       color: c.color || 'var(--color-lilac)',
+      editor: c.editor || 'vscode',
       scopes: match ? match.scopes : '(cuenta no encontrada en gh auth status)',
       folders: c.folders,
     };
@@ -108,6 +109,22 @@ function updateAccountColor(gh, color) {
   const acc = accounts.find((a) => a.gh === gh);
   if (acc) {
     acc.color = color;
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function updateAccountEditor(gh, editor) {
+  const configPath = getAccountsConfigPath();
+  const accounts = readAccountsConfig();
+  const acc = accounts.find((a) => a.gh === gh);
+  if (acc) {
+    acc.editor = editor;
     try {
       fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
       return true;
@@ -183,6 +200,7 @@ module.exports = {
   buildAccounts,
   getAccountsConfigPath,
   updateAccountColor,
+  updateAccountEditor,
   addAccountFolder,
   removeAccountFolder,
   accountIdForCwd,

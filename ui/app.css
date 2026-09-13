@@ -185,7 +185,7 @@ button { font-family: inherit; }
 }
 .toggle-knob[data-on="true"] { transform: translateX(13px); }
 
-/* Diff rows in the editor. Monospace and a fixed line height, so the two panes align. */
+/* Diff rows in the visualizer. Monospace and a fixed line height, so the two panes align. */
 .diff-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); font-size: 11px; line-height: 1.75; }
 .diff-row > .ln {
   padding-right: 8px;
@@ -198,6 +198,14 @@ button { font-family: inherit; }
 .diff-row[data-kind="add"] > .lt { background: var(--app-diff-add); color: var(--app-diff-add-line); }
 .diff-row[data-kind="del"] > .lt { background: var(--app-diff-del); color: var(--app-diff-del-line); }
 .diff-row[data-kind="pad"] > .lt { background: var(--app-surface-sunken); }
+
+/* Syntax highlighting tokens in diff rows */
+.tok-kw { color: var(--color-lilac); font-weight: 600; }
+.tok-str { color: var(--color-mint); }
+.tok-com { color: var(--color-dark-text-3); font-style: italic; opacity: 0.85; }
+.tok-num { color: var(--color-pink); }
+.tok-fn { color: var(--color-blue); }
+.tok-type { color: var(--color-lilac); }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .muted { color: var(--color-dark-text-3); }

@@ -303,6 +303,55 @@ function wireAgents(win) {
     return { ok: false };
   });
 
+  ipcMain.handle('desk:setAccountEditor', async (_ev, { accountId, editor }) => {
+    const { updateAccountEditor, buildAccounts } = require('./accounts.js');
+    const ok = updateAccountEditor(accountId, editor);
+    if (ok) {
+      const accounts = buildAccounts();
+      if (repoDataPromise) {
+        const current = await repoDataPromise;
+        current.accounts = accounts;
+      }
+      return { ok: true, accounts };
+    }
+    return { ok: false };
+  });
+
+  ipcMain.handle('desk:openEditor', async (_ev, { agentId, targetPath, filePath, line, editorChoice }) => {
+    const editor = require('./editor.js');
+    let effectiveTarget = targetPath;
+    let effectiveEditor = editorChoice;
+
+    if (agentId) {
+      const wtDir = worktree.worktreeDirFor(agentId);
+      if (fs.existsSync(wtDir)) {
+        effectiveTarget = wtDir;
+      }
+      if (!effectiveEditor) {
+        // Resolve account for this worktree
+        const reg = registry?.agents?.get(agentId);
+        const { readAccountsConfig } = require('./accounts.js');
+        const accounts = readAccountsConfig();
+        const acc = accounts.find((a) => (a.folders || []).some((f) => (reg?.cwd || '').toLowerCase().includes(f.path.toLowerCase())));
+        if (acc?.editor) {
+          effectiveEditor = acc.editor;
+        }
+      }
+    }
+
+    if (!effectiveTarget) {
+      return { ok: false, error: 'No se encontró la ruta del worktree o archivo' };
+    }
+
+    return editor.openInEditor({
+      targetPath: effectiveTarget,
+      filePath,
+      line,
+      editorChoice: effectiveEditor,
+      shell,
+    });
+  });
+
   ipcMain.handle('desk:addAccountFolder', async (_ev, { accountId, folderPath, depth }) => {
     const { addAccountFolder } = require('./accounts.js');
     const ok = addAccountFolder(accountId, folderPath, depth);

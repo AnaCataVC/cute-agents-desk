@@ -54,6 +54,12 @@ export function updateAccountColor(accountId, color) {
   if (acc) acc.color = color;
 }
 
+export function updateAccountEditor(accountId, editor) {
+  if (!liveAccounts) return;
+  const acc = liveAccounts.find((a) => a.id === accountId);
+  if (acc) acc.editor = editor;
+}
+
 /** @type {object[]|null} null until the first scan of the external schedulers comes back;
  * distinct from "scanned, found none" for the same reason liveAccounts/liveRepos use null. */
 let liveScheduledTasks = null;
@@ -450,7 +456,7 @@ let liveDiffs = {};
 /** @param {Record<string, any>} diffs */
 export function setLiveDiffs(diffs) { liveDiffs = diffs || {}; }
 /**
- * Uncommitted work per agent, as the editor shows it.
+ * Uncommitted work per agent, as the visualizer shows it.
  * `status` is where the work stands: sin commitear | commit sin empujar | con conflicto.
  */
 export function getDiffs() { return liveDiffs; }

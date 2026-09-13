@@ -176,7 +176,7 @@ function hiloPanel(agent, data, state) {
   </div>`;
 }
 
-/** A compact file list, not the full side-by-side viewer — that one lives in the Editor tab. */
+/** A compact file list, not the full side-by-side viewer — that one lives in the Visualizador tab. */
 function diffPanel(agent, data) {
   const diff = data.getDiffs()[agent.id];
   if (!diff) {

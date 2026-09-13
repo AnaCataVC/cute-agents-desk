@@ -90,6 +90,18 @@ contextBridge.exposeInMainWorld('desk', {
   setAccountColor: (accountId, color) => ipcRenderer.invoke('desk:setAccountColor', { accountId, color }),
 
   /**
+   * Update and persist an account's preferred editor in accounts.json.
+   * @param {{ accountId: string, editor: string }} o
+   */
+  setAccountEditor: (o) => ipcRenderer.invoke('desk:setAccountEditor', o),
+
+  /**
+   * Open a worktree or file in the configured external editor.
+   * @param {{ targetPath?: string, agentId?: string, filePath?: string, line?: number, editorChoice?: string }} o
+   */
+  openEditor: (o) => ipcRenderer.invoke('desk:openEditor', o),
+
+  /**
    * Add or update an account's registered folder in accounts.json.
    * @param {{ accountId: string, folderPath: string, depth?: number }} o
    */

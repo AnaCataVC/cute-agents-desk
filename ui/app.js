@@ -12,7 +12,7 @@ import { renderSidebar } from './sidebar.js';
 import { renderRepoTree } from './repo-tree.js';
 import { renderAgentPanel } from './agent-card.js';
 import { renderFlows } from './boss-graph.js';
-import { renderEditor } from './editor.js';
+import { renderVisualizer } from './visualizer.js';
 import { renderUsage } from './tokens-view.js';
 import { renderScheduledTasks } from './scheduled-tasks-view.js';
 import { renderConfig } from './config.js';
@@ -21,7 +21,7 @@ import { esc } from './esc.js';
 
 /** @type {Record<string, any>} */
 const state = {
-  view: 'dispatch',            // dispatch | flows | editor | usage | scheduled | config
+  view: 'dispatch',            // dispatch | flows | visualizer | usage | scheduled | config
   flowView: 'detail',          // detail | compact
   cfgTab: 'accounts',
   open: {},                     // repo tree, expanded nodes
@@ -33,10 +33,10 @@ const state = {
   accFlow: 'all',
   showArch: false,
   tip: null,                   // `${flowId}|${agentId}` of the picked graph node
-  ideOpen: [],                 // open editor tabs, as `${agentId}:${path}`
-  ideActive: null,
+  visualizerOpen: [],          // open visualizer tabs, as `${agentId}:${path}`
+  visualizerActive: null,
   diffMode: 'sbs',             // sbs | uni
-  treeClosed: {},              // collapsed groups in the editor's change tree
+  treeClosed: {},              // collapsed groups in the visualizer's change tree
   terminal: null,              // agent id whose terminal is mounted, or null
   chat: null,                  // agent id whose panel is open
   chatTab: 'hilo',             // ficha | hilo | diff, within that panel
@@ -91,12 +91,12 @@ const ACTIONS = {
   tip: (v) => { state.tip = state.tip === v ? null : v; },
   toggleTreeNode: (key) => { state.treeClosed[key] = !state.treeClosed[key]; },
   openFile: (id) => {
-    if (!state.ideOpen.includes(id)) state.ideOpen.push(id);
-    state.ideActive = id;
+    if (!state.visualizerOpen.includes(id)) state.visualizerOpen.push(id);
+    state.visualizerActive = id;
   },
   closeFile: (id) => {
-    state.ideOpen = state.ideOpen.filter((t) => t !== id);
-    if (state.ideActive === id) state.ideActive = state.ideOpen[state.ideOpen.length - 1] || null;
+    state.visualizerOpen = state.visualizerOpen.filter((t) => t !== id);
+    if (state.visualizerActive === id) state.visualizerActive = state.visualizerOpen[state.visualizerOpen.length - 1] || null;
   },
   diffMode: (v) => { state.diffMode = v; },
   openTerminal: (id) => { state.terminal = id || null; },
@@ -117,12 +117,12 @@ const ACTIONS = {
       }
     }
   },
-  /** Same file-opening path as the Editor tab's tree, reached from the chat panel's Diff sub-tab. */
+  /** Same file-opening path as the Visualizador tab's tree, reached from the chat panel's Diff sub-tab. */
   openDiffFile: (id) => {
-    state.view = 'editor';
+    state.view = 'visualizer';
     state.chat = null;
-    if (!state.ideOpen.includes(id)) state.ideOpen.push(id);
-    state.ideActive = id;
+    if (!state.visualizerOpen.includes(id)) state.visualizerOpen.push(id);
+    state.visualizerActive = id;
   },
   openQueue: (repo) => {
     state.queue = repo ?? '';
@@ -355,6 +355,37 @@ const ACTIONS = {
       }
     }
   },
+  setAccountEditor: async (arg) => {
+    if (!arg) return;
+    const [accountId, editor] = arg.split('|');
+    if (!accountId || !editor) return;
+    data.updateAccountEditor(accountId, editor);
+    render();
+    if (window.desk?.setAccountEditor) {
+      const res = await window.desk.setAccountEditor({ accountId, editor });
+      if (res?.accounts) {
+        data.setAccounts(res.accounts);
+        render();
+      }
+    }
+  },
+  openExternalEditor: async (arg) => {
+    if (!arg) return;
+    const [agentId, filePath] = arg.split('|');
+    if (!agentId) return;
+    state.error = null;
+    render();
+    if (window.desk?.openEditor) {
+      const res = await window.desk.openEditor({
+        agentId,
+        filePath: filePath || undefined,
+      });
+      if (res?.error) {
+        state.error = res.error;
+        render();
+      }
+    }
+  },
   toggleConfig: async (arg) => {
     if (!arg) return;
     const [section, key] = arg.split('|');
@@ -524,7 +555,7 @@ document.addEventListener('keydown', (ev) => {
 });
 
 const TABS = [
-  ['dispatch', 'Control de agentes'], ['flows', 'Flujos de trabajo'], ['editor', 'Editor'],
+  ['dispatch', 'Control de agentes'], ['flows', 'Flujos de trabajo'], ['visualizer', 'Visualizador'],
   ['usage', 'Uso'], ['scheduled', 'Tareas programadas'], ['config', 'Configuración'],
 ];
 
@@ -577,7 +608,8 @@ function dispatch() {
 const VIEWS = {
   dispatch,
   flows: () => renderFlows(state, data),
-  editor: () => renderEditor(state, data),
+  visualizer: () => renderVisualizer(state, data),
+  editor: () => renderVisualizer(state, data),
   usage: () => renderUsage(state, data),
   scheduled: () => renderScheduledTasks(state, data),
   config: () => renderConfig(state, data),
