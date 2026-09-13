@@ -54,6 +54,9 @@ contextBridge.exposeInMainWorld('desk', {
   /** @param {string} agentId  refused with `{error}` while that agent is still alive */
   reapWorktree: (agentId) => ipcRenderer.invoke('desk:reapWorktree', agentId),
 
+  /** Safely batch-prunes clean or delivered inactive worktrees without touching uncommitted work or running agents. */
+  reapCleanWorktrees: () => ipcRenderer.invoke('desk:reapCleanWorktrees'),
+
   /**
    * Start a conversation's coordinator: a real CLI agent whose only job is to break down work
    * and delegate, never to edit code itself. Returns its agent id, or `{ error }`.
@@ -83,6 +86,21 @@ contextBridge.exposeInMainWorld('desk', {
    */
   setAccountColor: (accountId, color) => ipcRenderer.invoke('desk:setAccountColor', { accountId, color }),
 
+  /**
+   * Add or update an account's registered folder in accounts.json.
+   * @param {{ accountId: string, folderPath: string, depth?: number }} o
+   */
+  addAccountFolder: (o) => ipcRenderer.invoke('desk:addAccountFolder', o),
+
+  /**
+   * Remove a registered folder from an account in accounts.json.
+   * @param {{ accountId: string, folderPath: string }} o
+   */
+  removeAccountFolder: (o) => ipcRenderer.invoke('desk:removeAccountFolder', o),
+
+  /** Open the native system directory picker dialog. */
+  pickDirectory: () => ipcRenderer.invoke('desk:pickDirectory'),
+
   /** Read persisted configuration with default schema merge. */
   config: () => ipcRenderer.invoke('desk:config'),
 
@@ -91,6 +109,18 @@ contextBridge.exposeInMainWorld('desk', {
    * @param {{section: string, key: string, value: any}} o
    */
   updateConfig: (o) => ipcRenderer.invoke('desk:updateConfig', o),
+
+  /** Fetch current in-memory thread messages per agent. */
+  threads: () => ipcRenderer.invoke('desk:threads'),
+
+  /** Fetch chronological state runs projected into timeline lanes. */
+  timeline: (opts) => ipcRenderer.invoke('desk:timeline', opts),
+
+  /**
+   * Send sanitized text input into a running agent's interactive PTY session.
+   * @param {{ agentId: string, text: string }} o
+   */
+  sendInput: (o) => ipcRenderer.invoke('desk:sendInput', o),
 
   /**
    * Push channel for what the main process owns: agent state, and raw terminal output.

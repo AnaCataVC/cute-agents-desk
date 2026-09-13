@@ -39,6 +39,10 @@ const FAST = [
   'verify-config.js',
   'verify-hierarchical-repo-tree.mjs',
   'verify-quotas.js',
+  'verify-flows-synthesis.mjs',
+  'verify-chat-input.js',
+  'verify-timeline.js',
+  'verify-scheduler-dag.js',
 ];
 
 const MANUAL = [

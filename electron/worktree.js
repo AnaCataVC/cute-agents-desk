@@ -203,4 +203,53 @@ function listWorktrees() {
   }));
 }
 
-module.exports = { createWorktree, removeWorktree, listWorktrees, worktreeDirFor, readManifest };
+/**
+ * Safely batch-prunes clean or delivered inactive worktrees.
+ * Strict invariants:
+ * 1. Never removes a worktree if its agent is in runningAgentIds (running).
+ * 2. Never removes a worktree if hasUncommittedChanges is true (dirty).
+ * 3. Removes clean or delivered inactive worktrees via removeWorktree.
+ * @param {object} [opts]
+ * @param {string[]|Set<string>} [opts.runningAgentIds]
+ * @param {string[]|Set<string>} [opts.deliveredIds]
+ * @returns {Promise<{ totalReaped: number, reaped: string[], skipped: Array<{ agentId: string, reason: string }> }>}
+ */
+async function reapCleanWorktrees(opts = {}) {
+  const runningSet = new Set(opts.runningAgentIds || []);
+  const all = await listWorktrees();
+
+  const reaped = [];
+  const skipped = [];
+
+  for (const wt of all) {
+    if (runningSet.has(wt.agentId)) {
+      skipped.push({ agentId: wt.agentId, reason: 'running' });
+      continue;
+    }
+    if (wt.hasUncommittedChanges) {
+      skipped.push({ agentId: wt.agentId, reason: 'dirty' });
+      continue;
+    }
+    try {
+      removeWorktree(wt.agentId);
+      reaped.push(wt.agentId);
+    } catch (err) {
+      skipped.push({ agentId: wt.agentId, reason: err && err.message ? err.message : 'error' });
+    }
+  }
+
+  return {
+    totalReaped: reaped.length,
+    reaped,
+    skipped,
+  };
+}
+
+module.exports = {
+  createWorktree,
+  removeWorktree,
+  reapCleanWorktrees,
+  listWorktrees,
+  worktreeDirFor,
+  readManifest,
+};

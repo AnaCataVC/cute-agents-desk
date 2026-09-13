@@ -54,6 +54,36 @@ function cleanup() {
   assert.strictEqual(git(toyRepoPath, ['rev-parse', '--abbrev-ref', 'HEAD']), originalBranch,
     'el repo base debe seguir en su propia rama original, sin moverse a agent/<id>');
 
+  // --- Test reapCleanWorktrees: clean vs dirty vs running --------------------------------------
+  const ID_CLEAN = 'wt-batch-clean';
+  const ID_DIRTY = 'wt-batch-dirty';
+  const ID_RUNNING = 'wt-batch-running';
+
+  const dirClean = worktree.createWorktree(toyRepoPath, ID_CLEAN);
+  const dirDirty = worktree.createWorktree(toyRepoPath, ID_DIRTY);
+  const dirRunning = worktree.createWorktree(toyRepoPath, ID_RUNNING);
+
+  fs.writeFileSync(path.join(dirDirty, 'dirty.txt'), 'cambio pendiente\n');
+
+  const reapRes = await worktree.reapCleanWorktrees({ runningAgentIds: [ID_RUNNING] });
+
+  assert.strictEqual(reapRes.totalReaped, 1, 'solo debe podar el worktree limpio e inactivo');
+  assert.ok(reapRes.reaped.includes(ID_CLEAN), 'debe haber podado ID_CLEAN');
+  assert.ok(!fs.existsSync(dirClean), 'dirClean ya no debe existir en disco');
+
+  assert.ok(reapRes.skipped.some((s) => s.agentId === ID_DIRTY && s.reason === 'dirty'),
+    'debe haber conservado ID_DIRTY por cambios pendientes');
+  assert.ok(fs.existsSync(dirDirty), 'dirDirty debe seguir existiendo intacto');
+
+  assert.ok(reapRes.skipped.some((s) => s.agentId === ID_RUNNING && s.reason === 'running'),
+    'debe haber conservado ID_RUNNING por agente vivo');
+  assert.ok(fs.existsSync(dirRunning), 'dirRunning debe seguir existiendo intacto');
+
+  // Limpieza manual de los dos conservados
+  worktree.removeWorktree(ID_DIRTY);
+  worktree.removeWorktree(ID_RUNNING);
+
+  console.log('reapCleanWorktrees OK: poda worktrees limpios, pero conserva incondicionalmente agentes vivos y trabajo sucio');
   console.log('worktree OK: crea el worktree en agent/<id> fuera del repo, lo lista, detecta cambios sin commitear, y el reap lo borra sin tocar el repo base');
 })().then(() => {
   // `process.exit()` never returns, so cleanup has to run before it, not after -- a `.finally()`

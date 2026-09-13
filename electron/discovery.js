@@ -89,4 +89,64 @@ function scanRepos(accounts) {
   return Promise.all(jobs);
 }
 
-module.exports = { inspectRepo, scanRepos };
+/**
+ * Recursively scans a repository directory for guidelines/documentation files (CLAUDE.md, AGENTS.md).
+ * Non-blocking, limits depth to prevent event loop blocking, skips build/vendor directories, and caps results.
+ * @param {string} repoPath
+ * @param {number} [maxDepth=3]
+ * @param {number} [maxFiles=6]
+ * @returns {Promise<Array<{ relativePath: string, absolutePath: string, engine: 'claude'|'agy', scope: string, excerpt: string }>>}
+ */
+async function findRepoDocsAsync(repoPath, maxDepth = 3, maxFiles = 6) {
+  if (!repoPath || typeof repoPath !== 'string') return [];
+  const results = [];
+
+  async function walk(currentDir, currentDepth) {
+    if (results.length >= maxFiles || currentDepth > maxDepth) return;
+    let entries;
+    try {
+      entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= maxFiles) break;
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isFile()) {
+        const lower = entry.name.toLowerCase();
+        if (lower === 'claude.md' || lower === 'agents.md') {
+          const rel = path.relative(repoPath, fullPath).replace(/\\/g, '/');
+          const engine = lower === 'claude.md' ? 'claude' : 'agy';
+          const dirName = path.dirname(rel).replace(/\\/g, '/');
+          const scope = dirName === '.' ? 'raíz' : dirName;
+
+          let excerpt = '';
+          try {
+            const content = await fs.promises.readFile(fullPath, 'utf8');
+            const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+            excerpt = lines.slice(0, 12).join('\n').slice(0, 400);
+          } catch { /* best effort */ }
+
+          results.push({
+            relativePath: rel,
+            absolutePath: fullPath,
+            engine,
+            scope,
+            excerpt,
+          });
+        }
+      } else if (entry.isDirectory()) {
+        if (entry.name.startsWith('.') && entry.name !== '.claude' && entry.name !== '.gemini') continue;
+        if (SKIP_DIRS.has(entry.name)) continue;
+        await walk(fullPath, currentDepth + 1);
+      }
+    }
+  }
+
+  await walk(repoPath, 0);
+  return results;
+}
+
+module.exports = { inspectRepo, scanRepos, findRepoDocsAsync };

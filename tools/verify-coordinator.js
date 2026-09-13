@@ -115,10 +115,69 @@ function checkSpawnSystemPromptArgs() {
   console.log('spawn() systemPrompt OK: agrega --append-system-prompt solo cuando se pide, default sin cambios');
 }
 
+// --- 4. buildCoordinatorPrompt with repoDocs and skills segregation ----------------------------
+
+function checkSkillsAndRepoDocsInCoordinatorPrompt() {
+  const conversation = { id: 'c000test', cap: 3 };
+  const repos = [
+    { name: 'my-project', accountGh: 'my-org', branch: 'main', path: 'C:/repos/my-project' },
+  ];
+
+  const fakeSkillsScan = [
+    {
+      engine: 'agy cli',
+      installed: true,
+      rows: [
+        ['ami-plan-feature', 'Planificacion de features', '1.0', 'a demanda', 10, 'path/SKILL.md', 'path'],
+        ['ami-audit-quality', 'Auditoria profunda de codigo', '1.0', 'a demanda', 10, 'path/SKILL.md', 'path'],
+      ],
+    },
+    {
+      engine: 'claude cli',
+      installed: true,
+      rows: [
+        ['claude-code-review', 'Revision de codigo', '1.0', 'a demanda', 10, 'path/SKILL.md', 'path'],
+      ],
+    },
+  ];
+
+  const fakeRepoDocs = [
+    {
+      relativePath: 'CLAUDE.md',
+      absolutePath: 'C:/repos/my-project/CLAUDE.md',
+      engine: 'claude',
+      scope: 'raíz',
+      excerpt: '# Directivas Globales\nUsa Clean Code y pruebas hermeticas.',
+    },
+    {
+      relativePath: 'packages/frontend/CLAUDE.md',
+      absolutePath: 'C:/repos/my-project/packages/frontend/CLAUDE.md',
+      engine: 'claude',
+      scope: 'packages/frontend',
+      excerpt: '# Directivas de Frontend\nUsa React y Tailwind.',
+    },
+  ];
+
+  const prompt = buildCoordinatorPrompt(conversation, repos, {
+    skills: fakeSkillsScan,
+    repoDocs: fakeRepoDocs,
+  });
+
+  assert.ok(prompt.includes('<repo_guidelines scope="raíz"'), 'debe incluir bloque de guidelines para raíz');
+  assert.ok(prompt.includes('<repo_guidelines scope="packages/frontend"'), 'debe incluir bloque de guidelines para submodulo');
+  assert.ok(prompt.includes('Para workers Antigravity (engine: "agy"):'), 'debe segregar skills de agy');
+  assert.ok(prompt.includes('ami-plan-feature'), 'debe listar ami-plan-feature bajo agy');
+  assert.ok(prompt.includes('Para workers Claude Code (engine: "claude"):'), 'debe segregar skills de claude');
+  assert.ok(prompt.includes('claude-code-review'), 'debe listar skill de claude');
+
+  console.log('buildCoordinatorPrompt with skills and repoDocs OK: inyecta docs anidados delimitados y skills segregadas');
+}
+
 (async () => {
   await checkWatchSpawnRequests();
   checkBuildCoordinatorPrompt();
   checkSpawnSystemPromptArgs();
-  console.log('coordinador OK: buzon de spawn-requests, prompt del coordinador, y systemPrompt aditivo en spawn()');
+  checkSkillsAndRepoDocsInCoordinatorPrompt();
+  console.log('coordinador OK: buzon de spawn-requests, prompt del coordinador, docs anidados y skills segregadas');
   process.exit(0);
 })();

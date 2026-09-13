@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const paths = require('../electron/paths.js');
 const { Registry } = require('../electron/events.js');
-const { updateAccountColor, readAccountsConfig, getAccountsConfigPath } = require('../electron/accounts.js');
+const { updateAccountColor, addAccountFolder, removeAccountFolder, readAccountsConfig, getAccountsConfigPath } = require('../electron/accounts.js');
 
 let publishedAgents = null;
 let publishedUsage = null;
@@ -76,7 +76,28 @@ assert.strictEqual(updated, true, 'updateAccountColor should return true for exi
 const freshConfig = readAccountsConfig();
 assert.strictEqual(freshConfig[0].color, 'var(--color-pink)', 'Config on disk should have updated color');
 
+// 4. Verify addAccountFolder and removeAccountFolder
+const added = addAccountFolder('TestUser', 'C:/test/path/repos', 3);
+assert.strictEqual(added, true, 'addAccountFolder should return true');
+const afterAdd = readAccountsConfig();
+assert.strictEqual(afterAdd[0].folders.length, 1, 'Folders array should contain 1 entry');
+assert.strictEqual(afterAdd[0].folders[0].path, 'C:/test/path/repos', 'Folder path should match');
+assert.strictEqual(afterAdd[0].folders[0].depth, 3, 'Folder depth should match');
+
+// Update depth of existing folder
+const updatedDepth = addAccountFolder('TestUser', 'C:/test/path/repos', 1);
+assert.strictEqual(updatedDepth, true, 'addAccountFolder should update existing folder');
+const afterUpdate = readAccountsConfig();
+assert.strictEqual(afterUpdate[0].folders.length, 1, 'Folders array should still have 1 entry');
+assert.strictEqual(afterUpdate[0].folders[0].depth, 1, 'Folder depth should be updated to 1');
+
+// Remove folder
+const removed = removeAccountFolder('TestUser', 'C:/test/path/repos');
+assert.strictEqual(removed, true, 'removeAccountFolder should return true');
+const afterRemove = readAccountsConfig();
+assert.strictEqual(afterRemove[0].folders.length, 0, 'Folders array should be empty after removal');
+
 // Clean up agent dir
 fs.rmSync(paths.agent('token-probe').dir, { recursive: true, force: true });
-console.log('tokens y cuentas OK: reactividad de status, calculo de tokens y actualizacion de color validados');
+console.log('tokens y cuentas OK: reactividad de status, calculo de tokens, carpetas y color validados');
 process.exit(0);

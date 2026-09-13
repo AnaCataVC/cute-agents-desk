@@ -197,10 +197,72 @@ function readSkillContent(filePath) {
   }
 }
 
+/**
+ * Formats discovered skills into two compact, motor-segregated lists (<30 tokens per skill).
+ * Avoids cross-engine hallucinations by separating Antigravity (agy) and Claude Code (claude) skills.
+ * @param {Array<{ engine: string, installed: boolean, rows: Array<[string, string, string, string, number, string|null, string]> }>} skillsScan
+ * @param {number} [maxPerEngine=20]
+ * @returns {string}
+ */
+function formatCompactCatalogByEngine(skillsScan, maxPerEngine = 20) {
+  if (!Array.isArray(skillsScan) || !skillsScan.length) return '';
+
+  /** @type {Map<string, string>} */
+  const agySkills = new Map();
+  /** @type {Map<string, string>} */
+  const claudeSkills = new Map();
+
+  for (const root of skillsScan) {
+    if (!root || !root.installed || !Array.isArray(root.rows)) continue;
+    const isAgy = (root.engine || '').toLowerCase().includes('agy');
+    const targetMap = isAgy ? agySkills : claudeSkills;
+
+    for (const [name, desc, , , , skillFile] of root.rows) {
+      if (!skillFile || !name || name.startsWith('(') || targetMap.has(name)) continue;
+      const cleanDesc = (desc || '(Sin descripción)')
+        .replace(/\r?\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const truncatedDesc = cleanDesc.length > 90 ? cleanDesc.slice(0, 87) + '...' : cleanDesc;
+      targetMap.set(name, truncatedDesc);
+    }
+  }
+
+  const lines = [];
+  if (agySkills.size > 0 || claudeSkills.size > 0) {
+    lines.push('Skills disponibles para delegar (especifica el engine adecuado en spawn-requests):');
+    if (agySkills.size > 0) {
+      lines.push('Para workers Antigravity (engine: "agy"):');
+      let count = 0;
+      for (const [name, desc] of agySkills.entries()) {
+        if (++count > maxPerEngine) {
+          lines.push(`  ... y ${agySkills.size - maxPerEngine} skills mas de agy`);
+          break;
+        }
+        lines.push(`  - ${name}: ${desc}`);
+      }
+    }
+    if (claudeSkills.size > 0) {
+      lines.push('Para workers Claude Code (engine: "claude"):');
+      let count = 0;
+      for (const [name, desc] of claudeSkills.entries()) {
+        if (++count > maxPerEngine) {
+          lines.push(`  ... y ${claudeSkills.size - maxPerEngine} skills mas de claude`);
+          break;
+        }
+        lines.push(`  - ${name}: ${desc}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
 module.exports = {
   defaultRoots,
   sanitizePath,
   scanSkills,
   readSkillContent,
+  formatCompactCatalogByEngine,
 };
 

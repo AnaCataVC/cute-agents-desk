@@ -118,6 +118,52 @@ function updateAccountColor(gh, color) {
   return false;
 }
 
+function addAccountFolder(gh, folderPath, depth = 2) {
+  if (!gh || !folderPath) return false;
+  const configPath = getAccountsConfigPath();
+  const accounts = readAccountsConfig();
+  const acc = accounts.find((a) => a.gh === gh);
+  if (!acc) return false;
+  if (!Array.isArray(acc.folders)) acc.folders = [];
+
+  const normalized = path.resolve(folderPath).replace(/\\/g, '/');
+  const existing = acc.folders.find((f) => path.resolve(f.path).replace(/\\/g, '/').toLowerCase() === normalized.toLowerCase());
+  if (existing) {
+    existing.path = normalized;
+    existing.depth = Number(depth) || 2;
+  } else {
+    acc.folders.push({ path: normalized, depth: Number(depth) || 2 });
+  }
+
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removeAccountFolder(gh, folderPath) {
+  if (!gh || !folderPath) return false;
+  const configPath = getAccountsConfigPath();
+  const accounts = readAccountsConfig();
+  const acc = accounts.find((a) => a.gh === gh);
+  if (!acc || !Array.isArray(acc.folders)) return false;
+
+  const normalized = path.resolve(folderPath).replace(/\\/g, '/').toLowerCase();
+  const beforeLen = acc.folders.length;
+  acc.folders = acc.folders.filter((f) => path.resolve(f.path).replace(/\\/g, '/').toLowerCase() !== normalized);
+  if (acc.folders.length !== beforeLen) {
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 /**
  * Find the account owning a cwd based on registered account folders.
  * @param {string} [cwd]
@@ -131,5 +177,14 @@ function accountIdForCwd(cwd, accounts = readAccountsConfig()) {
   return owner?.gh;
 }
 
-module.exports = { listGhAccounts, readAccountsConfig, buildAccounts, getAccountsConfigPath, updateAccountColor, accountIdForCwd };
+module.exports = {
+  listGhAccounts,
+  readAccountsConfig,
+  buildAccounts,
+  getAccountsConfigPath,
+  updateAccountColor,
+  addAccountFolder,
+  removeAccountFolder,
+  accountIdForCwd,
+};
 

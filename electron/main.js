@@ -20,7 +20,7 @@ if (process.argv.includes('--smoke')) {
   });
 }
 
-const { app, BrowserWindow, protocol, net, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, protocol, net, shell, ipcMain, dialog } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Registry } = require('./events.js');
@@ -100,6 +100,19 @@ function getRepoData() {
   return repoDataPromise;
 }
 
+async function refreshRepoData() {
+  const accountsConfig = readAccountsConfig();
+  const repos = await scanRepos(accountsConfig);
+  writeCachedRepos({ repos });
+  const fresh = { accounts: buildAccounts(), repos };
+  repoDataPromise = Promise.resolve(fresh);
+  const [win] = BrowserWindow.getAllWindows();
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('desk:patch', { repoData: fresh });
+  }
+  return fresh;
+}
+
 // `standard` is what makes it a real origin (so modules and fetch behave); `secure` puts it
 // on the same footing as https for the features that check.
 protocol.registerSchemesAsPrivileged([
@@ -135,11 +148,17 @@ function smoke(win) {
     app.exit(1);
   });
   win.webContents.on('did-finish-load', async () => {
-    const found = await win.webContents.executeJavaScript(
-      `({ tabs: document.querySelectorAll('[data-act="view"]').length,
-          agents: document.querySelectorAll('[data-act="openChat"]').length,
-          repos: document.querySelectorAll('[data-act="toggleNode"]').length })`,
-    );
+    const startTime = Date.now();
+    let found = { tabs: 0, agents: 0, repos: 0 };
+    while (Date.now() - startTime < 10000) {
+      found = await win.webContents.executeJavaScript(
+        `({ tabs: document.querySelectorAll('[data-act="view"]').length,
+            agents: document.querySelectorAll('[data-act="openChat"]').length,
+            repos: document.querySelectorAll('[data-act="toggleNode"]').length })`,
+      );
+      if (found.tabs === 6) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
     console.log(`smoke: ${JSON.stringify(found)} errors=${errors.length}`);
     if (errors.length) console.error(errors.join('\n'));
     // `agents` and `repos` are just logged, not asserted: zero of either is the correct render
@@ -213,8 +232,8 @@ function wireAgents(win) {
   const config = require('./config.js');
   const appConfig = config.readConfig();
 
-  registry = new Registry((agents, usage) => {
-    if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage });
+  registry = new Registry((agents, usage, threads, timeline) => {
+    if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage, threads, timeline });
   });
   const scheduler = new Scheduler({ globalCap: appConfig.exec?.maxParallel || 5 });
 
@@ -237,6 +256,14 @@ function wireAgents(win) {
         running.delete(id);
         onExtraExit?.(id);
         registry.exited(id, code);
+        if (code === 0) {
+          scheduler.onTaskCompleted(id);
+        } else {
+          const cascade = scheduler.onTaskFailed(id, `Exit code ${code}`);
+          for (const failedId of cascade) {
+            registry.note('scheduler', 'TaskCascadeFailed', { taskId: failedId, causedBy: id });
+          }
+        }
       },
     };
   }
@@ -276,6 +303,36 @@ function wireAgents(win) {
     return { ok: false };
   });
 
+  ipcMain.handle('desk:addAccountFolder', async (_ev, { accountId, folderPath, depth }) => {
+    const { addAccountFolder } = require('./accounts.js');
+    const ok = addAccountFolder(accountId, folderPath, depth);
+    if (ok) {
+      const fresh = await refreshRepoData();
+      return { ok: true, repoData: fresh };
+    }
+    return { ok: false, error: 'No se pudo añadir la carpeta' };
+  });
+
+  ipcMain.handle('desk:removeAccountFolder', async (_ev, { accountId, folderPath }) => {
+    const { removeAccountFolder } = require('./accounts.js');
+    const ok = removeAccountFolder(accountId, folderPath);
+    if (ok) {
+      const fresh = await refreshRepoData();
+      return { ok: true, repoData: fresh };
+    }
+    return { ok: false, error: 'No se pudo quitar la carpeta' };
+  });
+
+  ipcMain.handle('desk:pickDirectory', async () => {
+    const [win] = BrowserWindow.getAllWindows();
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Seleccionar carpeta de repositorios',
+      properties: ['openDirectory'],
+    });
+    if (res.canceled || !res.filePaths.length) return null;
+    return res.filePaths[0];
+  });
+
   const ALLOWED_ENGINES = new Set(['claude', 'agy', 'claude.exe', 'agy.exe']);
 
   /**
@@ -295,7 +352,7 @@ function wireAgents(win) {
    * @param {string} [o.effort]
    * @returns {Promise<string | { error: string }>}
    */
-  async function spawnWorker({ cwd, task, conversationId, replyTo, mode, bin, engine, model, effort }) {
+  async function spawnWorker({ cwd, task, conversationId, replyTo, mode, bin, engine, model, effort, id: customId }) {
     const rawBin = bin || engine || 'claude';
     const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
 
@@ -338,9 +395,12 @@ function wireAgents(win) {
       return { error: gate.reason };
     }
     cwd = cwd || toyRepo();
-    // The id is what names the agent's folder, its branch and its report, so it has to be
-    // readable in a directory listing — not a uuid.
-    const id = `a${Date.now().toString(36).slice(-5)}`;
+    const safeCustomId = (customId && typeof customId === 'string')
+      ? customId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
+      : null;
+    const id = (safeCustomId && !running.has(safeCustomId))
+      ? safeCustomId
+      : `a${Date.now().toString(36).slice(-5)}`;
     // Only a worker with somewhere to send it gets told about the outbox — a bare desk:spawn
     // call has no coordinator, so the file would just sit there unread.
     const workerSystemPrompt = replyTo ? [
@@ -404,10 +464,26 @@ function wireAgents(win) {
 
     const { repos } = await getRepoData();
 
+    // Async discovery of repo docs and skills scan
+    let repoDocs = [];
+    try {
+      const { findRepoDocsAsync } = require('./discovery.js');
+      const docPromises = repos.map((r) => findRepoDocsAsync(r.path));
+      const allDocs = await Promise.all(docPromises);
+      repoDocs = allDocs.flat();
+    } catch { /* best effort */ }
+
+    let skillsScan = [];
+    try {
+      skillsScan = scanSkills();
+    } catch { /* best effort */ }
+
     const agent = coordinator.spawnCoordinator({
       conversationId,
       conversation,
       repos,
+      skills: skillsScan,
+      repoDocs,
       spawn,
       bin: effectiveBin,
       model,
@@ -422,10 +498,30 @@ function wireAgents(win) {
     running.set(agent.id, agent);
     registry.register(agent, { conversationId, role: 'coordinator', model: agent.model, effort: agent.effort, mode: agent.mode });
 
-    const watcher = coordinator.watchSpawnRequests(conversationId, (req) => spawnWorker({
-      cwd: req.cwd, task: req.objective, conversationId, replyTo: agent.id, mode: req.mode,
-      bin: req.bin || req.engine, model: req.model, effort: req.effort,
-    }));
+    const watcher = coordinator.watchSpawnRequests(conversationId, (req) => {
+      const enqueueRes = scheduler.enqueueTask(req, (taskReq) => spawnWorker({
+        id: taskReq.id,
+        cwd: taskReq.cwd,
+        task: taskReq.objective,
+        conversationId,
+        replyTo: agent.id,
+        mode: taskReq.mode,
+        bin: taskReq.bin || taskReq.engine,
+        model: taskReq.model,
+        effort: taskReq.effort,
+      }));
+      if (!enqueueRes.ok) {
+        registry.notifyCoordinator(agent.id, 'scheduler', `pedido rechazado: ${enqueueRes.reason}`);
+        registry.note(conversationId, 'SpawnRefused', { reason: enqueueRes.reason, req });
+        return true;
+      }
+      if (enqueueRes.queued) {
+        registry.notifyCoordinator(agent.id, 'scheduler', `tarea "${req.id || 'en cola'}" esperando dependencias: ${(req.dependsOn || []).join(', ')}`);
+        registry.note(conversationId, 'TaskQueued', { taskId: req.id, dependsOn: req.dependsOn });
+        return true;
+      }
+      return true;
+    });
     spawnRequestWatchers.set(agent.id, watcher);
 
     return agent.id;
@@ -436,6 +532,40 @@ function wireAgents(win) {
     spawnRequestWatchers.get(id)?.close();
     spawnRequestWatchers.delete(id);
     return true;
+  });
+
+  ipcMain.handle('desk:threads', () => (registry ? registry.getThreads() : {}));
+  ipcMain.handle('desk:timeline', () => (registry ? registry.getTimelineData() : { window: 'últimos 30 min', ticks: [], lanes: [] }));
+  ipcMain.handle('desk:sendInput', async (_ev, { agentId, text } = {}) => {
+    if (!agentId || typeof text !== 'string' || !text.trim()) {
+      return { ok: false, error: 'Mensaje inválido' };
+    }
+    const targetAgent = running.get(agentId);
+    const regAgent = registry?.agents?.get(agentId);
+    if (!targetAgent || !regAgent) {
+      return { ok: false, error: 'El agente no está activo o ha finalizado' };
+    }
+    if (regAgent.state === 'tool') {
+      return { ok: false, error: 'El agente está ocupado ejecutando una herramienta. Espera a que termine su turno.' };
+    }
+
+    const sanitized = text
+      .replace(/\x1b\[[0-9;?]*[a-zA-Z]|\x1b[()][A-B0-2]|[\x00-\x09\x0b-\x1f\x7f-\x9f]/g, '')
+      .slice(0, 4000)
+      .trim();
+
+    let destHandle = targetAgent;
+    let messageToPty = `${sanitized}\r`;
+    if (regAgent.replyTo && running.has(regAgent.replyTo)) {
+      destHandle = running.get(regAgent.replyTo);
+      messageToPty = `[mensaje del usuario sobre trabajador ${agentId}] ${sanitized}\r`;
+      registry.recordMessage(regAgent.replyTo, 'user', 'tú', `[sobre ${agentId}]: ${sanitized}`);
+    }
+
+    destHandle.write(messageToPty);
+    registry.recordMessage(agentId, 'user', 'tú', sanitized);
+    registry.note(agentId, 'UserInputInjected', { length: sanitized.length });
+    return { ok: true };
   });
 
   // Manual reap only, per the plan: a worktree is never deleted on its own, so losing an
@@ -474,6 +604,12 @@ function wireAgents(win) {
     if (running.has(agentId)) return { error: 'el agente todavia esta vivo' };
     worktree.removeWorktree(agentId);
     return true;
+  });
+  ipcMain.handle('desk:reapCleanWorktrees', async () => {
+    const runningAgentIds = Array.from(running.keys());
+    const delivered = delivery.listDeliveries();
+    const deliveredIds = delivered.map((d) => d.agentId || d.id);
+    return await worktree.reapCleanWorktrees({ runningAgentIds, deliveredIds });
   });
 
   ipcMain.handle('desk:delivered', () => delivery.listDeliveries());
