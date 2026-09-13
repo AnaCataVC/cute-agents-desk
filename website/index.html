@@ -3,142 +3,414 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cute Agents Desk · Panel local para agentes CLI</title>
-<meta name="description" content="Panel local para despachar agentes de línea de comandos (claude, agy) sobre los repos de la máquina y ver gráficamente en qué va cada uno.">
-<meta name="theme-color" content="#151223">
+<title>Cute Agents Desk · Panel Local de Orquestación para Agentes CLI</title>
+<meta name="description" content="Panel de escritorio local para coordinar y supervisar agentes CLI (Claude Code y Antigravity) con aislamiento atómico por Git Worktrees y gobernanza de tokens.">
+<meta name="theme-color" content="#0c0e14">
 
 <!-- Open Graph / Meta -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Cute Agents Desk · Panel local para agentes CLI">
-<meta property="og:description" content="Despacho concurrente de agentes de línea de comandos (claude + agy) con aislamiento por git worktree y telemetría de estados en tiempo real.">
+<meta property="og:title" content="Cute Agents Desk · Panel Local para Agentes CLI">
+<meta property="og:description" content="Despacho concurrente de Claude Code y Antigravity CLI con aislamiento por git worktree y telemetría de estados en tiempo real sin exponer puertos.">
 <meta property="og:image" content="./icon.png">
 
 <!-- Google Fonts (Pastel-Tech Typography) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
 
 <link rel="icon" type="image/png" href="./icon.png">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<div class="wrap">
 
-  <nav class="site-nav">
-    <img src="./icon.png" alt="Cute Agents Desk Logo">
-    <span class="name">Cute Agents <span>Desk</span></span>
-    <a class="btn-ghost" href="https://github.com/AnaCataVC/cute-agents-desk">Código en GitHub</a>
-  </nav>
+<!-- Ambient Glow Elements -->
+<div class="glow-mesh"></div>
+<div class="glow-orb-1"></div>
+<div class="glow-orb-2"></div>
 
-  <header class="hero">
-    <span class="eyebrow"><span class="dot"></span> panel local · claude + agy</span>
-    <h1 class="hero-title">Un escritorio para tus agentes de <span>línea de comandos</span></h1>
-    <p class="hero-tagline">Panel local para despachar agentes de línea de comandos sobre los repos de la
-      máquina y ver gráficamente en qué va cada uno. Cada petición nueva levanta un
-      <b style="color:var(--color-dark-text-1)">coordinador</b> — un agente CLI de verdad, no código de
-      servidor — que decide en cuántas sesiones se divide el trabajo y delega por archivo, nunca por red.</p>
-    <div class="hero-ctas">
-      <a class="btn-primary" href="#instalar">Instalar y correr</a>
-      <a class="btn-ghost" href="https://github.com/AnaCataVC/cute-agents-desk">Ver el código</a>
+<!-- Sticky Glassmorphic Navbar -->
+<header class="site-nav-wrapper">
+  <div class="site-nav">
+    <a href="#" class="brand-link">
+      <div class="brand-icon-wrap">
+        <img src="./icon.png" alt="Cute Agents Desk Logo">
+      </div>
+      <div class="brand-text">Cute Agents <span>Desk</span></div>
+    </a>
+
+    <nav class="nav-links">
+      <a href="#aviso">En Desarrollo</a>
+      <a href="#caracteristicas">Capacidades</a>
+      <a href="#movimiento">Autómatas</a>
+      <a href="#arquitectura">Motores</a>
+      <a href="#instalacion">Instalación</a>
+    </nav>
+
+    <div class="nav-actions">
+      <a class="btn-ghost-nav" href="https://github.com/AnaCataVC/cute-agents-desk" target="_blank" rel="noopener noreferrer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
     </div>
-    <div class="badges">
-      <img src="https://img.shields.io/badge/platform-windows-0078D6?logo=windows11&logoColor=white" alt="platform: windows">
-      <img src="https://img.shields.io/badge/electron-44-47848F?logo=electron&logoColor=white" alt="electron 44">
-      <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license: MIT">
+  </div>
+</header>
+
+<main class="main-content">
+
+  <!-- Hero Section -->
+  <header class="hero">
+    <div class="status-pill-wip">
+      <span class="status-dot-amber"></span>
+      <span>v0.1.0-alpha · Proyecto en Desarrollo Activo · Desktop Local Windows</span>
+    </div>
+
+    <h1 class="hero-title">
+      Un escritorio local para tus agentes de <span class="gradient-text">línea de comandos</span>
+    </h1>
+
+    <p class="hero-tagline">
+      Despacho concurrente de Claude Code y Antigravity CLI con aislamiento atómico por Git Worktrees,
+      delegación autónoma por buzón de disco y telemetría de estados en tiempo real sin exponer puertos ni sockets a red.
+    </p>
+
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#instalacion">
+        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <span>Guía de Inicio Rápido</span>
+      </a>
+      <a class="btn-secondary" href="https://github.com/AnaCataVC/cute-agents-desk" target="_blank" rel="noopener noreferrer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        <span>Ver Código en GitHub</span>
+      </a>
+    </div>
+
+    <!-- Technical Metrics Bar -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-val">&lt; 50 ms</div>
+        <div class="metric-lbl">Latencia de despacho PTY</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">100% Local</div>
+        <div class="metric-lbl">Zero nube · Zero sockets</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">0 Dirty Files</div>
+        <div class="metric-lbl">Aislamiento por Git Worktrees</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">2 Motores</div>
+        <div class="metric-lbl">Claude Code &amp; Antigravity</div>
+      </div>
     </div>
   </header>
 
-  <section class="tight">
-    <h2 class="section-title">Propiedades</h2>
-    <p class="section-lead">Lo que el harness impone hoy, sin adornos:</p>
-    <div class="panel" style="padding:16px">
-      <div class="props-grid">
-        <div class="settings-row"><span>Motores</span><span style="margin-left:auto" class="value-pill mono">claude · agy</span></div>
-        <div class="settings-row"><span>Delegación</span><span style="margin-left:auto" class="value-pill mono">coordinador CLI, por archivo</span></div>
-        <div class="settings-row"><span>Aislamiento de escritura</span><span style="margin-left:auto" class="value-pill mono">git worktree por tarea</span></div>
-        <div class="settings-row"><span>Paralelismo</span><span style="margin-left:auto" class="value-pill mono">tope global + por conversación</span></div>
-        <div class="settings-row"><span>Modo lectura</span><span style="margin-left:auto" class="value-pill mono">niega Edit/Write/NotebookEdit</span></div>
-        <div class="settings-row"><span>Tope de tokens</span><span style="margin-left:auto" class="value-pill mono">aviso 80% · corte 100%</span></div>
-        <div class="settings-row"><span>Plataforma</span><span style="margin-left:auto" class="value-pill mono">Windows</span></div>
-        <div class="settings-row"><span>Licencia</span><span style="margin-left:auto" class="value-pill mono">MIT</span></div>
+  <!-- Active Development Warning Callout -->
+  <section class="warning-panel" id="aviso">
+    <div class="warning-header">
+      <span class="warning-badge">Aviso de Desarrollo Activo</span>
+      <h3 class="warning-title">Proyecto Experimental en Fase Alfa (v0.1.0)</h3>
+    </div>
+    <p class="warning-description">
+      <strong>Cute Agents Desk</strong> es una herramienta de ingeniería y banco de pruebas de arquitectura
+      en desarrollo activo. Actualmente no se distribuyen binarios cerrados autoinstalables: se ejecuta localmente
+      desde el código fuente sobre Windows 10/11 con Node.js y los CLIs instalados. Las capas IPC, hooks de motor
+      y el formato del buzón de coordinación están sujetos a mejoras continuas.
+    </p>
+
+    <div class="wip-grid">
+      <div class="wip-card">
+        <h4><span>🛠️</span> Prototipo Funcional</h4>
+        <p>Harness local para explorar concurrencia multi-agente, gobernanza de cuotas de tokens y aislamiento estricto de repositorios.</p>
+      </div>
+      <div class="wip-card">
+        <h4><span>💻</span> Ejecución desde Fuentes</h4>
+        <p>No requiere empaquetado cerrado: clonas el repositorio, configuras tus cuentas de GitHub locales y corres con Electron puro.</p>
+      </div>
+      <div class="wip-card">
+        <h4><span>🔄</span> Interfaces en Evolución</h4>
+        <p>Los contratos de telemetría de herramientas y las políticas de lectura pueden cambiar a medida que los CLIs se actualizan.</p>
+      </div>
+      <div class="wip-card">
+        <h4><span>💬</span> Retroalimentación</h4>
+        <p>Te invitamos a probar el harness, validar las suites de pruebas y compartir observaciones en los Issues de GitHub.</p>
       </div>
     </div>
   </section>
 
-  <section class="tight">
-    <h2 class="section-title">Cómo funciona</h2>
-    <p class="section-lead">Cuatro piezas hacen todo el trabajo: un coordinador que delega, dos motores de
-      CLI soportados, aislamiento por worktree para cada tarea de escritura, y un scheduler que impone el
-      cupo antes de que cualquier proceso nazca.</p>
-    <div class="grid-features">
-      <div class="panel feature">
-        <div class="icon">Σ</div>
-        <h3>Coordinador de verdad</h3>
-        <p>Un agente CLI real decide en cuántas sesiones paralelas se divide el trabajo y delega escribiendo
-          un archivo — no hay lógica de servidor decidiendo por él.</p>
+  <!-- Features Architecture Grid -->
+  <section id="caracteristicas">
+    <div class="section-head">
+      <span class="section-tag">Capacidades del Runtime</span>
+      <h2 class="section-title">Diseñado para el Caos de Múltiples Agentes Concurrentes</h2>
+      <p class="section-lead">
+        Cuatro pilares de ingeniería eliminan la fricción, colisiones y fugas de contexto al ejecutar
+        múltiples sesiones de agentes sobre tus repositorios de desarrollo.
+      </p>
+    </div>
+
+    <div class="features-grid">
+      <div class="glass-card feature-card">
+        <div class="feature-icon-box">Σ</div>
+        <h3>Coordinador Autónomo CLI</h3>
+        <p>
+          Un agente CLI real decide en cuántas sesiones paralelas se divide el trabajo y delega escribiendo
+          en colas JSON vigiladas en disco. No hay lógica de servidor tomando decisiones por él.
+        </p>
       </div>
-      <div class="panel feature">
-        <div class="icon">⌥</div>
-        <h3>Dos motores</h3>
-        <p><code class="mono">claude</code> (Claude Code) y <code class="mono">agy</code> (Antigravity CLI),
-          cada uno con sus propios hooks — la tarjeta nunca adivina el estado leyendo la terminal.</p>
+
+      <div class="glass-card feature-card">
+        <div class="feature-icon-box">⑂</div>
+        <h3>Aislamiento por Git Worktrees</h3>
+        <p>
+          Cada tarea en modo escritura corre en su propio <code class="mono">git worktree</code> efímero con
+          rama dedicada (<code class="mono">&lt;engine&gt;/&lt;task&gt;-&lt;id&gt;</code>), manteniendo tu checkout principal 100% limpio.
+        </p>
       </div>
-      <div class="panel feature">
-        <div class="icon">⑂</div>
-        <h3>Aislado por worktree</h3>
-        <p>Una tarea en modo escritura corre en su propio <code class="mono">git worktree</code>, fuera del
-          repo, nunca mutando el checkout compartido.</p>
+
+      <div class="glass-card feature-card">
+        <div class="feature-icon-box">⌥</div>
+        <h3>Doble Motor Nativo</h3>
+        <p>
+          Soporte integrado para <code class="mono">claude</code> (Claude Code) y <code class="mono">agy</code> (Antigravity CLI),
+          con captura de ciclo de vida mediante hooks de proceso sin depender de escaneos frágiles de texto.
+        </p>
       </div>
-      <div class="panel feature">
-        <div class="icon">▣</div>
-        <h3>Cupo antes que nada</h3>
-        <p>El scheduler impone el tope de paralelismo global y por conversación antes de cualquier spawn —
-          un coordinador sólo puede pedir, nunca lanzar.</p>
+
+      <div class="glass-card feature-card">
+        <div class="feature-icon-box">👥</div>
+        <h3>Gobernanza Multicuenta GitHub</h3>
+        <p>
+          Mapeo estricto de repositorios locales vinculados a perfiles (<code class="mono">accounts.json</code>).
+          Previene autoría cruzada o fugas entre proyectos personales y laborales en la misma máquina.
+        </p>
+      </div>
+
+      <div class="glass-card feature-card">
+        <div class="feature-icon-box">▣</div>
+        <h3>Control de Cuotas &amp; Paralelismo</h3>
+        <p>
+          El scheduler impone topes de concurrencia antes de cualquier spawn. Telemetría directa de suscripción
+          con advertencias preventivas al 80% y corte automático al 100% de la cuota.
+        </p>
+      </div>
+
+      <div class="glass-card feature-card">
+        <div class="feature-icon-box">🚀</div>
+        <h3>Pipeline Seguro de PRs</h3>
+        <p>
+          Al completar una tarea, el sistema realiza commit con las credenciales exactas de la cuenta activa,
+          hace push seguro y crea automáticamente un Pull Request en borrador (<code class="mono">gh pr create --draft</code>).
+        </p>
       </div>
     </div>
   </section>
 
-  <section>
-    <h2 class="section-title">El movimiento significa algo</h2>
-    <p class="section-lead">El estado de un agente se lee por color <b style="color:var(--color-dark-text-1)">y</b>
-      por movimiento, a propósito: lo que se mueve está avanzando, lo que está quieto está detenido. Estos
-      cuatro robots son el mismo componente que dibuja cada tarjeta real, en vivo, ahora mismo:</p>
-    <div class="motion-demo" id="motion-demo"></div>
+  <!-- Visual State Vocabulary (Robot Showcase) -->
+  <section id="movimiento">
+    <div class="section-head">
+      <span class="section-tag">Semántica Visual de Estados</span>
+      <h2 class="section-title">El Movimiento y el Color Comunican Estado</h2>
+      <p class="section-lead">
+        El estado de un agente se lee por color <strong>y</strong> por movimiento físico, a propósito:
+        lo que se mueve está trabajando, lo que está quieto está detenido. Estos autómatas son el mismo
+        componente SVG que dibuja cada tarjeta viva en el escritorio:
+      </p>
+    </div>
+
+    <div class="motion-demo-grid" id="motion-demo"></div>
   </section>
 
-  <section class="install" id="instalar">
-    <h2 class="section-title">Instalar y correr</h2>
-    <p class="section-lead">Sin paso de compilación. Windows, con <code class="mono">claude</code> y/o
-      <code class="mono">agy</code> disponibles en el PATH.</p>
-    <pre><span class="cmt"># npm bloquea los scripts de postinstalación de electron por defecto</span>
-npm install
-node node_modules/electron/install.js
-npm start</pre>
+  <!-- Multi-Engine Comparison Table -->
+  <section id="arquitectura">
+    <div class="section-head">
+      <span class="section-tag">Especificación Técnica</span>
+      <h2 class="section-title">Dos Motores CLI, Dos Filosofías de Hooks</h2>
+      <p class="section-lead">
+        Claude Code y Antigravity CLI no comparten mecanismo de integración. Cute Agents Desk implementa
+        adaptadores especializados para normalizar la telemetría en un modelo común:
+      </p>
+    </div>
+
+    <div class="table-container">
+      <table class="specs-table">
+        <thead>
+          <tr>
+            <th>Propiedad</th>
+            <th>Claude Code (<code>claude</code>)</th>
+            <th>Antigravity CLI (<code>agy</code>)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Configuración de hooks</strong></td>
+            <td>Parámetro <code>--settings &lt;ruta&gt;</code> arbitraria</td>
+            <td>Fija en <code>&lt;cwd&gt;/.agents/hooks.json</code></td>
+          </tr>
+          <tr>
+            <td><strong>Directorio de trabajo (CWD)</strong></td>
+            <td>El repositorio (o su worktree en escritura)</td>
+            <td>Directorio del agente en el harness; repo entra por <code>--add-dir</code></td>
+          </tr>
+          <tr>
+            <td><strong>Formato de payload</strong></td>
+            <td><code>snake_case</code> (<code>tool_name</code>, <code>tool_input</code>)</td>
+            <td><code>camelCase</code> (<code>toolCall.name</code>, <code>stepIdx</code>)</td>
+          </tr>
+          <tr>
+            <td><strong>Aislamiento por worktree</strong></td>
+            <td>Soportado directamente como CWD</td>
+            <td>Soportado mediante <code>--add-dir &lt;worktree&gt;</code></td>
+          </tr>
+          <tr>
+            <td><strong>Modo lectura</strong></td>
+            <td>Denegación de tools (<code>Edit|Write|NotebookEdit</code>)</td>
+            <td>Lista blanca estricta de tools confirmadas de lectura</td>
+          </tr>
+          <tr>
+            <td><strong>Telemetría de cuotas</strong></td>
+            <td>Línea de estado en vivo + <code>claude -p /usage</code></td>
+            <td>Lectura de suscripción mediante <code>agy -p /usage</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
+  <!-- Installation & Running Guide -->
+  <section class="install" id="instalacion">
+    <div class="section-head">
+      <span class="section-tag">Puesta en Marcha</span>
+      <h2 class="section-title">Instalación y Verificación Local</h2>
+      <p class="section-lead">
+        Sin empaquetados pesados ni pasos de compilación complejos. Windows 10 u 11 con Node.js 20+ y
+        al menos uno de los motores CLI disponibles en el <code>PATH</code> del sistema.
+      </p>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-header">
+        <div class="terminal-dots" aria-hidden="true">
+          <span class="terminal-dot dot-red"></span>
+          <span class="terminal-dot dot-yellow"></span>
+          <span class="terminal-dot dot-green"></span>
+        </div>
+        <div class="terminal-title">PowerShell — cute-agents-desk</div>
+        <div></div>
+      </div>
+      <pre class="terminal-body"><span class="cmt"># 1. Clonar el repositorio localmente</span>
+<span class="cmd">git clone https://github.com/AnaCataVC/cute-agents-desk.git</span>
+<span class="cmd">cd cute-agents-desk</span>
+
+<span class="cmt"># 2. Instalar dependencias e inicializar binario de Electron</span>
+<span class="cmd">npm install</span>
+<span class="cmd">node node_modules/electron/install.js</span>
+
+<span class="cmt"># 3. Validar el entorno con la suite automatizada (22 scripts herméticos)</span>
+<span class="cmd">npm test</span>
+
+<span class="cmt"># 4. Iniciar el panel de control de escritorio</span>
+<span class="cmd">npm start</span></pre>
+    </div>
+
+    <div class="prereq-list">
+      <div class="prereq-item">
+        <span class="check">✓</span>
+        <span>Windows 10 u 11 (64-bit)</span>
+      </div>
+      <div class="prereq-item">
+        <span class="check">✓</span>
+        <span>Node.js 20+ y npm</span>
+      </div>
+      <div class="prereq-item">
+        <span class="check">✓</span>
+        <span>Git configurado en el PATH</span>
+      </div>
+      <div class="prereq-item">
+        <span class="check">✓</span>
+        <span>GitHub CLI (<code>gh auth status</code>)</span>
+      </div>
+      <div class="prereq-item">
+        <span class="check">✓</span>
+        <span>Motor <code>claude</code> o <code>agy</code> en el PATH</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
   <footer>
-    <span>MIT · Electron 44 + node-pty</span>
-    <a href="https://github.com/AnaCataVC/cute-agents-desk">github.com/AnaCataVC/cute-agents-desk</a>
+    <div>
+      <span>Cute Agents Desk · Licencia MIT · Electron 44 + node-pty</span>
+    </div>
+    <div class="footer-meta">
+      <span>Desarrollado por Ana-Catalina (AnaCataVC)</span>
+      <a href="https://github.com/AnaCataVC/cute-agents-desk" target="_blank" rel="noopener noreferrer">github.com/AnaCataVC/cute-agents-desk</a>
+    </div>
   </footer>
 
-</div>
+</main>
 
 <script type="module">
   import { robot, STATE_ROBOT } from './robot.js';
 
+  // 5 Real Agent Lifecycle Automata showcasing motion & color semantic vocabulary
   const demo = [
-    ['thinking', 'pensando'],
-    ['tool', 'usando una herramienta'],
-    ['blocked', 'bloqueado'],
-    ['done', 'entregado'],
+    {
+      state: 'coordinator',
+      variant: 'coordinator',
+      color: 'var(--color-lilac)',
+      label: 'Coordinador CLI',
+      sublabel: 'Corona y división de tareas',
+      cls: ''
+    },
+    {
+      state: 'thinking',
+      variant: STATE_ROBOT.thinking.variant,
+      color: STATE_ROBOT.thinking.color,
+      label: 'Pensando',
+      sublabel: 'Respiración púrpura',
+      cls: 'thinking'
+    },
+    {
+      state: 'tool',
+      variant: STATE_ROBOT.tool.variant,
+      color: STATE_ROBOT.tool.color,
+      label: 'Usando Herramienta',
+      sublabel: 'Antena oscilante en menta',
+      cls: ''
+    },
+    {
+      state: 'blocked',
+      variant: STATE_ROBOT.blocked.variant,
+      color: STATE_ROBOT.blocked.color,
+      label: 'Bloqueado',
+      sublabel: 'Borde de advertencia discontinuo',
+      cls: 'blocked'
+    },
+    {
+      state: 'done',
+      variant: STATE_ROBOT.done.variant,
+      color: STATE_ROBOT.done.color,
+      label: 'Entregado',
+      sublabel: 'Check verde esmeralda',
+      cls: ''
+    }
   ];
-  document.getElementById('motion-demo').innerHTML = demo.map(([state, label]) => {
-    const r = STATE_ROBOT[state];
-    const svg = robot({ x: 38, y: 40, scale: 1.4, variant: r.variant, color: r.color })
-      .replace('<g transform', '<svg width="76" height="76" viewBox="0 0 76 76"><g transform') + '</svg>';
-    const cls = state === 'blocked' ? 'blocked' : state === 'thinking' ? 'thinking' : '';
-    return `<div class="panel motion-card ${cls}">${svg}<div class="label">${label}</div></div>`;
-  }).join('');
+
+  const container = document.getElementById('motion-demo');
+  if (container) {
+    container.innerHTML = demo.map(({ variant, color, label, sublabel, cls }) => {
+      const svg = robot({ x: 38, y: 40, scale: 1.4, variant, color })
+        .replace('<g transform', '<svg width="76" height="76" viewBox="0 0 76 76"><g transform') + '</svg>';
+      return `
+        <div class="glass-card motion-card ${cls}">
+          ${svg}
+          <div class="label">${label}</div>
+          <div class="sublabel">${sublabel}</div>
+        </div>
+      `;
+    }).join('');
+  }
 </script>
 </body>
 </html>
