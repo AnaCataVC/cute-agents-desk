@@ -27,7 +27,7 @@
       "electron/**",
       "ui/**",
       "index.html",
-      "assets/icon.ico"
+      "assets/**"
     ],
     "win": {
       "icon": "assets/icon.ico",

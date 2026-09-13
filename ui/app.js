@@ -748,13 +748,34 @@ function render() {
   keepFocus(() => paint());
 }
 
+function showToast(message, type = 'success') {
+  if (state.toastTimer) clearTimeout(state.toastTimer);
+  state.toast = { message, type, id: Date.now() };
+  render();
+  state.toastTimer = setTimeout(() => {
+    state.toast = null;
+    state.toastTimer = null;
+    render();
+  }, 3500);
+}
+
+function toastContainer() {
+  if (!state.toast) return '<div class="toast-container"></div>';
+  const icon = state.toast.type === 'error' ? '✕' : '✓';
+  return `
+  <div class="toast-container">
+    <div class="toast-msg" data-type="${esc(state.toast.type || 'success')}">
+      <span style="font-weight:700">${icon}</span>
+      <span>${esc(state.toast.message)}</span>
+    </div>
+  </div>`;
+}
+
 function renderLoading() {
   return `
   <div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:#151223;color:#EDE9FE;font-family:'Outfit',system-ui,sans-serif">
     <div style="display:flex;align-items:center;gap:12px">
-      <div style="width:28px;height:28px;border-radius:8px;background:#A855F7;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(168,85,247,0.4)">
-        <span style="font-size:16px;color:#fff">✦</span>
-      </div>
+      <img src="./assets/icon.png" alt="Cute Agents Desk" width="36" height="36" style="border-radius:10px;box-shadow:0 0 24px rgba(168,85,247,0.45);object-fit:cover">
       <div style="font-size:19px;font-weight:600;letter-spacing:-0.01em">
         Cute Agents <span style="color:#C4B5FD">Desk</span>
       </div>

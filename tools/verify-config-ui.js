@@ -27,19 +27,31 @@ assert.ok(dialogsJs.includes('state.editConfig'), 'dialogs.js must check state.e
 assert.ok(dialogsJs.includes('data-act="submitEditConfig"'), 'dialogs.js must support submitEditConfig');
 assert.ok(dialogsJs.includes('data-act="browseEditConfigPath"'), 'dialogs.js must support browseEditConfigPath');
 
-// 3. Inspect app.js content to ensure actions and toast are wired
+// 3. Inspect app.js content to ensure actions and toast are properly defined and wired
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'ui', 'app.js'), 'utf8');
 assert.ok(appJs.includes('editConfigValue:'), 'app.js must handle editConfigValue');
 assert.ok(appJs.includes('submitEditConfig:'), 'app.js must handle submitEditConfig');
 assert.ok(appJs.includes('closeEditConfig:'), 'app.js must handle closeEditConfig');
-assert.ok(appJs.includes('showToast'), 'app.js must include showToast');
-assert.ok(appJs.includes('toastContainer()'), 'app.js must render toastContainer');
+assert.ok(appJs.includes('function showToast('), 'app.js must define function showToast');
+assert.ok(appJs.includes('function toastContainer()'), 'app.js must define function toastContainer');
+assert.ok(appJs.includes('${toastContainer()}'), 'app.js must render toastContainer');
+assert.ok(appJs.includes('assets/icon.png'), 'app.js loading screen must use official app icon');
 
-// 4. Inspect app.css for toast and value-pill interactive styling
+// 4. Inspect index.html and package.json for asset and icon integrity
+const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+assert.ok(indexHtml.includes('assets/icon.png'), 'index.html loading markup must use official app icon');
+
+const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+assert.ok(
+  pkgJson.build?.files?.includes('assets/**'),
+  'package.json must bundle assets/** to include app icons in distributions'
+);
+
+// 5. Inspect app.css for toast and value-pill interactive styling
 const appCss = fs.readFileSync(path.join(__dirname, '..', 'ui', 'app.css'), 'utf8');
 assert.ok(appCss.includes('.toast-container'), 'app.css must define .toast-container');
 assert.ok(appCss.includes('.toast-msg'), 'app.css must define .toast-msg');
 assert.ok(appCss.includes('.value-pill[data-act="editConfigValue"]'), 'app.css must style editable value-pill');
 
-console.log('verify-config-ui OK: controles de edicion, dialog modal, CSS y feedback toast validados hermeticamente');
+console.log('verify-config-ui OK: controles de edicion, dialog modal, CSS, icono de carga y feedback toast validados hermeticamente');
 process.exit(0);
