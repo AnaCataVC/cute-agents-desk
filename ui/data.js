@@ -159,6 +159,9 @@ function fromLive(a) {
     model: a.model,
     effort: a.effort,
     mode: a.mode || 'write',
+    conversationId: a.conversationId,
+    role: a.role,
+    replyTo: a.replyTo,
   };
 }
 
@@ -171,13 +174,142 @@ export function setLiveDelivered(list) { liveDelivered = Array.isArray(list) ? l
 /** @type {() => object[]} tasks with a merged/drafted PR -- delivered tasks */
 export function getDelivered() { return liveDelivered; }
 
+/**
+ * Synthesizes cohesive workflow groups for the radial graph in boss-graph.js from
+ * live conversations, agents, and accounts.
+ * @param {object[]} [agents]
+ * @param {object[]} [conversations]
+ * @param {object[]} [accounts]
+ * @returns {object[]}
+ */
+export function synthesizeFlows(agents = [], conversations = [], accounts = []) {
+  const flows = [];
+  const handledAgentIds = new Set();
+
+  for (const conv of conversations) {
+    const roster = [];
+    let coordinator = null;
+
+    for (const a of agents) {
+      const belongs = a.conversationId === conv.id || a.replyTo === conv.id;
+      if (belongs) {
+        handledAgentIds.add(a.id);
+        if (a.role === 'coordinator') {
+          coordinator = a;
+        } else {
+          roster.push({
+            id: a.id,
+            state: a.state || 'idle',
+            repo: a.repo || '—',
+            branch: a.branch || '—',
+            tokens: a.tokens || 0,
+            ctxPct: a.tokenCap > 0 ? Math.round(((a.tokens || 0) / a.tokenCap) * 100) : 0,
+            costUsd: a.costUsd || 0,
+            role: a.role || 'worker',
+            task: a.task,
+            tool: a.tool,
+          });
+        }
+      }
+    }
+
+    const reposList = [...new Set(roster.map((r) => r.repo).filter((r) => r && r !== '—'))];
+    const totalCost = roster.reduce((sum, r) => sum + (r.costUsd || 0), (coordinator?.costUsd || 0));
+
+    let status = 'en espera';
+    if (conv.status === 'archived' || conv.status === 'archivado') {
+      status = 'archivado';
+    } else if (roster.some((r) => r.state === 'blocked') || coordinator?.state === 'blocked') {
+      status = 'bloqueado';
+    } else if (roster.some((r) => LIVE.includes(r.state)) || (coordinator && LIVE.includes(coordinator.state))) {
+      status = 'activo';
+    } else if (roster.length > 0 && roster.every((r) => r.state === 'done')) {
+      status = 'entregado';
+    }
+
+    const engines = new Set();
+    if (coordinator?.engine) engines.add(coordinator.engine);
+    for (const r of roster) {
+      const fullAgent = agents.find((a) => a.id === r.id);
+      if (fullAgent?.engine) engines.add(fullAgent.engine);
+    }
+    const engineLabel = engines.size === 0 ? 'claude cli' : (engines.size === 1 ? [...engines][0] : 'ambos');
+
+    const accountId = coordinator?.accountId || roster.find((r) => {
+      const fullAgent = agents.find((a) => a.id === r.id);
+      return fullAgent?.accountId;
+    })?.accountId || (accounts[0]?.id || '—');
+
+    flows.push({
+      id: conv.id,
+      name: conv.title || `Conversación ${conv.id}`,
+      split: reposList.length > 1 ? 'por repo' : 'por tema',
+      engine: engineLabel,
+      accountId,
+      repos: reposList.length ? reposList.join(', ') : (conv.topic || '—'),
+      roster,
+      defined: conv.cap || 3,
+      turns: `${roster.length + (coordinator ? 1 : 0)} turnos`,
+      cost: Number((totalCost || 0).toFixed(2)),
+      rate: roster.reduce((sum, r) => sum + (r.state === 'thinking' || r.state === 'tool' ? 120 : 0), 0),
+      hooks: (roster.length + (coordinator ? 1 : 0)) * 3,
+      loops: [],
+      links: [],
+      status,
+    });
+  }
+
+  // Handle standalone agents not tied to any declared conversation
+  const orphanAgents = agents.filter((a) => !handledAgentIds.has(a.id));
+  if (orphanAgents.length > 0) {
+    const orphanRoster = orphanAgents.filter((a) => a.role !== 'coordinator').map((a) => ({
+      id: a.id,
+      state: a.state || 'idle',
+      repo: a.repo || '—',
+      branch: a.branch || '—',
+      tokens: a.tokens || 0,
+      ctxPct: a.tokenCap > 0 ? Math.round(((a.tokens || 0) / a.tokenCap) * 100) : 0,
+      costUsd: a.costUsd || 0,
+      role: a.role || 'worker',
+      task: a.task,
+      tool: a.tool,
+    }));
+    const reposList = [...new Set(orphanRoster.map((r) => r.repo).filter((r) => r && r !== '—'))];
+    const totalCost = orphanAgents.reduce((sum, a) => sum + (a.costUsd || 0), 0);
+    const hasBlocked = orphanAgents.some((a) => a.state === 'blocked');
+    const hasLive = orphanAgents.some((a) => LIVE.includes(a.state));
+
+    flows.push({
+      id: 'direct-dispatch',
+      name: 'Sesiones directas',
+      split: reposList.length > 1 ? 'por repo' : 'por tema',
+      engine: 'claude / agy',
+      accountId: orphanAgents[0]?.accountId || (accounts[0]?.id || '—'),
+      repos: reposList.length ? reposList.join(', ') : 'despacho directo',
+      roster: orphanRoster,
+      defined: orphanAgents.length,
+      turns: `${orphanAgents.length} turnos`,
+      cost: Number((totalCost || 0).toFixed(2)),
+      rate: orphanRoster.reduce((sum, r) => sum + (r.state === 'thinking' || r.state === 'tool' ? 120 : 0), 0),
+      hooks: orphanAgents.length * 3,
+      loops: [],
+      links: [],
+      status: hasBlocked ? 'bloqueado' : (hasLive ? 'activo' : 'en espera'),
+    });
+  }
+
+  return flows;
+}
 
 /** @type {object[]} */
 let liveFlows = [];
 /** @param {object[]} flows */
 export function setLiveFlows(flows) { liveFlows = Array.isArray(flows) ? flows : []; }
 /** Coordinators, each with the full roster it opened. */
-export function getFlows() { return liveFlows; }
+export function getFlows() {
+  if (liveFlows.length > 0) return liveFlows;
+  return synthesizeFlows(getAgents(), getConversations(), getAccounts());
+}
 
 /** @type {Record<string, any[]>} */
 let liveThreads = {};
@@ -503,12 +635,29 @@ let liveScanCandidates = [];
 export function setLiveScanCandidates(candidates) { liveScanCandidates = Array.isArray(candidates) ? candidates : []; }
 export function getScanCandidates() { return liveScanCandidates; }
 
+let liveTimeline = null;
+/** @param {object} tl */
+export function setLiveTimeline(tl) { liveTimeline = tl; }
+
 /** Timeline: one lane per agent, bars are state runs inside the window. */
 export function getTimeline() {
+  if (liveTimeline && Array.isArray(liveTimeline.lanes) && liveTimeline.lanes.length > 0) {
+    return liveTimeline;
+  }
+  const agents = getAgents();
+  if (agents.length === 0) {
+    return { window: 'sesión actual', ticks: ['-30m', '-20m', '-10m', 'ahora'], lanes: [] };
+  }
   return {
     window: 'sesión actual',
-    ticks: [],
-    lanes: [],
+    ticks: ['-30m', '-20m', '-10m', 'ahora'],
+    lanes: agents.map((a) => {
+      const isLive = LIVE.includes(a.state);
+      return {
+        agent: a.id,
+        bars: [[a.state || 'thinking', isLive ? 20 : 0, isLive ? 80 : 100]],
+      };
+    }),
   };
 }
 

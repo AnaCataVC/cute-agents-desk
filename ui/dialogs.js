@@ -168,17 +168,22 @@ function scanDialog(state, data) {
       </div>
     </div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
-      ${field('Ruta', `<input type="text" placeholder="~/ruta/a/repositorios" value="" style="${INPUT}">`)}
+      ${field('Ruta', `
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" data-act="scanPath" placeholder="~/ruta/a/repositorios" value="${esc(state.scanPath || '')}" style="${INPUT};flex:1">
+          <button class="btn-ghost" data-act="browseScanFolder" type="button" style="flex:none;padding:7px 12px;font-size:11px">Elegir carpeta…</button>
+        </div>`)}
       ${field('Profundidad', `<div style="display:flex;gap:7px">${[1, 2, 3].map(depthChip).join('')}</div>`,
     'Más profundidad encuentra más repos y tarda más; los node_modules y .git anidados se saltan siempre')}
-      ${field(`Repos encontrados · ${data.getScanCandidates().filter((/** @type {any} */ c) => c.picked).length} de ${data.getScanCandidates().length}`,
-    `<div style="display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto">${rows || '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0;text-align:center">Sin repositorios escaneados todavía.</div>'}</div>`,
-    `último escaneo ${s.when} · ${s.took}`)}
+      ${state.scanError ? `
+        <div style="padding:8px 12px;background:var(--who-system-bg);border:1px solid var(--state-blocked);border-radius:var(--radius-sm);font:500 11px var(--font-body);color:var(--state-blocked)">
+          ${esc(state.scanError)}
+        </div>` : ''}
     </div>
     <div style="display:flex;gap:9px;justify-content:flex-end;padding:13px 18px;
          border-top:1px solid var(--color-dark-border);background:var(--app-surface-sunken)">
       <button class="btn-ghost" data-act="closeScan">Cancelar</button>
-      <button class="btn-primary" style="padding:9px 18px">Añadir carpeta</button>
+      <button class="btn-primary" data-act="submitScanFolder" style="padding:9px 18px">Añadir carpeta</button>
     </div>`, 520, 'closeScan');
 }
 

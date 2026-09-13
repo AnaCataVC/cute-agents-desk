@@ -50,6 +50,9 @@ const state = {
   queueCoord: '',
   scan: null,                  // account id the add-folder dialog belongs to
   scanDepth: 2,
+  scanPath: '',
+  scanError: null,
+  loading: Boolean(window.desk?.isDesk),
   newConvOpen: false,          // the sidebar's "+ nueva conversación" inline form
   newConvTitle: '',
   newConvTopic: '',
@@ -57,6 +60,7 @@ const state = {
   error: null,                 // last IPC refusal (scheduler cap, still-alive agent, ...), or null
   inspectedSkill: null,        // data for currently inspected skill in dialog
   inspectedTask: null,         // data for currently inspected scheduled task in dialog
+  chatInput: '',               // active input text in chat modal
 };
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -97,9 +101,22 @@ const ACTIONS = {
   diffMode: (v) => { state.diffMode = v; },
   openTerminal: (id) => { state.terminal = id || null; },
   closeTerminal: () => { state.terminal = null; },
-  openChat: (id) => { state.chat = id; state.chatTab = 'hilo'; state.tip = null; },
-  closeChat: () => { state.chat = null; },
+  openChat: (id) => { state.chat = id; state.chatTab = 'hilo'; state.tip = null; state.chatInput = ''; },
+  closeChat: () => { state.chat = null; state.chatInput = ''; },
   chatTab: (v) => { state.chatTab = v; },
+  submitChat: async (agentId) => {
+    const text = (state.chatInput || '').trim();
+    if (!text || !agentId) return;
+    state.chatInput = '';
+    render();
+    if (window.desk?.sendInput) {
+      const res = await window.desk.sendInput({ agentId, text });
+      if (res?.error) {
+        state.error = res.error;
+        render();
+      }
+    }
+  },
   /** Same file-opening path as the Editor tab's tree, reached from the chat panel's Diff sub-tab. */
   openDiffFile: (id) => {
     state.view = 'editor';
@@ -147,9 +164,73 @@ const ACTIONS = {
     }
     render();
   },
-  openScan: (accountId) => { state.scan = accountId; },
-  closeScan: () => { state.scan = null; },
+  openScan: (accountId) => {
+    state.scan = accountId;
+    state.scanPath = '';
+    state.scanDepth = 2;
+    state.scanError = null;
+  },
+  closeScan: () => {
+    state.scan = null;
+    state.scanPath = '';
+    state.scanError = null;
+  },
   scanDepth: (d) => { state.scanDepth = Number(d); },
+  browseScanFolder: async () => {
+    if (window.desk?.pickDirectory) {
+      const folder = await window.desk.pickDirectory();
+      if (folder) {
+        state.scanPath = folder;
+        state.scanError = null;
+        render();
+      }
+    }
+  },
+  submitScanFolder: async () => {
+    const folderPath = (state.scanPath || '').trim();
+    if (!folderPath) {
+      state.scanError = 'Ingresa o selecciona una ruta de carpeta';
+      render();
+      return;
+    }
+    if (!state.scan) return;
+    if (window.desk?.addAccountFolder) {
+      const res = await window.desk.addAccountFolder({
+        accountId: state.scan,
+        folderPath,
+        depth: state.scanDepth || 2,
+      });
+      if (res?.error) {
+        state.scanError = res.error;
+        render();
+        return;
+      }
+      if (res?.repoData) {
+        data.setLiveRepoData(res.repoData);
+      }
+    }
+    state.scan = null;
+    state.scanPath = '';
+    state.scanError = null;
+    render();
+  },
+  removeFolder: async (arg) => {
+    if (!arg) return;
+    const [accountId, folderPath] = arg.split('|');
+    if (!accountId || !folderPath) return;
+    if (window.desk?.removeAccountFolder) {
+      const res = await window.desk.removeAccountFolder({ accountId, folderPath });
+      if (res?.error) {
+        state.error = res.error;
+        render();
+        return;
+      }
+      if (res?.repoData) {
+        data.setLiveRepoData(res.repoData);
+        render();
+      }
+    }
+  },
 
   toggleNewConversation: () => {
     state.newConvOpen = !state.newConvOpen;
@@ -186,6 +267,24 @@ const ACTIONS = {
     window.desk?.reapWorktree?.(agentId).then((result) => {
       if (result?.error) { state.error = result.error; render(); return; }
       return window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
+    });
+  },
+
+  /** Batch reap of clean or delivered inactive worktrees. */
+  reapCleanWorktrees: () => {
+    window.desk?.reapCleanWorktrees?.().then((res) => {
+      if (res?.error) {
+        state.error = res.error;
+        render();
+        return;
+      }
+      const reaped = res?.totalReaped || 0;
+      const skipped = (res?.skipped || []).length;
+      state.reapFeedback = `Se podaron ${reaped} worktrees (${skipped} conservados por cambios o actividad)`;
+      window.desk.worktrees().then((worktrees) => {
+        data.setLiveWorktrees(worktrees);
+        render();
+      });
     });
   },
 
@@ -360,6 +459,20 @@ app.addEventListener('input', (ev) => {
   if (el.dataset.act === 'newConvTopic') { state.newConvTopic = el.value; }
   if (el.dataset.act === 'queueTask') { state.queueTask = el.value; }
   if (el.dataset.act === 'queueModel') { state.queueModel = el.value; }
+  if (el.dataset.act === 'scanPath') { state.scanPath = el.value; state.scanError = null; }
+  if (el.dataset.act === 'chatInput') { state.chatInput = el.value; }
+});
+
+app.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const target = /** @type {HTMLElement} */ (ev.target);
+  const el = /** @type {HTMLElement|null} */ (target.closest('[data-act]'));
+  if (!el) return;
+  const act = ACTIONS[el.dataset.act || ''];
+  if (act) {
+    act(el.dataset.arg, el);
+    render();
+  }
 });
 
 app.addEventListener('change', (ev) => {
@@ -474,7 +587,29 @@ function render() {
   keepFocus(() => paint());
 }
 
+function renderLoading() {
+  return `
+  <div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:#151223;color:#EDE9FE;font-family:'Outfit',system-ui,sans-serif">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:28px;height:28px;border-radius:8px;background:#A855F7;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(168,85,247,0.4)">
+        <span style="font-size:16px;color:#fff">✦</span>
+      </div>
+      <div style="font-size:19px;font-weight:600;letter-spacing:-0.01em">
+        Cute Agents <span style="color:#C4B5FD">Desk</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#94A3B8;font-family:'Inter',system-ui,sans-serif">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#A855F7;animation:antenna 1.8s ease-in-out infinite"></span>
+      <span>Iniciando despacho local...</span>
+    </div>
+  </div>`;
+}
+
 function paint() {
+  if (state.loading) {
+    app.innerHTML = renderLoading();
+    return;
+  }
   app.innerHTML = `
     <div style="display:flex;align-items:flex-start">
       ${renderSidebar(state, data)}
@@ -506,31 +641,43 @@ function scheduleRender() {
  * spawning anything.
  */
 if (window.desk?.isDesk) {
+  state.loading = true;
+
   window.desk.subscribe((patch) => {
     if (patch.agents) data.setLiveAgents(patch.agents);
     if (patch.output) data.pushOutput(patch.output.id, patch.output.chunk);
     if (patch.usage) data.setLiveUsage(patch.usage);
     if (patch.repoData) data.setLiveRepoData(patch.repoData);
+    if (patch.threads) data.setLiveThreads(patch.threads);
+    if (patch.timeline) data.setLiveTimeline(patch.timeline);
     scheduleRender();
   });
-  window.desk.agents().then((agents) => {
-    if (agents.length) { data.setLiveAgents(agents); render(); }
-  });
-  window.desk.usage?.().then((usage) => {
-    if (usage) { data.setLiveUsage(usage); render(); }
-  });
+
+  const initialLoads = [
+    window.desk.repos().then((repoData) => { if (repoData) data.setLiveRepoData(repoData); }),
+    window.desk.conversations().then((conversations) => { if (conversations) data.setLiveConversations(conversations); }),
+    window.desk.agents().then((agents) => { if (agents?.length) data.setLiveAgents(agents); }),
+    window.desk.config?.().then((cfg) => { if (cfg) data.setLiveConfig(cfg); }),
+    window.desk.worktrees().then((worktrees) => { if (worktrees) data.setLiveWorktrees(worktrees); }),
+    window.desk.usage?.().then((usage) => { if (usage) data.setLiveUsage(usage); }),
+    window.desk.scheduledTasks().then((tasks) => { if (tasks) data.setLiveScheduledTasks(tasks); }),
+    window.desk.delivered().then((deliv) => { if (deliv) data.setLiveDelivered(deliv); }),
+    window.desk.skills?.().then((skills) => { if (skills) data.setLiveSkills?.(skills); }),
+    window.desk.threads?.().then((threads) => { if (threads) data.setLiveThreads(threads); }),
+    window.desk.timeline?.().then((tl) => { if (tl) data.setLiveTimeline(tl); }),
+  ];
+
   window.desk.quotas?.().then((quotas) => {
-    if (quotas) { data.setLiveQuotas(quotas); render(); }
+    if (quotas) {
+      data.setLiveQuotas(quotas);
+      scheduleRender();
+    }
   });
-  // Scanned once on load, same as the agent list -- the tree does not need to re-scan on every
-  // repaint, only when a folder is added or removed from Configuracion.
-  window.desk.repos().then((repoData) => { data.setLiveRepoData(repoData); render(); });
-  window.desk.conversations().then((conversations) => { data.setLiveConversations(conversations); render(); });
-  window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
-  window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
-  window.desk.delivered().then((deliv) => { data.setLiveDelivered(deliv); render(); });
-  window.desk.skills?.().then((skills) => { data.setLiveSkills?.(skills); render(); });
-  window.desk.config?.().then((cfg) => { if (cfg) { data.setLiveConfig(cfg); render(); } });
+
+  Promise.allSettled(initialLoads).finally(() => {
+    state.loading = false;
+    render();
+  });
 
   // Unlike repos/worktrees/conversations, this reflects files Claude Desktop and Antigravity
   // write in the background -- fetch-once-on-load would go stale the moment either reschedules,
@@ -545,6 +692,7 @@ if (window.desk?.isDesk) {
 // The clock the artboard runs: elapsed times and the live rate tick without touching anything else.
 setInterval(() => {
   state.tick++;
+  if (state.loading) return;
   if (state.view === 'dispatch' || state.view === 'usage') render();
 }, 1000);
 

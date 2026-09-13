@@ -123,9 +123,14 @@ function fichaPanel(agent, states, skills, skillStates, data) {
   </div>`;
 }
 
-function hiloPanel(agent, data) {
-  const messages = data.getThread(agent.id).map((m) => bubble(m, data.AUTHORS)).join('');
+function hiloPanel(agent, data, state) {
+  const allMessages = data.getThread(agent.id) || [];
+  // Paginate to latest 50 messages to prevent DOM bloat per stress test
+  const displayMessages = allMessages.slice(-50);
+  const messages = displayMessages.map((m) => bubble(m, data.AUTHORS)).join('');
   const skills = data.getAgentSkills(agent.id);
+  const isBusy = agent.state === 'tool';
+  const chatInput = state?.chatInput || '';
 
   return `
   <div style="display:flex;flex-direction:column;min-height:0;flex:1">
@@ -150,14 +155,22 @@ function hiloPanel(agent, data) {
       </div>`}
     </div>
     <div style="padding:12px 16px;border-top:1px solid var(--color-dark-border)">
-      <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:var(--radius-full);
-           border:1px solid var(--color-dark-border);background:var(--color-dark-surface)">
-        <span style="font:400 12px var(--font-body);color:var(--color-dark-text-3)">Escribir al ${esc(agent.boss)}…</span>
-        <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3);
-              background:var(--color-dark-bg);padding:2px 6px;border-radius:4px">↵</span>
-      </div>
+      <form data-act="submitChat" data-arg="${esc(agent.id)}"
+        style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:var(--radius-full);
+               border:1px solid var(--color-dark-border);background:var(--color-dark-surface)">
+        <input type="text" data-act="chatInput" value="${esc(chatInput)}"
+          placeholder="${isBusy ? 'Agente ocupado ejecutando herramienta…' : `Escribir al ${esc(agent.boss)}…`}"
+          ${isBusy ? 'disabled' : ''}
+          style="flex:1;background:transparent;border:none;outline:none;padding:6px 10px;
+                 color:var(--color-dark-text-1);font:400 11.5px var(--font-body);min-width:0">
+        <button type="submit" class="btn-primary" data-act="submitChat" data-arg="${esc(agent.id)}"
+          ${isBusy || !chatInput.trim() ? 'disabled' : ''}
+          style="padding:5px 12px;border-radius:var(--radius-full);font-size:11px;line-height:1.2;cursor:pointer">
+          Enviar
+        </button>
+      </form>
       <div style="font:400 9.5px var(--font-body);color:var(--color-dark-text-3);margin-top:7px">
-        Lo que escribas entra por el coordinador; él decide si lo reparte o lo contesta.
+        ${isBusy ? 'El agente está ocupado. Espera a que termine su herramienta para enviar entrada.' : 'Lo que escribas entra por el coordinador; él decide si lo reparte o lo contesta.'}
       </div>
     </div>
   </div>`;
@@ -201,7 +214,7 @@ export function renderChat(state, data) {
   const tab = state.chatTab || 'hilo';
   const body = tab === 'ficha' ? fichaPanel(agent, data.STATES, skills, data.SKILL_STATES, data)
     : tab === 'diff' ? diffPanel(agent, data)
-      : hiloPanel(agent, data);
+      : hiloPanel(agent, data, state);
 
   return `
   <div style="display:flex;flex-direction:column;max-height:86vh;min-width:0;width:420px">

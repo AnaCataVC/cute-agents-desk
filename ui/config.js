@@ -60,13 +60,13 @@ function swatchButton(ac, color) {
     border:${selected ? '2px solid var(--color-dark-text-1)' : '1px solid var(--color-dark-border)'}"></button>`;
 }
 
-function folderRow(f, data) {
+function folderRow(f, data, accountId) {
   const repoCount = data.getRepos().filter((r) => r.folder === f.path).length;
   return `
   <div class="settings-row">
     <span class="mono" style="font-weight:500;font-size:11.5px;color:var(--color-dark-text-1)">${esc(f.path)}</span>
-    <span class="mono" style="font-size:10.5px;color:var(--color-dark-text-3)">${repoCount} repos · ${esc(f.depth)}</span>
-    <button class="btn-ghost" style="margin-left:auto;padding:4px 9px;font-size:10px">Quitar</button>
+    <span class="mono" style="font-size:10.5px;color:var(--color-dark-text-3)">${repoCount} repos · prof. ${esc(f.depth)}</span>
+    <button class="btn-ghost" data-act="removeFolder" data-arg="${esc(accountId)}|${esc(f.path)}" style="margin-left:auto;padding:4px 9px;font-size:10px">Quitar</button>
   </div>`;
 }
 
@@ -86,7 +86,7 @@ function accountCard(ac, data) {
       <div style="display:flex;gap:6px;margin-left:auto">${SWATCHES.map((v) => swatchButton(ac, v)).join('')}</div>
     </div>
     <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-      ${(ac.folders || []).map((f) => folderRow(f, data)).join('')}
+      ${(ac.folders || []).map((f) => folderRow(f, data, ac.id)).join('')}
       <button class="btn-ghost" style="align-self:flex-start;margin-top:2px;border-style:dashed"
         data-act="openScan" data-arg="${ac.id}">Añadir carpeta…</button>
     </div>
@@ -308,7 +308,7 @@ function scanSummaryCard(data) {
 
 /** Worktrees are never deleted on their own — this is the "siempre visible" list the plan
  * requires precisely because nothing else surfaces one once its agent has exited. */
-function worktreesCard(data) {
+function worktreesCard(data, state) {
   const worktrees = data.getWorktrees();
   const liveIds = new Set(data.getAgents().map((a) => a.id));
 
@@ -331,6 +331,13 @@ function worktreesCard(data) {
     </div>`;
   };
 
+  const actionBlock = worktrees.length ? `
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+      <button class="chip" style="width:100%;justify-content:center;border-style:dashed;padding:6px;font-size:11px"
+        data-act="reapCleanWorktrees">Limpiar worktrees inactivos</button>
+      ${state && state.reapFeedback ? `<div style="font:400 10.5px var(--font-body);color:var(--color-dark-text-2);text-align:center">${esc(state.reapFeedback)}</div>` : ''}
+    </div>` : '';
+
   return `
   <div class="panel" style="padding:16px">
     <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
@@ -338,6 +345,7 @@ function worktreesCard(data) {
     ${worktrees.length ? worktrees.map(row).join('')
     : `<div style="font:400 11.5px/1.6 var(--font-body);color:var(--color-dark-text-3)">
          Ninguno todavía — se crea uno por cada tarea en modo escritura, fuera del repo.</div>`}
+    ${actionBlock}
   </div>`;
 }
 
@@ -354,8 +362,8 @@ function deliverInfoCard() {
          color:var(--color-dark-text-3)">
       <div>rama · <span style="color:var(--color-lilac)">claude/&lt;tarea&gt;</span> ·
         <span style="color:var(--color-blue)">agy/&lt;tarea&gt;</span></div>
-      <div>pr · <span style="color:var(--color-dark-text-2)">draft, reviewer: nadie</span></div>
-      <div>commit · <span style="color:var(--color-dark-text-2)">email de la cuenta de la carpeta</span></div>
+      <div>commit · autoría de la cuenta de la carpeta</div>
+      <div>PR · borrador (<span class="mono">gh pr create --draft</span>)</div>
     </div>
   </div>`;
 }
@@ -393,7 +401,7 @@ export function renderConfig(state, data) {
     </div>
     <div style="display:flex;flex-direction:column;gap:14px">
       ${scanSummaryCard(data)}
-      ${worktreesCard(data)}
+      ${worktreesCard(data, state)}
       ${deliverInfoCard()}
     </div>
   </div>`;

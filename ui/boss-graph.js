@@ -158,6 +158,7 @@ function parkedRow(flow, agents, states) {
 
 /** The numbers that say whether this coordinator is worth your attention right now. */
 function metaRow(flow) {
+  const roster = flow.roster || [];
   const item = (label, value) => `
     <div style="min-width:0">
       <div style="font:400 8.5px var(--font-body);color:var(--color-dark-text-3);
@@ -169,44 +170,46 @@ function metaRow(flow) {
   return `
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:9px;
        padding:9px 11px;background:var(--color-dark-bg);border-radius:10px;margin-bottom:10px">
-    ${item('sesiones', `${flow.roster.length} de ${flow.defined}`)}
-    ${item('turnos', esc(flow.turns))}
-    ${item('costo', `$${flow.cost.toFixed(2)}`)}
+    ${item('sesiones', `${roster.length} de ${flow.defined ?? 3}`)}
+    ${item('turnos', esc(flow.turns || `${roster.length} turnos`))}
+    ${item('costo', `$${(flow.cost || 0).toFixed(2)}`)}
     ${item('ritmo', flow.rate ? `${flow.rate} tok/min` : '—')}
-    ${item('hooks', String(flow.hooks))}
-    ${item('bucles', flow.loops.length ? esc(flow.loops.join(', ')) : '—')}
+    ${item('hooks', String(flow.hooks || 0))}
+    ${item('bucles', (flow.loops || []).length ? esc(flow.loops.join(', ')) : '—')}
   </div>`;
 }
 
 function detailCard(flow, state, states, data) {
-  const live = flow.roster.filter((a) => LIVE.includes(a.state));
-  const parked = flow.roster.filter((a) => !LIVE.includes(a.state));
+  const roster = flow.roster || [];
+  const live = roster.filter((a) => LIVE.includes(a.state));
+  const parked = roster.filter((a) => !LIVE.includes(a.state));
   const acc = (data?.getAccounts() || []).find((a) => a.id === flow.accountId);
   const account = acc ? (acc.name || acc.id) : (flow.accountId || '—');
 
   return `
   <div class="panel" style="padding:14px;position:relative">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:3px">
-      <span class="mono" style="font-size:11.5px;font-weight:600">${esc(flow.name)}</span>
-      ${splitPill(flow.split)}
+      <span class="mono" style="font-size:11.5px;font-weight:600">${esc(flow.name || flow.id)}</span>
+      ${splitPill(flow.split || 'por tema')}
       <span style="padding:1px 7px;border-radius:var(--radius-full);background:var(--color-dark-bg);
-            color:var(--color-dark-text-2);font:500 9px var(--font-body)">${esc(flow.engine)}</span>
+            color:var(--color-dark-text-2);font:500 9px var(--font-body)">${esc(flow.engine || 'claude cli')}</span>
       <button class="chip" data-act="archive" data-arg="${esc(flow.id)}"
         style="margin-left:auto;font-size:9px">Archivar</button>
     </div>
     <div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);margin-bottom:9px">
-      ${esc(account)} · ${esc(flow.repos)}</div>
+      ${esc(account)} · ${esc(flow.repos || '—')}</div>
     ${metaRow(flow)}
     ${live.length
     ? graph({ flow, agents: live, width: 464, height: 330, scale: 0.78 })
     : `<div style="padding:38px 12px;text-align:center;font:400 11px var(--font-body);
          color:var(--color-dark-text-3)">Sin sesiones activas: todo entregado o en espera.</div>`}
-    ${tooltip(flow, flow.roster, state, states)}
+    ${tooltip(flow, roster, state, states)}
     ${parkedRow(flow, parked, states)}
   </div>`;
 }
 
 function compactCard(flow, states) {
+  const roster = flow.roster || [];
   const archived = flow.status === 'archivado';
   const statusColor = flow.status === 'bloqueado' ? 'var(--state-blocked)'
     : archived ? 'var(--color-dark-text-3)' : 'var(--color-lilac)';
@@ -216,15 +219,15 @@ function compactCard(flow, states) {
        border:1px solid var(--color-dark-border);border-radius:14px;${archived ? 'opacity:.55' : ''}">
     <div style="display:flex;align-items:baseline;gap:6px">
       <span class="mono" style="font-size:10.5px;font-weight:600;min-width:0;overflow:hidden;
-            text-overflow:ellipsis;white-space:nowrap">${esc(flow.name)}</span>
-      <span style="margin-left:auto;font:500 9px var(--font-body);color:${statusColor}">${esc(flow.status)}</span>
+            text-overflow:ellipsis;white-space:nowrap">${esc(flow.name || flow.id)}</span>
+      <span style="margin-left:auto;font:500 9px var(--font-body);color:${statusColor}">${esc(flow.status || 'activo')}</span>
     </div>
     <div style="font:400 9px var(--font-body);color:var(--color-dark-text-3);margin-top:1px">
-      ${esc(flow.split)} · ${flow.roster.length} agentes · $${flow.cost.toFixed(2)}</div>
+      ${esc(flow.split || 'por tema')} · ${roster.length} agentes · $${(flow.cost || 0).toFixed(2)}</div>
     <div style="display:flex;justify-content:center;padding:10px 0 4px">
       ${ringByState({
     // An archived coordinator gets a flat grey ring: its states are history, not status.
-    agents: archived ? flow.roster.map(() => ({ state: 'idle' })) : flow.roster,
+    agents: archived ? roster.map(() => ({ state: 'idle' })) : roster,
     states,
     size: 66,
   })}
