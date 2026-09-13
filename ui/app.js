@@ -68,46 +68,195 @@ const state = {
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
 
+/**
+ * Metadata definitions for all editable non-boolean configuration keys.
+ * Specifies input control type, allowed bounds, units, step sizes, and hints.
+ */
+export const CONFIG_META = {
+  'coordinators.maxSessionsPerCoordinator': {
+    label: 'Sesiones que puede abrir',
+    type: 'number',
+    min: 1,
+    max: 10,
+    step: 1,
+    unit: 'sesiones',
+    hint: 'Máximo número de agentes paralelos por coordinador (1-10)',
+  },
+  'coordinators.defaultEngine': {
+    label: 'Motor por defecto',
+    type: 'select',
+    options: [
+      { value: 'claude cli', label: 'claude cli' },
+      { value: 'agy cli', label: 'agy cli' },
+    ],
+    hint: 'Motor predeterminado para nuevos coordinadores',
+  },
+  'coordinators.reportInterval': {
+    label: 'Reportar al coordinador cada',
+    type: 'select',
+    options: [
+      { value: 'herramienta', label: 'herramienta' },
+      { value: 'turno', label: 'turno' },
+      { value: 'minuto', label: 'minuto' },
+    ],
+    hint: 'Frecuencia con la que los agentes reportan progreso',
+  },
+  'coordinators.idleTimeoutMinutes': {
+    label: 'Cerrar agentes idle tras',
+    type: 'number',
+    min: 1,
+    max: 120,
+    step: 1,
+    unit: 'min',
+    hint: 'Minutos de inactividad antes de finalizar la sesión (1-120)',
+  },
+
+  'exec.maxParallel': {
+    label: 'Sesiones en paralelo',
+    type: 'number',
+    min: 1,
+    max: 20,
+    step: 1,
+    unit: 'sesiones',
+    hint: 'Límite global de agentes ejecutándose a la vez (1-20)',
+  },
+  'exec.blockedTimeoutMinutes': {
+    label: 'Marcar bloqueado sin avance',
+    type: 'number',
+    min: 1,
+    max: 60,
+    step: 1,
+    unit: 'min',
+    hint: 'Minutos sin avance para considerar un agente bloqueado (1-60)',
+  },
+
+  'deliver.prTitleTemplate': {
+    label: 'Título del PR',
+    type: 'text',
+    placeholder: '<tipo>: <tarea>',
+    hint: 'Plantilla de título para PRs generados (ej. <tipo>: <tarea>)',
+  },
+
+  'perf.maxMountedTerminals': {
+    label: 'Terminales montadas a la vez',
+    type: 'number',
+    min: 1,
+    max: 5,
+    step: 1,
+    unit: 'terminales',
+    hint: 'Límite de terminales activas simultáneamente en pantalla (1-5)',
+  },
+  'perf.terminalScrollbackLines': {
+    label: 'Scrollback por terminal',
+    type: 'number',
+    min: 100,
+    max: 10000,
+    step: 100,
+    unit: 'líneas',
+    hint: 'Líneas de historial retenidas por terminal (100-10000)',
+  },
+  'perf.cardRefreshIntervalMs': {
+    label: 'Refresco de tarjetas',
+    type: 'number',
+    min: 250,
+    max: 10000,
+    step: 250,
+    unit: 'ms',
+    hint: 'Intervalo de refresco de telemetría en milisegundos (250-10000)',
+  },
+  'perf.eventLogRotationMb': {
+    label: 'Rotar el registro de eventos',
+    type: 'number',
+    min: 1,
+    max: 500,
+    step: 5,
+    unit: 'MB',
+    hint: 'Tamaño máximo antes de rotar los registros de eventos (1-500)',
+  },
+
+  'advanced.harnessDir': {
+    label: 'Directorio del harness',
+    type: 'text',
+    isPath: true,
+    placeholder: '~/.cute-agents-desk',
+    hint: 'Ubicación física para worktrees y entornos aislados',
+  },
+  'advanced.windowProtocol': {
+    label: 'Protocolo de ventana',
+    type: 'text',
+    placeholder: 'app://desk',
+    hint: 'Esquema de protocolo para la ventana principal',
+  },
+};
+
+/**
+ * Safely extracts the raw typed configuration value for a section and key.
+ * Prioritizes live configuration over default visual representation in getSettings().
+ * @param {string} section
+ * @param {string} key
+ * @returns {any}
+ */
+export function getConfigRawValue(section, key) {
+  const current = data.getLiveConfig();
+  if (current && current[section] && current[section][key] !== undefined) {
+    return current[section][key];
+  }
+
+  const allSettings = data.getSettings();
+  const subtab = allSettings[section];
+  const match = Array.isArray(subtab) ? subtab.find((r) => r[3] === key) : null;
+  if (match && match[1] !== undefined) {
+    const meta = (CONFIG_META && CONFIG_META[`${section}.${key}`]) || {};
+    if (meta.type === 'number') {
+      const parsed = parseFloat(String(match[1]));
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    return match[1];
+  }
+
+  return '';
+}
+
 /** Actions, keyed by the `data-act` value. Each one mutates state; render() follows. */
 const ACTIONS = {
-  view: (v) => {
+  view: (/** @type {string} */ v) => {
     state.view = v;
     if (v === 'usage' && window.desk?.quotas) {
-      window.desk.quotas().then((q) => { if (q) { data.setLiveQuotas(q); render(); } });
+      window.desk.quotas().then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } });
     }
   },
   refreshQuotas: () => {
     if (window.desk?.quotas) {
-      window.desk.quotas({ forceRefresh: true }).then((q) => { if (q) { data.setLiveQuotas(q); render(); } });
+      window.desk.quotas({ forceRefresh: true }).then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } });
     }
   },
-  flowView: (v) => { state.flowView = v; },
-  cfgTab: (v) => { state.cfgTab = v; },
-  toggleNode: (key) => { state.open[key] = !state.open[key]; },
+  flowView: (/** @type {any} */ v) => { state.flowView = v; },
+  cfgTab: (/** @type {any} */ v) => { state.cfgTab = v; },
+  toggleNode: (/** @type {string | number} */ key) => { state.open[key] = !state.open[key]; },
   toggleFilters: () => { state.filtersOpen = !state.filtersOpen; },
-  accFilter: (v) => { state.accFilter = v; },
-  stFilter: (v) => { state.stFilter = v; },
+  accFilter: (/** @type {any} */ v) => { state.accFilter = v; },
+  stFilter: (/** @type {any} */ v) => { state.stFilter = v; },
   clearFilters: () => { state.accFilter = 'all'; state.stFilter = 'any'; state.search = ''; },
-  accFlow: (v) => { state.accFlow = v; },
+  accFlow: (/** @type {any} */ v) => { state.accFlow = v; },
   showArch: () => { state.showArch = !state.showArch; },
   // A second click on the same node closes the tooltip, so it needs no close button.
-  tip: (v) => { state.tip = state.tip === v ? null : v; },
-  toggleTreeNode: (key) => { state.treeClosed[key] = !state.treeClosed[key]; },
-  openFile: (id) => {
+  tip: (/** @type {any} */ v) => { state.tip = state.tip === v ? null : v; },
+  toggleTreeNode: (/** @type {string | number} */ key) => { state.treeClosed[key] = !state.treeClosed[key]; },
+  openFile: (/** @type {any} */ id) => {
     if (!state.visualizerOpen.includes(id)) state.visualizerOpen.push(id);
     state.visualizerActive = id;
   },
-  closeFile: (id) => {
-    state.visualizerOpen = state.visualizerOpen.filter((t) => t !== id);
+  closeFile: (/** @type {any} */ id) => {
+    state.visualizerOpen = state.visualizerOpen.filter((/** @type {any} */ t) => t !== id);
     if (state.visualizerActive === id) state.visualizerActive = state.visualizerOpen[state.visualizerOpen.length - 1] || null;
   },
-  diffMode: (v) => { state.diffMode = v; },
-  openTerminal: (id) => { state.terminal = id || null; },
+  diffMode: (/** @type {any} */ v) => { state.diffMode = v; },
+  openTerminal: (/** @type {null} */ id) => { state.terminal = id || null; },
   closeTerminal: () => { state.terminal = null; },
-  openChat: (id) => { state.chat = id; state.chatTab = 'hilo'; state.tip = null; state.chatInput = ''; },
+  openChat: (/** @type {any} */ id) => { state.chat = id; state.chatTab = 'hilo'; state.tip = null; state.chatInput = ''; },
   closeChat: () => { state.chat = null; state.chatInput = ''; },
-  chatTab: (v) => { state.chatTab = v; },
-  submitChat: async (agentId) => {
+  chatTab: (/** @type {any} */ v) => { state.chatTab = v; },
+  submitChat: async (/** @type {any} */ agentId) => {
     const text = (state.chatInput || '').trim();
     if (!text || !agentId) return;
     state.chatInput = '';
@@ -121,13 +270,13 @@ const ACTIONS = {
     }
   },
   /** Same file-opening path as the Visualizador tab's tree, reached from the chat panel's Diff sub-tab. */
-  openDiffFile: (id) => {
+  openDiffFile: (/** @type {any} */ id) => {
     state.view = 'visualizer';
     state.chat = null;
     if (!state.visualizerOpen.includes(id)) state.visualizerOpen.push(id);
     state.visualizerActive = id;
   },
-  openQueue: (repo) => {
+  openQueue: (/** @type {string} */ repo) => {
     state.queue = repo ?? '';
     state.queueRepo = repo ?? '';
     state.queueTask = '';
@@ -138,7 +287,7 @@ const ACTIONS = {
     state.queueCoord = '';
   },
   closeQueue: () => { state.queue = null; },
-  queueMode: (m) => { state.queueMode = m || 'write'; },
+  queueMode: (/** @type {string} */ m) => { state.queueMode = m || 'write'; },
   submitQueue: async () => {
     const task = (state.queueTask || '').trim();
     if (!task) return;
@@ -167,7 +316,7 @@ const ACTIONS = {
     }
     render();
   },
-  openScan: (accountId) => {
+  openScan: (/** @type {any} */ accountId) => {
     state.scan = accountId;
     state.scanPath = '';
     state.scanDepth = 2;
@@ -178,7 +327,7 @@ const ACTIONS = {
     state.scanPath = '';
     state.scanError = null;
   },
-  scanDepth: (d) => { state.scanDepth = Number(d); },
+  scanDepth: (/** @type {any} */ d) => { state.scanDepth = Number(d); },
   browseScanFolder: async () => {
     if (window.desk?.pickDirectory) {
       const folder = await window.desk.pickDirectory();
@@ -217,7 +366,7 @@ const ACTIONS = {
     state.scanError = null;
     render();
   },
-  removeFolder: async (arg) => {
+  removeFolder: async (/** @type {{ split: (arg0: string) => [any, any]; }} */ arg) => {
     if (!arg) return;
     const [accountId, folderPath] = arg.split('|');
     if (!accountId || !folderPath) return;
@@ -247,34 +396,34 @@ const ACTIONS = {
     const topic = (state.newConvTopic || '').trim();
     state.newConvOpen = false;
     window.desk?.createConversation?.({ title, topic: topic || undefined })
-      .then((created) => {
+      .then((/** @type {{ id: any; }} */ created) => {
         if (created?.id) {
           window.desk?.spawnCoordinator?.({ conversationId: created.id });
         }
         return window.desk.conversations();
       })
-      .then((conversations) => { data.setLiveConversations(conversations); render(); });
+      .then((/** @type {object[]} */ conversations) => { data.setLiveConversations(conversations); render(); });
   },
   dismissError: () => { state.error = null; },
 
   /** The coordinator's own card shows up once it reports in, like any agent -- a rejection
    * (scheduler cap full) is the one outcome worth telling the user about right away. */
-  openCoordinator: (conversationId) => {
-    window.desk?.spawnCoordinator?.({ conversationId }).then((result) => {
+  openCoordinator: (/** @type {any} */ conversationId) => {
+    window.desk?.spawnCoordinator?.({ conversationId }).then((/** @type {{ error: any; }} */ result) => {
       if (result?.error) { state.error = result.error; render(); }
     });
   },
-  archive: (conversationId) => {
+  archive: (/** @type {any} */ conversationId) => {
     if (!conversationId) return;
-    window.desk?.archiveConversation?.(conversationId).then((res) => {
+    window.desk?.archiveConversation?.(conversationId).then((/** @type {{ error: any; }} */ res) => {
       if (res?.error) { state.error = res.error; render(); return; }
-      return window.desk.conversations().then((conversations) => {
+      return window.desk.conversations().then((/** @type {object[]} */ conversations) => {
         data.setLiveConversations(conversations);
         render();
       });
     });
   },
-  closeIdle: (flowId) => {
+  closeIdle: (/** @type {any} */ flowId) => {
     const agents = data.getAgents();
     for (const a of agents) {
       if ((a.conversationId === flowId || a.boss?.includes(flowId)) && (a.state === 'idle' || a.state === 'done')) {
@@ -285,16 +434,16 @@ const ACTIONS = {
 
   /** Manual reap, per the plan: never automatic, so losing an agent's uncommitted work is never
    * a side effect of something else finishing. The IPC handler itself refuses a still-live agent. */
-  reapWorktree: (agentId) => {
-    window.desk?.reapWorktree?.(agentId).then((result) => {
+  reapWorktree: (/** @type {any} */ agentId) => {
+    window.desk?.reapWorktree?.(agentId).then((/** @type {{ error: any; }} */ result) => {
       if (result?.error) { state.error = result.error; render(); return; }
-      return window.desk.worktrees().then((worktrees) => { data.setLiveWorktrees(worktrees); render(); });
+      return window.desk.worktrees().then((/** @type {object[]} */ worktrees) => { data.setLiveWorktrees(worktrees); render(); });
     });
   },
 
   /** Batch reap of clean or delivered inactive worktrees. */
   reapCleanWorktrees: () => {
-    window.desk?.reapCleanWorktrees?.().then((res) => {
+    window.desk?.reapCleanWorktrees?.().then((/** @type {{ error: any; totalReaped: number; skipped: any; }} */ res) => {
       if (res?.error) {
         state.error = res.error;
         render();
@@ -303,7 +452,7 @@ const ACTIONS = {
       const reaped = res?.totalReaped || 0;
       const skipped = (res?.skipped || []).length;
       state.reapFeedback = `Se podaron ${reaped} worktrees (${skipped} conservados por cambios o actividad)`;
-      window.desk.worktrees().then((worktrees) => {
+      window.desk.worktrees().then((/** @type {object[]} */ worktrees) => {
         data.setLiveWorktrees(worktrees);
         render();
       });
@@ -317,13 +466,13 @@ const ACTIONS = {
     });
     if (result?.error) { state.error = result.error; render(); }
   },
-  stopAgent: (id) => window.desk.stop(id),
+  stopAgent: (/** @type {any} */ id) => window.desk.stop(id),
   refreshSkills: () => {
-    window.desk?.skills?.().then((skills) => { data.setLiveSkills(skills); render(); });
+    window.desk?.skills?.().then((/** @type {any[]} */ skills) => { data.setLiveSkills(skills); render(); });
   },
 
   /** Deliver an agent's work as a branch + draft PR. */
-  deliverAgent: async (agentId) => {
+  deliverAgent: async (/** @type {any} */ agentId) => {
     if (!window.desk?.deliver || !agentId) return;
     state.error = null;
     render();
@@ -344,7 +493,7 @@ const ACTIONS = {
     }
     render();
   },
-  setAccountColor: async (arg) => {
+  setAccountColor: async (/** @type {{ split: (arg0: string) => [any, any]; }} */ arg) => {
     if (!arg) return;
     const [accountId, color] = arg.split('|');
     if (!accountId || !color) return;
@@ -358,7 +507,7 @@ const ACTIONS = {
       }
     }
   },
-  setAccountEditor: async (arg) => {
+  setAccountEditor: async (/** @type {{ split: (arg0: string) => [any, any]; }} */ arg) => {
     if (!arg) return;
     const [accountId, editor] = arg.split('|');
     if (!accountId || !editor) return;
@@ -372,7 +521,7 @@ const ACTIONS = {
       }
     }
   },
-  openExternalEditor: async (arg) => {
+  openExternalEditor: async (/** @type {{ split: (arg0: string) => [any, any]; }} */ arg) => {
     if (!arg) return;
     const [agentId, filePath] = arg.split('|');
     if (!agentId) return;
@@ -389,7 +538,7 @@ const ACTIONS = {
       }
     }
   },
-  toggleConfig: async (arg) => {
+  toggleConfig: async (/** @type {{ split: (arg0: string) => [any, any]; }} */ arg) => {
     if (!arg) return;
     const [section, key] = arg.split('|');
     if (!section || !key) return;
@@ -399,7 +548,7 @@ const ACTIONS = {
     if (typeof oldVal !== 'boolean') {
       const allSettings = data.getSettings();
       const subtab = allSettings[section];
-      const match = subtab?.find((r) => r[3] === key);
+      const match = subtab?.find((/** @type {any[]} */ r) => r[3] === key);
       oldVal = match && typeof match[1] === 'boolean' ? match[1] : false;
     }
     const newVal = !oldVal;
@@ -420,12 +569,13 @@ const ACTIONS = {
     }
   },
 
-  editConfigValue: (arg) => {
+  editConfigValue: (/** @type {{ split: (arg0: string) => [any, any]; }} */ arg) => {
     if (!arg) return;
     const [section, key] = arg.split('|');
     if (!section || !key) return;
 
-    const meta = CONFIG_META[`${section}.${key}`] || {};
+    // Defensive zero-crash fallback: guarantee safe metadata even for unregistered keys
+    const meta = (CONFIG_META && CONFIG_META[`${section}.${key}`]) || {};
     const rawVal = getConfigRawValue(section, key);
 
     state.editConfig = {
@@ -443,6 +593,7 @@ const ACTIONS = {
       placeholder: meta.placeholder,
       hint: meta.hint,
       error: null,
+      saving: false,
     };
     render();
   },
@@ -466,7 +617,7 @@ const ACTIONS = {
 
   submitEditConfig: async () => {
     const cfg = state.editConfig;
-    if (!cfg) return;
+    if (!cfg || cfg.saving) return;
 
     let finalVal = cfg.currentValue;
     if (cfg.type === 'number') {
@@ -477,12 +628,12 @@ const ACTIONS = {
         return;
       }
       if (cfg.min !== undefined && num < cfg.min) {
-        cfg.error = `El valor mínimo permitido es ${cfg.min}.`;
+        cfg.error = `El valor mínimo permitido es ${cfg.min}${cfg.unit ? ` ${cfg.unit}` : ''}.`;
         render();
         return;
       }
       if (cfg.max !== undefined && num > cfg.max) {
-        cfg.error = `El valor máximo permitido es ${cfg.max}.`;
+        cfg.error = `El valor máximo permitido es ${cfg.max}${cfg.unit ? ` ${cfg.unit}` : ''}.`;
         render();
         return;
       }
@@ -494,27 +645,50 @@ const ACTIONS = {
         render();
         return;
       }
+      if (finalVal.length > 500) {
+        cfg.error = 'El valor no puede superar los 500 caracteres.';
+        render();
+        return;
+      }
     }
 
     const { section, key, label } = cfg;
-    data.updateLiveConfigKey(section, key, finalVal);
-    state.editConfig = null;
+    cfg.saving = true;
+    cfg.error = null;
     render();
 
     if (window.desk?.updateConfig) {
-      const res = await window.desk.updateConfig({ section, key, value: finalVal });
-      if (res?.config) {
-        data.setLiveConfig(res.config);
+      try {
+        const res = await window.desk.updateConfig({ section, key, value: finalVal });
+        if (res?.error) {
+          cfg.error = res.error;
+          cfg.saving = false;
+          render();
+          return;
+        }
+        if (res?.config) {
+          data.setLiveConfig(res.config);
+        } else {
+          data.updateLiveConfigKey(section, key, finalVal);
+        }
+        state.editConfig = null;
+        render();
         showToast(`Guardado: ${label}`);
-      } else if (res?.error) {
-        showToast(res.error, 'error');
+      } catch (err) {
+        cfg.error = err instanceof Error ? err.message : 'Error inesperado al guardar';
+        cfg.saving = false;
+        render();
       }
     } else {
+      // Mock / browser preview mode
+      data.updateLiveConfigKey(section, key, finalVal);
+      state.editConfig = null;
+      render();
       showToast(`Guardado: ${label}`);
     }
   },
 
-  inspectSkill: (_arg, el) => {
+  inspectSkill: (/** @type {any} */ _arg, /** @type {{ dataset: { name: string; desc: string; version: string; load: string; tokens: any; file: string; folder: string; engine: string; }; }} */ el) => {
     if (!el) return;
     const name = el.dataset.name || '';
     const desc = el.dataset.desc || '';
@@ -532,7 +706,7 @@ const ACTIONS = {
     render();
 
     if (filePath && window.desk?.readSkill) {
-      window.desk.readSkill(filePath).then((res) => {
+      window.desk.readSkill(filePath).then((/** @type {{ error: any; content: string; }} */ res) => {
         if (state.inspectedSkill && state.inspectedSkill.name === name) {
           state.inspectedSkill.loading = false;
           if (res?.error) state.inspectedSkill.error = res.error;
@@ -547,7 +721,7 @@ const ACTIONS = {
     render();
   },
 
-  inspectTask: (_arg, el) => {
+  inspectTask: (/** @type {any} */ _arg, /** @type {{ dataset: { id: string; name: string; engine: string; source: string; }; }} */ el) => {
     if (!el) return;
     const id = el.dataset.id || '';
     const name = el.dataset.name || '';
@@ -561,7 +735,7 @@ const ACTIONS = {
     render();
 
     if (sourcePath && window.desk?.taskLogs) {
-      window.desk.taskLogs({ sourcePath, engine, taskId: id }).then((res) => {
+      window.desk.taskLogs({ sourcePath, engine, taskId: id }).then((/** @type {{ error: any; logs: string; }} */ res) => {
         if (state.inspectedTask && state.inspectedTask.id === id) {
           state.inspectedTask.loading = false;
           if (res?.error) state.inspectedTask.error = res.error;
@@ -576,10 +750,10 @@ const ACTIONS = {
     render();
   },
 
-  openFolderInExplorer: (_arg, el) => {
+  openFolderInExplorer: (/** @type {any} */ _arg, /** @type {{ dataset: { target: any; }; }} */ el) => {
     const target = el?.dataset?.target;
     if (target && window.desk?.openPath) {
-      window.desk.openPath(target).then((res) => {
+      window.desk.openPath(target).then((/** @type {{ error: any; }} */ res) => {
         if (res?.error) {
           state.error = res.error;
           render();
@@ -729,6 +903,7 @@ const VIEWS = {
  * A full repaint replaces the focused element, so typing would lose focus and caret on every
  * keystroke — and once the SSE stream repaints on each hook event, on every event too. The
  * fields are identified by their `data-act`, which is unique per field and survives the repaint.
+ * @param {{ (): void; (): void; }} paint
  */
 function keepFocus(paint) {
   const active = /** @type {HTMLInputElement|null} */ (document.activeElement);
@@ -748,6 +923,9 @@ function render() {
   keepFocus(() => paint());
 }
 
+/**
+ * @param {string} message
+ */
 function showToast(message, type = 'success') {
   if (state.toastTimer) clearTimeout(state.toastTimer);
   state.toast = { message, type, id: Date.now() };
@@ -826,31 +1004,29 @@ function scheduleRender() {
 if (window.desk?.isDesk) {
   state.loading = true;
 
-  window.desk.subscribe((patch) => {
+  window.desk.subscribe((/** @type {{ agents: object[]; output: { id: string; chunk: string; }; usage: object; repoData: { accounts: object[]; repos: object[]; }; threads: Record<string, any[]>; }} */ patch) => {
     if (patch.agents) data.setLiveAgents(patch.agents);
     if (patch.output) data.pushOutput(patch.output.id, patch.output.chunk);
     if (patch.usage) data.setLiveUsage(patch.usage);
     if (patch.repoData) data.setLiveRepoData(patch.repoData);
     if (patch.threads) data.setLiveThreads(patch.threads);
-    if (patch.timeline) data.setLiveTimeline(patch.timeline);
     scheduleRender();
   });
 
   const initialLoads = [
-    window.desk.repos().then((repoData) => { if (repoData) data.setLiveRepoData(repoData); }),
-    window.desk.conversations().then((conversations) => { if (conversations) data.setLiveConversations(conversations); }),
-    window.desk.agents().then((agents) => { if (agents?.length) data.setLiveAgents(agents); }),
-    window.desk.config?.().then((cfg) => { if (cfg) data.setLiveConfig(cfg); }),
-    window.desk.worktrees().then((worktrees) => { if (worktrees) data.setLiveWorktrees(worktrees); }),
-    window.desk.usage?.().then((usage) => { if (usage) data.setLiveUsage(usage); }),
-    window.desk.scheduledTasks().then((tasks) => { if (tasks) data.setLiveScheduledTasks(tasks); }),
-    window.desk.delivered().then((deliv) => { if (deliv) data.setLiveDelivered(deliv); }),
-    window.desk.skills?.().then((skills) => { if (skills) data.setLiveSkills?.(skills); }),
-    window.desk.threads?.().then((threads) => { if (threads) data.setLiveThreads(threads); }),
-    window.desk.timeline?.().then((tl) => { if (tl) data.setLiveTimeline(tl); }),
+    window.desk.repos().then((/** @type {{ accounts: object[]; repos: object[]; }} */ repoData) => { if (repoData) data.setLiveRepoData(repoData); }),
+    window.desk.conversations().then((/** @type {object[]} */ conversations) => { if (conversations) data.setLiveConversations(conversations); }),
+    window.desk.agents().then((/** @type {string | any[]} */ agents) => { if (agents?.length) data.setLiveAgents(agents); }),
+    window.desk.config?.().then((/** @type {Record<string, any>} */ cfg) => { if (cfg) data.setLiveConfig(cfg); }),
+    window.desk.worktrees().then((/** @type {object[]} */ worktrees) => { if (worktrees) data.setLiveWorktrees(worktrees); }),
+    window.desk.usage?.().then((/** @type {object} */ usage) => { if (usage) data.setLiveUsage(usage); }),
+    window.desk.scheduledTasks().then((/** @type {object[]} */ tasks) => { if (tasks) data.setLiveScheduledTasks(tasks); }),
+    window.desk.delivered().then((/** @type {any[]} */ deliv) => { if (deliv) data.setLiveDelivered(deliv); }),
+    window.desk.skills?.().then((/** @type {any[]} */ skills) => { if (skills) data.setLiveSkills?.(skills); }),
+    window.desk.threads?.().then((/** @type {Record<string, any[]>} */ threads) => { if (threads) data.setLiveThreads(threads); }),
   ];
 
-  window.desk.quotas?.().then((quotas) => {
+  window.desk.quotas?.().then((/** @type {object} */ quotas) => {
     if (quotas) {
       data.setLiveQuotas(quotas);
       scheduleRender();
@@ -867,7 +1043,7 @@ if (window.desk?.isDesk) {
   // so it gets its own poll, cheap fs reads only, and only while the tab is actually open.
   setInterval(() => {
     if (state.view === 'scheduled') {
-      window.desk.scheduledTasks().then((tasks) => { data.setLiveScheduledTasks(tasks); render(); });
+      window.desk.scheduledTasks().then((/** @type {object[]} */ tasks) => { data.setLiveScheduledTasks(tasks); render(); });
     }
   }, 5000);
 }

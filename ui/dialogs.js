@@ -346,7 +346,7 @@ function editConfigDialog(state, _data) {
           ${esc(cfg.section)} · <span class="mono" style="color:var(--color-dark-text-1)">${esc(cfg.key)}</span>
         </div>
       </div>
-      <button class="btn-ghost" data-act="closeEditConfig" style="padding:4px 8px;font-size:11px">✕</button>
+      <button class="btn-ghost" data-act="closeEditConfig" ${cfg.saving ? 'disabled' : ''} style="padding:4px 8px;font-size:11px">✕</button>
     </div>
     <form data-act="submitEditConfig" style="margin:0">
       <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
@@ -358,8 +358,8 @@ function editConfigDialog(state, _data) {
       </div>
       <div style="display:flex;gap:9px;justify-content:flex-end;padding:13px 18px;
            border-top:1px solid var(--color-dark-border);background:var(--app-surface-sunken)">
-        <button type="button" class="btn-ghost" data-act="closeEditConfig">Cancelar</button>
-        <button type="submit" class="btn-primary" style="padding:9px 18px">Guardar cambios</button>
+        <button type="button" class="btn-ghost" data-act="closeEditConfig" ${cfg.saving ? 'disabled' : ''}>Cancelar</button>
+        <button type="submit" class="btn-primary" style="padding:9px 18px" ${cfg.saving ? 'disabled' : ''}>${cfg.saving ? 'Guardando…' : 'Guardar cambios'}</button>
       </div>
     </form>
   `, 480, 'closeEditConfig');

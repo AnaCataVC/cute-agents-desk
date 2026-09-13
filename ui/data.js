@@ -9,7 +9,7 @@
 
 /** @typedef {'thinking'|'tool'|'approval'|'blocked'|'idle'|'done'} AgentState */
 
-/** State -> label and token. The single source for card border, timeline bar and graph edge. */
+/** State -> label and token. The single source for card border and graph edge. */
 export const STATES = {
   thinking: { label: 'pensando', color: 'var(--state-thinking)' },
   tool: { label: 'herramienta', color: 'var(--state-tool)' },
@@ -46,14 +46,25 @@ export function setLiveRepoData({ accounts, repos }) {
 
 export function getAccounts() { return liveAccounts ?? []; }
 
+/**
+ * @param {object[] | null} accounts
+ */
 export function setAccounts(accounts) { liveAccounts = accounts; }
 
+/**
+ * @param {any} accountId
+ * @param {any} color
+ */
 export function updateAccountColor(accountId, color) {
   if (!liveAccounts) return;
   const acc = liveAccounts.find((a) => a.id === accountId);
   if (acc) acc.color = color;
 }
 
+/**
+ * @param {any} accountId
+ * @param {any} editor
+ */
 export function updateAccountEditor(accountId, editor) {
   if (!liveAccounts) return;
   const acc = liveAccounts.find((a) => a.id === accountId);
@@ -133,7 +144,7 @@ function accountIdForCwd(cwd) {
   if (!cwd) return undefined;
   const normalized = cwd.replace(/\\/g, '/').toLowerCase();
   const owner = (liveAccounts || []).find((acc) => (acc.folders || [])
-    .some((f) => normalized.startsWith(f.path.replace(/\\/g, '/').toLowerCase())));
+    .some((/** @type {{ path: string; }} */ f) => normalized.startsWith(f.path.replace(/\\/g, '/').toLowerCase())));
   return owner?.id;
 }
 
@@ -141,6 +152,7 @@ function accountIdForCwd(cwd) {
  * A real agent in the shape the card reads. What the harness does not know yet at this stage
  * says so rather than being invented: a card showing a plausible branch it never checked is
  * worse than one showing a dash.
+ * @param {{ id: string | number; engine: string; repo: any; cwd: string | undefined; state: string; tokens: any; tokenCap: any; elapsed: any; role: string; replyTo: any; tool: any; costUsd: any; task: any; model: any; effort: any; mode: any; conversationId: any; }} a
  */
 function fromLive(a) {
   return {
@@ -174,7 +186,13 @@ function fromLive(a) {
 /** Agents shown as cards on the dispatch tab. `ctxPct` is what the ring fills. */
 export function getAgents() { return liveAgents.map(fromLive); }
 
+/**
+ * @type {any[]}
+ */
 let liveDelivered = [];
+/**
+ * @param {any[]} list
+ */
 export function setLiveDelivered(list) { liveDelivered = Array.isArray(list) ? list : []; }
 
 /** @type {() => object[]} tasks with a merged/drafted PR -- delivered tasks */
@@ -346,7 +364,10 @@ export function getFlows() {
 let liveThreads = {};
 /** @param {Record<string, any[]>} threads */
 export function setLiveThreads(threads) { liveThreads = threads || {}; }
-/** Thread messages, keyed by agent id. Authors: boss | sub | user | sys | tool. */
+/**
+ * Thread messages, keyed by agent id. Authors: boss | sub | user | sys | tool.
+ * @param {string | number} agentId
+ */
 export function getThread(agentId) { return liveThreads[agentId] || []; }
 
 /** Author -> colour pair for the thread bubbles. */
@@ -411,6 +432,9 @@ export function getEngines() {
   ];
 }
 
+/**
+ * @type {any[] | null}
+ */
 let liveSkills = null;
 /** @param {any[]} skills */
 export function setLiveSkills(skills) { liveSkills = Array.isArray(skills) ? skills : null; }
@@ -444,6 +468,9 @@ export const SKILL_STATES = {
 let liveAgentSkills = {};
 /** @param {Record<string, any[]>} skills */
 export function setLiveAgentSkills(skills) { liveAgentSkills = skills || {}; }
+/**
+ * @param {string | number} agentId
+ */
 export function getAgentSkills(agentId) { return liveAgentSkills[agentId] || []; }
 
 let liveConflicts = {};
@@ -463,21 +490,33 @@ export function getDiffs() { return liveDiffs; }
 
 export const SERIES_NO_DATA_FROM = new Date().getHours() + 1;
 
+/**
+ * @type {object | null}
+ */
 let liveServerUsage = null;
 /** @param {object} usage */
 export function setLiveUsage(usage) { liveServerUsage = usage; }
 
+/**
+ * @type {object | null}
+ */
 let liveQuotas = null;
 /** @param {object} quotas */
 export function setLiveQuotas(quotas) { liveQuotas = quotas; }
 export function getQuotas() { return liveQuotas; }
 
+/**
+ * @param {number} n
+ */
 function fmtTokens(n) {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)} M`;
   if (n >= 1000) return `${Math.round(n / 1000)} k`;
   return `${n} `;
 }
 
+/**
+ * @param {any} c
+ */
 function fmtCost(c) {
   return `$${(c || 0).toFixed(2)}`;
 }
@@ -661,41 +700,27 @@ export function getScanSummary() {
   };
 }
 
+/**
+ * @type {any[]}
+ */
 let liveScanCandidates = [];
 /** @param {any[]} candidates */
 export function setLiveScanCandidates(candidates) { liveScanCandidates = Array.isArray(candidates) ? candidates : []; }
 export function getScanCandidates() { return liveScanCandidates; }
 
-let liveTimeline = null;
-/** @param {object} tl */
-export function setLiveTimeline(tl) { liveTimeline = tl; }
 
-/** Timeline: one lane per agent, bars are state runs inside the window. */
-export function getTimeline() {
-  if (liveTimeline && Array.isArray(liveTimeline.lanes) && liveTimeline.lanes.length > 0) {
-    return liveTimeline;
-  }
-  const agents = getAgents();
-  if (agents.length === 0) {
-    return { window: 'sesión actual', ticks: ['-30m', '-20m', '-10m', 'ahora'], lanes: [] };
-  }
-  return {
-    window: 'sesión actual',
-    ticks: ['-30m', '-20m', '-10m', 'ahora'],
-    lanes: agents.map((a) => {
-      const isLive = LIVE.includes(a.state);
-      return {
-        agent: a.id,
-        bars: [[a.state || 'thinking', isLive ? 20 : 0, isLive ? 80 : 100]],
-      };
-    }),
-  };
-}
-
+/**
+ * @type {Record<string, any> | null}
+ */
 let liveConfig = null;
 /** @param {Record<string, any>} config */
 export function setLiveConfig(config) { liveConfig = config; }
 export function getLiveConfig() { return liveConfig; }
+/**
+ * @param {string | number} section
+ * @param {string | number} key
+ * @param {any} value
+ */
 export function updateLiveConfigKey(section, key, value) {
   if (!liveConfig) liveConfig = {};
   if (!liveConfig[section]) liveConfig[section] = {};
@@ -754,7 +779,6 @@ export function getSettings() {
       ['Scrollback por terminal', `${p.terminalScrollbackLines ?? 2000} líneas`, 'perf', 'terminalScrollbackLines'],
       ['Refresco de tarjetas', `${(p.cardRefreshIntervalMs ?? 1000) / 1000} s`, 'perf', 'cardRefreshIntervalMs'],
       ['Animaciones de estado', p.statusAnimations ?? true, 'perf', 'statusAnimations'],
-      ['Ventana del timeline', `${p.timelineWindowMinutes ?? 30} min`, 'perf', 'timelineWindowMinutes'],
       ['Rotar el registro de eventos', `${p.eventLogRotationMb ?? 50} MB`, 'perf', 'eventLogRotationMb'],
     ],
     advanced: [

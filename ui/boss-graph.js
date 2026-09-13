@@ -12,7 +12,6 @@
 
 import { robot, STATE_ROBOT } from './robot.js';
 import { ringByState, shortTokens } from './ring.js';
-import { renderTimeline } from './timeline.js';
 import { LIVE } from './data.js';
 import { esc } from './esc.js';
 
@@ -337,6 +336,5 @@ export function renderFlows(state, data) {
       también se enlazan entre ellos cuando se pasan contexto sin pasar por él.
     </div>
     ${empty || body}
-    <div style="margin-top:18px">${renderTimeline(state, data)}</div>
   </div>`;
 }

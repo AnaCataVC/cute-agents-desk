@@ -51,7 +51,6 @@ The configuration store must guarantee forward and backward compatibility. When 
     "terminalScrollbackLines": 2000,
     "cardRefreshIntervalMs": 1000,
     "statusAnimations": true,
-    "timelineWindowMinutes": 30,
     "eventLogRotationMb": 50
   },
   "advanced": {

@@ -119,8 +119,6 @@ class Registry {
     this.completedHourlySeries = Array(24).fill(0);
     /** @type {Map<string, Array<[string, string, string, string]>>} */
     this.threads = new Map();
-    /** @type {Map<string, Array<{ state: string, start: number, end?: number }>>} */
-    this.agentRuns = new Map();
     paths.ensure();
     this.loadTodayUsage();
   }
@@ -148,65 +146,6 @@ class Registry {
       out[k] = [...v];
     }
     return out;
-  }
-
-  /**
-   * Record a state run interval for an agent.
-   * @param {string} agentId
-   * @param {string} state
-   * @param {number} [timestamp]
-   */
-  recordStateRun(agentId, state, timestamp = Date.now()) {
-    if (!agentId || !state) return;
-    if (!this.agentRuns.has(agentId)) this.agentRuns.set(agentId, []);
-    const runs = this.agentRuns.get(agentId);
-    if (runs.length > 0) {
-      const prev = runs[runs.length - 1];
-      if (prev.state === state) return;
-      if (!prev.end) prev.end = timestamp;
-    }
-    runs.push({ state, start: timestamp, end: undefined });
-    if (runs.length > 100) runs.shift();
-  }
-
-  /**
-   * Project state runs into the timeline structure expected by ui/timeline.js.
-   * @param {number} [windowMinutes=30]
-   */
-  getTimelineData(windowMinutes = 30) {
-    const now = Date.now();
-    const windowMs = windowMinutes * 60 * 1000;
-    const windowStart = now - windowMs;
-
-    const lanes = [];
-    for (const [agentId, runs] of this.agentRuns) {
-      const bars = [];
-      for (const run of runs) {
-        const runStart = run.start;
-        const runEnd = run.end || now;
-        if (runEnd < windowStart || runStart > now) continue;
-
-        const effectiveStart = Math.max(runStart, windowStart);
-        const effectiveEnd = Math.min(runEnd, now);
-        const duration = effectiveEnd - effectiveStart;
-        if (duration <= 0) continue;
-
-        const fromPct = +(((effectiveStart - windowStart) / windowMs) * 100).toFixed(1);
-        const lenPct = +((duration / windowMs) * 100).toFixed(1);
-        if (lenPct > 0) {
-          bars.push([run.state, fromPct, lenPct]);
-        }
-      }
-      if (bars.length > 0 || this.agents.has(agentId)) {
-        lanes.push({ agent: agentId, bars });
-      }
-    }
-
-    return {
-      window: `últimos ${windowMinutes} min`,
-      ticks: [`-${windowMinutes}m`, `-${Math.round(windowMinutes * 0.66)}m`, `-${Math.round(windowMinutes * 0.33)}m`, 'ahora'],
-      lanes,
-    };
   }
 
   /**
@@ -249,7 +188,6 @@ class Registry {
     this.watch(agent.id);
     this.watchOutbox(agent.id);
     this.append({ event: 'AgentSpawned', at: new Date().toISOString(), agentId: agent.id, payload: { cwd: agent.cwd, task: agent.task, pid: agent.pid, tokenCap: opts.tokenCap, replyTo: opts.replyTo, role: opts.role, mode: agent.mode || opts.mode || 'write', model: agent.model || opts.model || null, effort: agent.effort || opts.effort || null } });
-    this.recordStateRun(agent.id, 'spawning');
     this.recordMessage(agent.id, 'sys', 'harness', `Sesión iniciada en ${path.basename(agent.cwd)}`);
     if (opts.replyTo) this.notifyCoordinator(opts.replyTo, agent.id, `arranco en ${path.basename(agent.cwd)}: ${agent.task}`);
     this.publish();
@@ -338,7 +276,6 @@ class Registry {
     const next = STATE_BY_EVENT[report.event];
     if (next) {
       agent.state = next;
-      this.recordStateRun(id, next);
     }
 
     if (report.event === 'PreToolUse') {
@@ -349,21 +286,17 @@ class Registry {
       }
       if (ALWAYS_ASK.test(toolNameOf(report.payload))) {
         agent.state = 'approval';
-        this.recordStateRun(id, 'approval');
       }
     }
     if (report.event === 'PostToolUse') {
       agent.tool = 'pensando';
-      this.recordStateRun(id, 'thinking');
     }
     if (report.event === 'Notification' && report.payload?.message) {
       agent.tool = report.payload.message;
       this.recordMessage(id, 'sys', 'harness', `Esperando: ${report.payload.message}`);
-      this.recordStateRun(id, 'blocked');
     }
     if (report.event === 'Stop') {
       agent.tool = 'turno terminado';
-      this.recordStateRun(id, 'idle');
     }
 
     // "Cuando queda bloqueado" from the plan's three automatic moments — only Notification
@@ -438,12 +371,10 @@ class Registry {
     }
     if (agent.failReason === 'token-cap') {
       agent.tool = `sesión cerrada por tope de tokens (${agent.tokens}/${agent.tokenCap})`;
-      this.recordStateRun(id, 'failed');
       this.recordMessage(id, 'sys', 'harness', `Sesión cerrada por tope de tokens (${agent.tokens}/${agent.tokenCap})`);
     } else {
       agent.state = code === 0 ? 'done' : 'failed';
       agent.tool = code === 0 ? 'sesión cerrada' : `salió con código ${code}`;
-      this.recordStateRun(id, agent.state);
       this.recordMessage(id, 'sys', 'harness', code === 0 ? 'Sesión cerrada con éxito' : `Salió con código ${code}`);
     }
     // The third automatic moment: done or failed. Uses the coordinator's handle, not this
@@ -594,21 +525,12 @@ class Registry {
           }
 
           if (entry.agentId) {
-            const parsedAt = Date.parse(entry.at) || Date.now();
             if (entry.event === 'AgentSpawned') {
-              this.recordStateRun(entry.agentId, 'thinking', parsedAt);
               this.recordMessage(entry.agentId, 'sys', 'harness', `Sesión iniciada (${entry.payload?.task || ''})`);
             } else if (entry.event === 'PreToolUse') {
               const tDesc = describeTool(entry.payload);
               if (tDesc) this.recordMessage(entry.agentId, 'tool', 'herramienta', tDesc);
-              this.recordStateRun(entry.agentId, 'tool', parsedAt);
-            } else if (entry.event === 'PostToolUse') {
-              this.recordStateRun(entry.agentId, 'thinking', parsedAt);
-            } else if (entry.event === 'Notification') {
-              this.recordStateRun(entry.agentId, 'blocked', parsedAt);
             } else if (entry.event === 'AgentExited') {
-              const st = entry.payload?.code === 0 ? 'done' : 'failed';
-              this.recordStateRun(entry.agentId, st, parsedAt);
               this.recordMessage(entry.agentId, 'sys', 'harness', entry.payload?.code === 0 ? 'Sesión cerrada con éxito' : `Salió con código ${entry.payload?.code}`);
             } else if (entry.event === 'UserInputInjected' && entry.payload?.text) {
               this.recordMessage(entry.agentId, 'user', 'tú', entry.payload.text);
@@ -703,7 +625,7 @@ class Registry {
   }
 
   publish() {
-    this.onChange(this.list(), this.getUsage(), this.getThreads(), this.getTimelineData());
+    this.onChange(this.list(), this.getUsage(), this.getThreads());
     this.writeConversationStatuses();
   }
 
