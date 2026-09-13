@@ -81,11 +81,11 @@ isolation, read-only mode, the full `agy` engine), and pure `node:assert` unit t
 state-machine logic (token cap, scheduler, conversations, mailbox draining).
 
 ```bash
-npm test        # runs the 22 fast scripts that need no real CLI and no window, in one shot
+npm test        # runs the 26 fast scripts that need no real CLI and no window, in one shot
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 22 `verify-*.js` scripts MEASURED to finish in
+`npm test` (`tools/verify-all.js`) runs the 26 `verify-*.js` scripts MEASURED to finish in
 seconds under plain `node`. The rest need a real CLI turn, an Electron window, or packaged
 binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay manual, run one at a time:
 
@@ -123,7 +123,7 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `events.js` | `Registry`: hook → state, the worker↔coordinator mailbox, `status.json`, the token cap |
 | `worktree.js` | Per-`git worktree` isolation for write-mode tasks (`claude` and `agy`) with semantic branch naming |
 | `delivery.js` | Delivery pipeline: account identity, commit dirty worktree files, safe push to origin, and draft PR (`gh pr create --draft`) |
-| `scheduler.js` | The parallelism cap, global and per-conversation, enforced before any spawn |
+| `scheduler.js` | Concurrency caps and acyclic task orchestration (DAG with DFS cycle detection and fail-fast cascade) |
 | `conversations.js` | A conversation is a folder: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | The coordinator's prompt and the draining of its `spawn-requests` |
 | `config.js` | Hardened configuration store (`config.json`): canonical defaults, deep merge, prototype pollution guards, numerical bounds clamping, and atomic replacement |

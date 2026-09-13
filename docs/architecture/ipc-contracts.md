@@ -143,12 +143,75 @@ Extracts official subscription limits and usage windows directly from CLI binari
 
 ---
 
+### 2.5 Worktrees & Delivery Pipeline
+
+#### `desk:reapCleanWorktrees`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** None
+* **Returns:** `Promise<{ totalReaped: number, reaped: string[], skipped: Array<{ agentId: string, reason: string }> }>`
+* **Invariants:**
+  - Strictly preserves running agents (`skipped: 'running'`).
+  - Strictly preserves worktrees with uncommitted changes (`hasUncommittedChanges === true`, `skipped: 'dirty'`).
+  - Safely prunes clean or delivered inactive worktrees without leaving dangling references in `.git/worktrees`.
+
+### 2.6 Agent Interaction, Threads & Task DAG Subsystem
+
+Provides structured inter-agent message histories, visual timeline projection, and interactive user input injection.
+
+#### `desk:threads`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** None
+* **Returns:** `Promise<Record<string, Array<ThreadMessage>>>`
+* **Schema:**
+  ```typescript
+  interface ThreadMessage {
+    id: string;                      // Message identifier
+    who: string;                     // Sender label (e.g. "tú", "trabajador", "coordinador")
+    kind: 'user' | 'agent' | 'event' | 'tool';
+    text: string;                    // Sanitized message content
+    time: string;                    // HH:MM timestamp
+  }
+  ```
+
+#### `desk:timeline`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** None
+* **Returns:** `Promise<TimelineData>`
+* **Schema:**
+  ```typescript
+  interface TimelineData {
+    window: string;                  // e.g. "últimos 30 min"
+    ticks: string[];                 // Time markers
+    lanes: Array<{
+      id: string;                    // Agent identifier
+      name: string;                  // Display name
+      runs: Array<{
+        state: 'running' | 'tool' | 'idle' | 'blocked' | 'done';
+        startPct: number;            // 0 - 100% relative to window start
+        widthPct: number;            // 0 - 100% relative duration
+      }>;
+    }>;
+  }
+  ```
+
+#### `desk:sendInput`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** `{ agentId: string, text: string }`
+* **Returns:** `Promise<{ ok: boolean, error?: string }>`
+* **Invariants:**
+  - Strict ANSI escape sequence stripping (`/\x1b\[[0-9;?]*[a-zA-Z].../`).
+  - Text length capped at 4000 characters.
+  - Rejection with friendly error when the target agent is actively running a tool (`state === 'tool'`).
+  - Automatic routing to coordinator PTY when interacting with worker agents possessing a `replyTo` relationship.
+
+---
+
 ## 3. Asynchronous Main-to-Renderer Push Channels
 
 The main process broadcasts state mutations reactively to all active `BrowserWindow` instances using `webContents.send()`:
 
 | Channel | Trigger Event | Payload Description |
 | :--- | :--- | :--- |
-| `desk:patch` | Agent state changes, token increments, or repo status updates | Incremental state diff object applied optimistically in `ui/data.js`. |
+| `desk:patch` | Agent state changes, token increments, threads, or timeline updates | Incremental state diff object applied optimistically in `ui/data.js`. |
 | `desk:agent-log` | Worker or coordinator PTY output chunk | `{ agentId: string, chunk: string }` stream for live terminal views. |
 | `desk:task-status` | Scheduled task execution start / completion | `{ taskId: string, status: string, timestamp: number }`. |

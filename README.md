@@ -82,11 +82,11 @@ puras de `node:assert` para lógica de máquina de estados (tope de tokens, sche
 conversaciones, el drenado del buzón).
 
 ```bash
-npm test        # corre de un tiro los 22 que son rápidos y no necesitan un CLI real ni ventana
+npm test        # corre de un tiro los 26 que son rápidos y no necesitan un CLI real ni ventana
 npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm test` (`tools/verify-all.js`) corre los 22 `verify-*.js` que MEDIDO tardan segundos bajo
+`npm test` (`tools/verify-all.js`) corre los 26 `verify-*.js` que MEDIDO tardan segundos bajo
 `node` puro. Los que quedan afuera necesitan un turno real de CLI, una ventana de Electron o validación
 del binario empaquetado (`verify-dist-binary.js` tras `npm run dist`). Esos se corren aparte, uno a la vez:
 
@@ -124,7 +124,7 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `events.js` | `Registry`: hook → estado, el buzón worker↔coordinador, `status.json`, el tope de tokens |
 | `worktree.js` | Aislamiento por `git worktree` para tareas de escritura (`claude` y `agy`) con nombres de rama semánticos |
 | `delivery.js` | Pipeline de entrega: autoría de cuenta, commits, push seguro a `origin` y PR en borrador (`gh pr create --draft`) |
-| `scheduler.js` | El tope de paralelismo, global y por conversación, impuesto antes de cualquier spawn |
+| `scheduler.js` | El tope de paralelismo y orquestación acíclica de tareas (DAG con detección DFS de ciclos y cascada fail-fast) |
 | `conversations.js` | Una conversación es una carpeta: `conversation.json`, `status.json`, `agents/` |
 | `coordinator.js` | El prompt del coordinador y el drenado de sus `spawn-requests` |
 | `config.js` | Almacén endurecido de configuración (`config.json`): defaults canónicos, deep merge, guardas contra Prototype Pollution, acotamiento numérico y reemplazo atómico |
