@@ -132,6 +132,37 @@ let lastFetchedAt = 0;
 let activeFetchPromise = null;
 
 /**
+ * Fetches Claude Code quota or authentication status.
+ * Checks `claude auth status --json` first to avoid hanging or timing out when not logged in.
+ * @param {number} [timeoutMs]
+ */
+async function fetchClaudeUsage(timeoutMs = 8000) {
+  try {
+    const authRaw = await execCli('claude', ['auth', 'status', '--json'], timeoutMs);
+    if (authRaw) {
+      try {
+        const auth = JSON.parse(authRaw);
+        if (auth && auth.loggedIn === false) {
+          return {
+            notLoggedIn: true,
+            sessionUsedPct: null,
+            weekAllModelsUsedPct: null,
+            weekResetsAt: null,
+          };
+        }
+      } catch {
+        // If not JSON, continue to /usage
+      }
+    }
+
+    const usageRaw = await execCli('claude', ['-p', '/usage'], timeoutMs);
+    return parseClaudeUsage(usageRaw);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetches current quota statuses for Claude and AGY.
  * @param {{forceRefresh?: boolean, timeoutMs?: number}} [opts]
  */
@@ -147,12 +178,11 @@ async function getQuotas(opts = {}) {
 
   activeFetchPromise = (async () => {
     try {
-      const [claudeRaw, agyRaw] = await Promise.all([
-        execCli('claude', ['-p', '/usage'], opts.timeoutMs || 8000),
+      const [claude, agyRaw] = await Promise.all([
+        fetchClaudeUsage(opts.timeoutMs || 8000),
         execCli('agy', ['-p', '/usage'], opts.timeoutMs || 8000),
       ]);
 
-      const claude = parseClaudeUsage(claudeRaw);
       const agy = parseAgyUsage(agyRaw);
 
       cachedQuotas = {
@@ -173,6 +203,7 @@ async function getQuotas(opts = {}) {
 module.exports = {
   parseAgyUsage,
   parseClaudeUsage,
+  fetchClaudeUsage,
   getQuotas,
   CACHE_TTL_MS,
 };
