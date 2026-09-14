@@ -1,16 +1,16 @@
 // @ts-check
 /**
- * The agy counterpart to verify-phase1.js: one real `agy` session, on a toy repo, through the
+ * The agy counterpart to verify-claude-live.js: one real `agy` session, on a toy repo, through the
  * actual harness (agent.js's spawn() + events.js's Registry, same pairing main.js uses), not a
  * standalone probe script. Confirms the schema/cwd fix (agyHooksFor, effectiveCwd = the harness's
  * own agent dir, --add-dir for the real repo) actually produces real, parseable hook events end
- * to end -- the same gate `--smoke` and verify-phase1.js already give claude.
+ * to end -- the same gate `--smoke` and verify-claude-live.js already give claude.
  *
- * Deliberately narrower than verify-phase1.js: no worktree isolation exists for agy yet (see
+ * Deliberately narrower than verify-claude-live.js: no worktree isolation exists for agy yet (see
  * agent.js's comment on that), and there is no known statusLine-equivalent for agy, so token
  * tracking is not asserted here -- both are known, reported gaps, not oversights.
  *
- * Run with: node tools/verify-agy-phase1.js
+ * Run with: npm run verify:agy
  */
 
 require('./test-home.js');
@@ -42,8 +42,8 @@ async function main() {
       onExit: (code) => { if (!done) { done = true; registry.exited(id, code); resolve(undefined); } },
     });
     registry.register(agent);
-    // Interactive session never exits on its own after one turn -- same reason verify-phase1.js
-    // kills claude 1.5s after 'idle': give it a real window to actually run the tool, then end
+    // Interactive session never exits on its own after one turn -- same reason verify-claude-live.js
+    // kills its own agent in a deadline timer. Five seconds of silence after seeing the hook, then end
     // the session ourselves. agy took noticeably longer than claude to settle on the right path
     // in manual runs, so this window is generous on purpose.
     setTimeout(() => { if (!done) { done = true; agent.kill(); resolve(undefined); } }, 75000);

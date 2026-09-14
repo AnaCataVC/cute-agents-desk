@@ -29,7 +29,7 @@ app.whenReady().then(() => {
   const startedAt = new Date().toISOString();
   const readmeBefore = fs.readFileSync(path.join(cwd, 'README.md'), 'utf8');
   // The toy repo is reused across verification scripts and isn't guaranteed clean going in
-  // (verify-phase1 resets the file's content but never commits) — so the bar is "no new dirt
+  // (verify-claude-live resets the file's content but never commits) — so the bar is "no new dirt
   // from this run", not "empty", which would fail on leftovers this script had no part in.
   const statusBefore = gitStatus(cwd);
   const seen = [];

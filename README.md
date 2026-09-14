@@ -93,8 +93,8 @@ del binario empaquetado (`verify-dist-binary.js` tras `npm run dist`). Esos se c
 
 ```bash
 node tools/verify-dist-binary.js                                     # valida el ejecutable empaquetado en dist/
-node tools/verify-phase1.js                                          # agente claude real, de punta a punta
-node tools/verify-agy-phase1.js                                      # lo mismo, con agy
+npm run verify:claude                                                # agente claude real, de punta a punta (tools/verify-claude-live.js)
+npm run verify:agy                                                   # lo mismo, con agy (tools/verify-agy-live.js)
 npx electron tools/verify-read-mode.js
 npx electron tools/verify-hook-isolation.js
 npx electron tools/verify-coordinator-e2e.js

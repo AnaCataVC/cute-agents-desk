@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "author": "AnaCataVC <anacatalina@outlook.cl>",
   "description": "Despacho local de agentes: coordinadores, repos y entregas",
   "main": "electron/main.js",
   "scripts": {
@@ -11,12 +12,13 @@
     "smoke": "electron . --smoke",
     "icon": "electron tools/make-ico.js",
     "test": "node tools/verify-all.js",
-    "verify": "electron tools/verify-phase1.js",
+    "verify": "electron tools/verify-claude-live.js",
+    "verify:claude": "electron tools/verify-claude-live.js",
+    "verify:agy": "electron tools/verify-agy-live.js",
     "dist": "electron-builder --win",
-    "rebuild": "electron-rebuild -f -w node-pty"
+    "rebuild": "electron-builder install-app-deps"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
     "electron": "^44.3.0",
     "electron-builder": "^26.0.12"
   },

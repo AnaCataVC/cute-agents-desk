@@ -56,8 +56,8 @@ The testing framework is split into two primary tiers:
 | Script | Execution Command | When to Run |
 | :--- | :--- | :--- |
 | `verify-dist-binary.js` | `node tools/verify-dist-binary.js` | Run after `npm run dist` to verify that the packaged desktop binary in `dist/win-unpacked/` launches cleanly. |
-| `verify-phase1.js` | `npm run verify` | End-to-end integration test with a live Claude Code agent in a real PTY. |
-| `verify-agy-phase1.js` | `node tools/verify-agy-phase1.js` | End-to-end integration test with a live Antigravity CLI agent. |
+| `verify-claude-live.js` | `npm run verify:claude` (or `npm run verify`) | End-to-end integration test with a live Claude Code agent in a real PTY. |
+| `verify-agy-live.js` | `npm run verify:agy` | End-to-end integration test with a live Antigravity CLI agent. |
 | `verify-read-mode.js` | `npx electron tools/verify-read-mode.js` | Verifies that read-only mode denies filesystem writes via runtime hooks. |
 | `verify-hook-isolation.js` | `npx electron tools/verify-hook-isolation.js` | Verifies hook isolation across concurrent agents. |
 | `verify-coordinator-e2e.js` | `npx electron tools/verify-coordinator-e2e.js` | End-to-end multi-agent coordination with live CLI processes. |

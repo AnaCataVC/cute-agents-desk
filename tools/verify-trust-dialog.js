@@ -3,7 +3,7 @@
  * MEASURED 2026-09-10: claude's and agy's workspace-trust dialogs show the same phrase but
  * default the cursor to opposite options (see agent.js's trustDialogFor doc comment). Pure
  * logic, no PTY needed — the live proof that this actually lands correctly on screen is
- * tools/verify-phase1.js for claude; agy's own live proof is blocked on the separate hooks gap.
+ * tools/verify-claude-live.js for claude; agy's own live proof is blocked on the separate hooks gap.
  *
  * Run with: node tools/verify-trust-dialog.js
  */

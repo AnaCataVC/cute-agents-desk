@@ -11,7 +11,7 @@
  *      stripping worked. Run this from inside a Claude Code session and it is a real
  *      counter-proof: without the stripping, the child adopts this session and saves nothing.
  *
- * Run with: npm run verify
+ * Run with: npm run verify:claude (or npm run verify)
  */
 
 require('./test-home.js');
@@ -100,7 +100,7 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error(`\nno se pudo lanzar el PTY: ${err.message}`);
     console.error('si dice NODE_MODULE_VERSION, node-pty esta compilado para node y no para electron:');
-    console.error('  npx @electron/rebuild -f -w node-pty');
+    console.error('  npm run rebuild');
     app.exit(1);
     return;
   }

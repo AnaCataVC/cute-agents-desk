@@ -92,8 +92,8 @@ binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay m
 
 ```bash
 node tools/verify-dist-binary.js                                     # validates packaged executable in dist/
-node tools/verify-phase1.js                                          # a real claude agent, end to end
-node tools/verify-agy-phase1.js                                      # the same, with agy
+npm run verify:claude                                                # a real claude agent, end to end (tools/verify-claude-live.js)
+npm run verify:agy                                                   # the same, with agy (tools/verify-agy-live.js)
 npx electron tools/verify-read-mode.js
 npx electron tools/verify-hook-isolation.js
 npx electron tools/verify-coordinator-e2e.js

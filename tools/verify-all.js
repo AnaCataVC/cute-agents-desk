@@ -49,8 +49,8 @@ const FAST = [
 
 const MANUAL = [
   ['verify-dist-binary.js', 'node tools/verify-dist-binary.js'],
-  ['verify-phase1.js', 'npm run verify'],
-  ['verify-agy-phase1.js', 'node tools/verify-agy-phase1.js'],
+  ['verify-claude-live.js', 'npm run verify:claude'],
+  ['verify-agy-live.js', 'npm run verify:agy'],
   ['verify-read-mode.js', 'node_modules/electron/dist/electron.exe tools/verify-read-mode.js'],
   ['verify-hook-isolation.js', 'node_modules/electron/dist/electron.exe tools/verify-hook-isolation.js'],
   ['verify-coordinator-e2e.js', 'node_modules/electron/dist/electron.exe tools/verify-coordinator-e2e.js'],
