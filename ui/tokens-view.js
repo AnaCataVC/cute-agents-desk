@@ -96,9 +96,20 @@ function quotasSection(quotas) {
   const rows = [];
   if (quotas.claude) {
     const c = quotas.claude;
-    const weekUsed = c.weekAllModelsUsedPct ?? 0;
-    const detail = c.weekResetsAt ? `reinicio: ${c.weekResetsAt}` : '';
-    rows.push(quotaBar('Claude Code (Semana)', weekUsed, weekUsed >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));
+    if (c.notLoggedIn) {
+      rows.push(`
+      <div style="margin-bottom:8px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px">
+          <span style="font:500 11px var(--font-body);color:var(--color-dark-text-1)">Claude Code</span>
+          <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">no autenticado</span>
+        </div>
+        <div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3)">Ejecuta "claude auth login" para ver cuotas</div>
+      </div>`);
+    } else {
+      const weekUsed = c.weekAllModelsUsedPct ?? 0;
+      const detail = c.weekResetsAt ? `reinicio: ${c.weekResetsAt}` : '';
+      rows.push(quotaBar('Claude Code (Semana)', weekUsed, weekUsed >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));
+    }
   }
 
   if (quotas.agy) {
@@ -198,47 +209,10 @@ function sessionTable(agents, usage) {
   </div>`;
 }
 
-function coordRow(flow) {
-  const tokens = flow.roster.reduce((sum, a) => sum + a.tokens, 0);
-  return `
-  <div style="display:flex;align-items:center;gap:10px;padding:8px 11px;background:var(--color-dark-bg);
-       border:1px solid var(--color-dark-border);border-radius:9px">
-    <span class="mono" style="font-size:11px;font-weight:500">${esc(flow.short)}</span>
-    <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${flow.roster.length} agentes · ${esc(flow.turns)} turnos</span>
-    <span class="mono" style="margin-left:auto;font-size:10.5px;color:var(--color-dark-text-2)">${shortTokens(tokens)}</span>
-    <span class="mono" style="font-size:10.5px;width:52px;text-align:right">$${flow.cost.toFixed(2)}</span>
-  </div>`;
-}
-
-function accountRow(a) {
-  const tokenLabel = a.hasToday
-    ? `${esc(a.tokens)} · ${esc(a.cost)}`
-    : (a.allTimeTokens && a.allTimeTokens.trim() !== '0'
-      ? `0 hoy (hist: ${esc(a.allTimeTokens)})`
-      : `${esc(a.tokens)} · ${esc(a.cost)}`);
-  return `
-  <div>
-    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-      <span style="width:8px;height:8px;border-radius:var(--radius-full);background:${a.color}"></span>
-      <span class="mono" style="font-size:11px">${esc(a.name)}</span>
-      <span class="mono" style="margin-left:auto;font-size:10.5px;color:var(--color-dark-text-2)">
-        ${tokenLabel}</span>
-    </div>
-    <div style="display:flex;height:7px;border-radius:var(--radius-full);overflow:hidden;
-         background:var(--color-dark-bg)">
-      <div style="width:${(a.share * a.claudeShare * 100).toFixed(1)}%;background:var(--color-lilac)"></div>
-      <div style="width:${(a.share * (1 - a.claudeShare) * 100).toFixed(1)}%;background:var(--color-blue)"></div>
-    </div>
-    <div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);margin-top:3px">
-      claude ${esc(a.claude)} · agy ${esc(a.agy)}</div>
-  </div>`;
-}
-
 /** @returns {string} */
 export function renderUsage(state, data) {
   const u = data.getUsage();
   const agents = data.getAgents();
-  const flows = data.getFlows().filter((f) => f.status !== 'archivado');
 
   return `
   <div>
@@ -295,18 +269,5 @@ export function renderUsage(state, data) {
     </div>
 
     <div style="margin-top:14px">${sessionTable(agents, u)}</div>
-
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px;align-items:start">
-      <div class="panel" style="padding:14px 15px">
-        <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
-             text-transform:uppercase;margin-bottom:10px">Por coordinador</div>
-        <div style="display:flex;flex-direction:column;gap:7px">${flows.length ? flows.map(coordRow).join('') : '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0">Sin coordinadores activos</div>'}</div>
-      </div>
-      <div class="panel" style="padding:14px 15px">
-        <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
-             text-transform:uppercase;margin-bottom:12px">Por cuenta</div>
-        <div style="display:flex;flex-direction:column;gap:13px">${u.accounts.length ? u.accounts.map(accountRow).join('') : '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:8px 0">Sin cuentas configuradas</div>'}</div>
-      </div>
-    </div>
   </div>`;
 }

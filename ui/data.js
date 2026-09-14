@@ -567,59 +567,6 @@ export function getUsage() {
     }
   }
 
-  const rawAccounts = getAccounts();
-  const byAcc = new Map();
-  for (const acc of rawAccounts) {
-    const sAcc = liveServerUsage?.byAccount?.[acc.id];
-    const sAllTime = liveServerUsage?.byAccountAllTime?.[acc.id];
-    byAcc.set(acc.id, {
-      tokens: sAcc?.tokens || 0,
-      cost: sAcc?.costUsd || 0,
-      claudeTokens: sAcc?.claudeTokens || 0,
-      agyTokens: sAcc?.agyTokens || 0,
-      allTimeTokens: sAllTime?.tokens || 0,
-      allTimeCost: sAllTime?.costUsd || 0,
-    });
-  }
-  if (!liveServerUsage) {
-    for (const a of agents) {
-      if (a.accountId && byAcc.has(a.accountId)) {
-        const rec = byAcc.get(a.accountId);
-        rec.tokens += (a.tokens || 0);
-        rec.cost += (a.costUsd || 0);
-        rec.allTimeTokens += (a.tokens || 0);
-        rec.allTimeCost += (a.costUsd || 0);
-        if (a.engine.includes('agy')) rec.agyTokens += (a.tokens || 0);
-        else rec.claudeTokens += (a.tokens || 0);
-      }
-    }
-  }
-
-  const allTimeTotalTokens = liveServerUsage?.allTime?.total?.tokens || totalTokens;
-  const accounts = rawAccounts.map((a) => {
-    const rec = byAcc.get(a.id) || { tokens: 0, cost: 0, claudeTokens: 0, agyTokens: 0, allTimeTokens: 0, allTimeCost: 0 };
-    const hasToday = rec.tokens > 0;
-    const share = totalTokens > 0
-      ? rec.tokens / totalTokens
-      : (allTimeTotalTokens > 0 ? rec.allTimeTokens / allTimeTotalTokens : 0);
-    const claudeShare = rec.tokens > 0
-      ? rec.claudeTokens / rec.tokens
-      : (rec.allTimeTokens > 0 ? (rec.claudeTokens / rec.allTimeTokens) : 0.5);
-    return {
-      name: a.name || a.id,
-      color: a.color || 'var(--color-lilac)',
-      tokens: fmtTokens(rec.tokens),
-      cost: fmtCost(rec.cost),
-      allTimeTokens: fmtTokens(rec.allTimeTokens),
-      allTimeCost: fmtCost(rec.allTimeCost),
-      hasToday,
-      share,
-      claude: fmtTokens(rec.claudeTokens),
-      agy: fmtTokens(rec.agyTokens),
-      claudeShare,
-    };
-  });
-
   let series = Array(24).fill(0);
   if (liveServerUsage?.series && Array.isArray(liveServerUsage.series) && liveServerUsage.series.length === 24) {
     series = liveServerUsage.series;
@@ -668,7 +615,6 @@ export function getUsage() {
       { engine: 'claude cli', used: claudeBudget, cap: fmtTokens(claudeCap).trim(), color: 'var(--color-lilac)' },
       { engine: 'agy cli', used: agyBudget, cap: fmtTokens(agyCap).trim(), color: 'var(--color-blue)' },
     ],
-    accounts,
   };
 
 }
