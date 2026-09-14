@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Discovers skills installed across engines (Claude Code and Antigravity).

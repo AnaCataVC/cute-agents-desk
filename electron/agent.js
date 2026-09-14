@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * One agent = one real terminal running the CLI, plus the hooks that make it observable.
@@ -20,9 +21,9 @@ const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostTool
 /**
  * The settings file the agent runs with. Every event calls the same script with its own name;
  * the script is what decides where the report goes.
- * @param {string} agentId
+ * @param {string} [_agentId]
  */
-function settingsFor(agentId) {
+function settingsFor(_agentId) {
   const command = `node "${paths.hookScript.replace(/\\/g, '/')}"`;
   /** @type {Record<string, unknown>} */
   const hooks = {};

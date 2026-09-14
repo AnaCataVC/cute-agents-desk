@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * A coordinator is a real CLI agent, not server code: the criterion for splitting up work comes

@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Discovers recurring tasks that Claude Desktop and Antigravity (agy) have scheduled on this

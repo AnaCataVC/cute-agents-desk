@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Where the harness keeps its state. Everything under one directory, all of it plain text,
@@ -29,6 +30,64 @@ const os = require('node:os');
 // tools/test-home.js) -- unset in production, where this is always the real home directory.
 const HOME = process.env.CUTE_AGENTS_DESK_HOME || path.join(os.homedir(), '.cute-agents-desk');
 
+/**
+ * Resolves a persistent file path checking portable exe dir, project root, and user home.
+ * @param {string} filename
+ * @returns {string}
+ */
+function resolveUserDataFile(filename) {
+  if (process.env.CUTE_AGENTS_DESK_HOME) {
+    return path.join(HOME, filename);
+  }
+
+  const exeDir = process.env.PORTABLE_EXECUTABLE_DIR
+    || (process.versions?.electron ? path.dirname(process.execPath) : null);
+
+  if (exeDir) {
+    const exeConfig = path.join(exeDir, filename);
+    if (fs.existsSync(exeConfig)) return exeConfig;
+  }
+
+  const projectConfig = path.join(__dirname, '..', filename);
+  if (fs.existsSync(projectConfig)) return projectConfig;
+
+  const homeConfig = path.join(HOME, filename);
+  if (fs.existsSync(homeConfig)) return homeConfig;
+
+  return exeDir ? path.join(exeDir, filename) : homeConfig;
+}
+
+/**
+ * Atomically writes JSON data to disk with random PID/entropy to avoid collision.
+ * @param {string} targetPath
+ * @param {any} data
+ */
+function writeJsonAtomic(targetPath, data) {
+  const serialized = JSON.stringify(data, null, 2);
+  const targetDir = path.dirname(targetPath);
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const tmpPath = path.join(targetDir, `.${path.basename(targetPath)}.${nonce}.tmp`);
+
+  try {
+    fs.writeFileSync(tmpPath, serialized, 'utf8');
+    try {
+      fs.renameSync(tmpPath, targetPath);
+    } catch {
+      // Windows rename fallback for locked files or cross-boundary devices
+      fs.copyFileSync(tmpPath, targetPath);
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    }
+  } finally {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch { /* ignore */ }
+  }
+}
+
 const paths = {
   home: HOME,
   eventsLog: path.join(HOME, 'events.jsonl'),
@@ -37,6 +96,9 @@ const paths = {
   deliveries: path.join(HOME, 'deliveries.json'),
   reposCache: path.join(HOME, 'repos-cache.json'),
   config: path.join(HOME, 'config.json'),
+
+  resolveUserDataFile,
+  writeJsonAtomic,
 
   /** @param {string} id */
   agent(id) {

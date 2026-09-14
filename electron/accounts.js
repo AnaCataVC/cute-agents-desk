@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Which GitHub accounts exist on this machine, and which folders belong to each.
@@ -14,31 +15,10 @@ const path = require('node:path');
 const paths = require('./paths.js');
 
 /**
- * Resolves the accounts configuration path:
- * 1. Directory where the executable is installed or running from (`PORTABLE_EXECUTABLE_DIR` or `process.execPath`).
- * 2. In development or test mode: project root (`accounts.json`).
- * 3. Fallback to `~/.cute-agents-desk/accounts.json`.
+ * Resolves the accounts configuration path using centralized resolver.
  */
 function getAccountsConfigPath() {
-  if (process.env.CUTE_AGENTS_DESK_HOME) {
-    return path.join(paths.home, 'accounts.json');
-  }
-
-  const exeDir = process.env.PORTABLE_EXECUTABLE_DIR
-    || (process.versions?.electron ? path.dirname(process.execPath) : null);
-
-  if (exeDir) {
-    const exeConfig = path.join(exeDir, 'accounts.json');
-    if (fs.existsSync(exeConfig)) return exeConfig;
-  }
-
-  const projectConfig = path.join(__dirname, '..', 'accounts.json');
-  if (fs.existsSync(projectConfig)) return projectConfig;
-
-  const homeConfig = path.join(paths.home, 'accounts.json');
-  if (fs.existsSync(homeConfig)) return homeConfig;
-
-  return exeDir ? path.join(exeDir, 'accounts.json') : homeConfig;
+  return paths.resolveUserDataFile('accounts.json');
 }
 
 /**
@@ -103,41 +83,38 @@ function buildAccounts() {
   });
 }
 
-function updateAccountColor(gh, color) {
+function saveAccountsConfig(accounts) {
   const configPath = getAccountsConfigPath();
+  try {
+    paths.writeJsonAtomic(configPath, accounts);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function updateAccountColor(gh, color) {
   const accounts = readAccountsConfig();
   const acc = accounts.find((a) => a.gh === gh);
   if (acc) {
     acc.color = color;
-    try {
-      fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
-      return true;
-    } catch {
-      return false;
-    }
+    return saveAccountsConfig(accounts);
   }
   return false;
 }
 
 function updateAccountEditor(gh, editor) {
-  const configPath = getAccountsConfigPath();
   const accounts = readAccountsConfig();
   const acc = accounts.find((a) => a.gh === gh);
   if (acc) {
     acc.editor = editor;
-    try {
-      fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
-      return true;
-    } catch {
-      return false;
-    }
+    return saveAccountsConfig(accounts);
   }
   return false;
 }
 
 function addAccountFolder(gh, folderPath, depth = 2) {
   if (!gh || !folderPath) return false;
-  const configPath = getAccountsConfigPath();
   const accounts = readAccountsConfig();
   const acc = accounts.find((a) => a.gh === gh);
   if (!acc) return false;
@@ -152,17 +129,11 @@ function addAccountFolder(gh, folderPath, depth = 2) {
     acc.folders.push({ path: normalized, depth: Number(depth) || 2 });
   }
 
-  try {
-    fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
+  return saveAccountsConfig(accounts);
 }
 
 function removeAccountFolder(gh, folderPath) {
   if (!gh || !folderPath) return false;
-  const configPath = getAccountsConfigPath();
   const accounts = readAccountsConfig();
   const acc = accounts.find((a) => a.gh === gh);
   if (!acc || !Array.isArray(acc.folders)) return false;
@@ -171,12 +142,7 @@ function removeAccountFolder(gh, folderPath) {
   const beforeLen = acc.folders.length;
   acc.folders = acc.folders.filter((f) => path.resolve(f.path).replace(/\\/g, '/').toLowerCase() !== normalized);
   if (acc.folders.length !== beforeLen) {
-    try {
-      fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2), 'utf8');
-      return true;
-    } catch {
-      return false;
-    }
+    return saveAccountsConfig(accounts);
   }
   return false;
 }

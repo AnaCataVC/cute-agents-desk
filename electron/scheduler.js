@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * The one rule that has to hold before anything else: a coordinator can *ask*
@@ -166,10 +167,10 @@ class Scheduler {
    * Notify scheduler that a task failed.
    * Triggers cascade failure on all pending tasks that directly or indirectly depend on it.
    * @param {string} taskId
-   * @param {string} [reason]
+   * @param {string} [_reason]
    * @returns {string[]} ids of cascading failed tasks
    */
-  onTaskFailed(taskId, reason) {
+  onTaskFailed(taskId, _reason) {
     if (!taskId) return [];
     this.taskStates.set(taskId, 'failed');
 

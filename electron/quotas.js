@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Quota & Subscription Limits Module

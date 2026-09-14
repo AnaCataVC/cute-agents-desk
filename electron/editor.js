@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * External editor integration: opens agent worktrees in either Visual Studio Code,

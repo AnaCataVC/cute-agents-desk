@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Claude and agy send completely different payload shapes for the same hook event (MEASURED

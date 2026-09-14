@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Turns hook reports into the state the window draws.

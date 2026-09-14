@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Application Configuration Module (config.json)
@@ -7,7 +8,6 @@
  */
 
 const fs = require('node:fs');
-const path = require('node:path');
 const paths = require('./paths.js');
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -183,25 +183,7 @@ function validateAndSanitize(section, key, value) {
  * 4. Fallback to `~/.cute-agents-desk/config.json`
  */
 function getConfigPath() {
-  if (process.env.CUTE_AGENTS_DESK_HOME) {
-    return path.join(paths.home, 'config.json');
-  }
-
-  const exeDir = process.env.PORTABLE_EXECUTABLE_DIR
-    || (process.versions?.electron ? path.dirname(process.execPath) : null);
-
-  if (exeDir) {
-    const exeConfig = path.join(exeDir, 'config.json');
-    if (fs.existsSync(exeConfig)) return exeConfig;
-  }
-
-  const projectConfig = path.join(__dirname, '..', 'config.json');
-  if (fs.existsSync(projectConfig)) return projectConfig;
-
-  const homeConfig = paths.config;
-  if (fs.existsSync(homeConfig)) return homeConfig;
-
-  return exeDir ? path.join(exeDir, 'config.json') : homeConfig;
+  return paths.resolveUserDataFile('config.json');
 }
 
 /**
@@ -223,7 +205,7 @@ function readConfig(forceReload = false) {
       cachedConfig = deepMerge(DEFAULT_CONFIG, parsed);
       return clone(cachedConfig);
     }
-  } catch (err) {
+  } catch {
     // Return defaults on corrupt or unreadable files
   }
 
@@ -238,27 +220,11 @@ function readConfig(forceReload = false) {
  */
 function writeConfig(config) {
   const configPath = getConfigPath();
-  const dir = path.dirname(configPath);
-  const nonce = `${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
-  const tmpPath = `${configPath}.${nonce}.tmp`;
-
   try {
-    fs.mkdirSync(dir, { recursive: true });
-    const content = JSON.stringify(config, null, 2);
-    fs.writeFileSync(tmpPath, content, 'utf8');
-
-    try {
-      fs.renameSync(tmpPath, configPath);
-    } catch {
-      // Fallback for Windows locks/antivirus
-      fs.copyFileSync(tmpPath, configPath);
-      try { fs.unlinkSync(tmpPath); } catch {}
-    }
-
+    paths.writeJsonAtomic(configPath, config);
     cachedConfig = deepMerge(DEFAULT_CONFIG, config);
     return true;
   } catch {
-    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
     return false;
   }
 }

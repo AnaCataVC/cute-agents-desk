@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * The seam between the window and the machine.

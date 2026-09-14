@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Write-mode isolation: each write agent gets its own `git worktree`, checked out on its own
@@ -17,7 +18,6 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const { git, gitAsync } = require('./git.js');
 const paths = require('./paths.js');
 

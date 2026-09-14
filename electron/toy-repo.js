@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * A repo to try things on, created on first use.

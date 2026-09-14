@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * The mailbox mechanics shared by every drop-a-json-file-here queue in the harness (an agent's

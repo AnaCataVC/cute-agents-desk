@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * The window, and nothing else yet.
@@ -22,13 +23,20 @@ if (process.argv.includes('--smoke')) {
 
 const { app, BrowserWindow, protocol, net, shell, ipcMain, dialog } = require('electron');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
+const { pathToFileURL, URL } = require('node:url');
 const { Registry } = require('./events.js');
-const { spawn } = require('./agent.js');
+const { spawn, engineFor, validateAndSanitizeParams } = require('./agent.js');
 const { toyRepo } = require('./toy-repo.js');
 const { Scheduler } = require('./scheduler.js');
-const { readAccountsConfig, buildAccounts } = require('./accounts.js');
-const { scanRepos } = require('./discovery.js');
+const {
+  readAccountsConfig,
+  buildAccounts,
+  updateAccountColor,
+  updateAccountEditor,
+  addAccountFolder,
+  removeAccountFolder,
+} = require('./accounts.js');
+const { scanRepos, findRepoDocsAsync } = require('./discovery.js');
 const conv = require('./conversations.js');
 const coordinator = require('./coordinator.js');
 const paths = require('./paths.js');
@@ -36,6 +44,11 @@ const worktree = require('./worktree.js');
 const { getScheduledTasks, readTaskLogs } = require('./scheduled-tasks.js');
 const { scanSkills, readSkillContent } = require('./skills.js');
 const delivery = require('./delivery.js');
+const config = require('./config.js');
+const editor = require('./editor.js');
+const { getQuotas } = require('./quotas.js');
+
+const Response = globalThis.Response || class Response {};
 
 const ROOT = path.join(__dirname, '..');
 
@@ -229,7 +242,6 @@ function createWindow() {
  * @param {import('electron').BrowserWindow} win
  */
 function wireAgents(win) {
-  const config = require('./config.js');
   const appConfig = config.readConfig();
 
   registry = new Registry((agents, usage, threads) => {
@@ -275,13 +287,12 @@ function wireAgents(win) {
   ipcMain.handle('desk:repos', () => getRepoData());
 
   ipcMain.handle('desk:usage', () => registry.getUsage());
-  ipcMain.handle('desk:quotas', (_ev, opts) => {
-    const { getQuotas } = require('./quotas.js');
+  ipcMain.handle('desk:quotas', (_ev, opts = {}) => {
     return getQuotas(opts);
   });
 
   ipcMain.handle('desk:config', () => config.readConfig());
-  ipcMain.handle('desk:updateConfig', (_ev, { section, key, value }) => {
+  ipcMain.handle('desk:updateConfig', (_ev, { section, key, value } = {}) => {
     const res = config.updateConfigKey(section, key, value);
     if (res.ok && section === 'exec' && key === 'maxParallel') {
       scheduler.globalCap = res.config.exec.maxParallel;
@@ -289,8 +300,7 @@ function wireAgents(win) {
     return res;
   });
 
-  ipcMain.handle('desk:setAccountColor', async (_ev, { accountId, color }) => {
-    const { updateAccountColor, buildAccounts } = require('./accounts.js');
+  ipcMain.handle('desk:setAccountColor', async (_ev, { accountId, color } = {}) => {
     const ok = updateAccountColor(accountId, color);
     if (ok) {
       const accounts = buildAccounts();
@@ -303,9 +313,8 @@ function wireAgents(win) {
     return { ok: false };
   });
 
-  ipcMain.handle('desk:setAccountEditor', async (_ev, { accountId, editor }) => {
-    const { updateAccountEditor, buildAccounts } = require('./accounts.js');
-    const ok = updateAccountEditor(accountId, editor);
+  ipcMain.handle('desk:setAccountEditor', async (_ev, { accountId, editor: editorChoice } = {}) => {
+    const ok = updateAccountEditor(accountId, editorChoice);
     if (ok) {
       const accounts = buildAccounts();
       if (repoDataPromise) {
@@ -317,8 +326,7 @@ function wireAgents(win) {
     return { ok: false };
   });
 
-  ipcMain.handle('desk:openEditor', async (_ev, { agentId, targetPath, filePath, line, editorChoice }) => {
-    const editor = require('./editor.js');
+  ipcMain.handle('desk:openEditor', async (_ev, { agentId, targetPath, filePath, line, editorChoice } = {}) => {
     let effectiveTarget = targetPath;
     let effectiveEditor = editorChoice;
 
@@ -330,7 +338,6 @@ function wireAgents(win) {
       if (!effectiveEditor) {
         // Resolve account for this worktree
         const reg = registry?.agents?.get(agentId);
-        const { readAccountsConfig } = require('./accounts.js');
         const accounts = readAccountsConfig();
         const acc = accounts.find((a) => (a.folders || []).some((f) => (reg?.cwd || '').toLowerCase().includes(f.path.toLowerCase())));
         if (acc?.editor) {
@@ -352,8 +359,7 @@ function wireAgents(win) {
     });
   });
 
-  ipcMain.handle('desk:addAccountFolder', async (_ev, { accountId, folderPath, depth }) => {
-    const { addAccountFolder } = require('./accounts.js');
+  ipcMain.handle('desk:addAccountFolder', async (_ev, { accountId, folderPath, depth } = {}) => {
     const ok = addAccountFolder(accountId, folderPath, depth);
     if (ok) {
       const fresh = await refreshRepoData();
@@ -362,8 +368,7 @@ function wireAgents(win) {
     return { ok: false, error: 'No se pudo añadir la carpeta' };
   });
 
-  ipcMain.handle('desk:removeAccountFolder', async (_ev, { accountId, folderPath }) => {
-    const { removeAccountFolder } = require('./accounts.js');
+  ipcMain.handle('desk:removeAccountFolder', async (_ev, { accountId, folderPath } = {}) => {
     const ok = removeAccountFolder(accountId, folderPath);
     if (ok) {
       const fresh = await refreshRepoData();
@@ -418,7 +423,6 @@ function wireAgents(win) {
     const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
 
     try {
-      const { engineFor, validateAndSanitizeParams } = require('./agent.js');
       validateAndSanitizeParams({ engine: engineFor(effectiveBin), mode, model, effort });
     } catch (err) {
       const reason = err.message;
@@ -525,7 +529,6 @@ function wireAgents(win) {
     const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
 
     try {
-      const { engineFor, validateAndSanitizeParams } = require('./agent.js');
       validateAndSanitizeParams({ engine: engineFor(effectiveBin), mode, model, effort });
     } catch (err) {
       registry.note(conversationId, 'SpawnRefused', { reason: err.message });
@@ -537,7 +540,6 @@ function wireAgents(win) {
     // Async discovery of repo docs and skills scan
     let repoDocs = [];
     try {
-      const { findRepoDocsAsync } = require('./discovery.js');
       const docPromises = repos.map((r) => findRepoDocsAsync(r.path));
       const allDocs = await Promise.all(docPromises);
       repoDocs = allDocs.flat();
@@ -671,6 +673,9 @@ function wireAgents(win) {
 
   ipcMain.handle('desk:worktrees', () => worktree.listWorktrees());
   ipcMain.handle('desk:reapWorktree', (_ev, agentId) => {
+    if (typeof agentId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(agentId)) {
+      return { error: 'invalid agent id' };
+    }
     if (running.has(agentId)) return { error: 'el agente todavia esta vivo' };
     worktree.removeWorktree(agentId);
     return true;
@@ -679,7 +684,7 @@ function wireAgents(win) {
     const runningAgentIds = Array.from(running.keys());
     const delivered = delivery.listDeliveries();
     const deliveredIds = delivered.map((d) => d.agentId || d.id);
-    return await worktree.reapCleanWorktrees({ runningAgentIds, deliveredIds });
+    return worktree.reapCleanWorktrees({ runningAgentIds, deliveredIds });
   });
 
   ipcMain.handle('desk:delivered', () => delivery.listDeliveries());

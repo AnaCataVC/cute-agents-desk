@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Safe, bounded micro-parser for SKILL.md YAML frontmatter.
@@ -76,7 +77,7 @@ function parseSkillFrontmatter(text) {
     // description: ... (single-line or folded/multiline)
     const descMatch = line.match(/^description:\s*(.*)$/);
     if (descMatch && !description) {
-      let rawVal = descMatch[1].trim();
+      const rawVal = descMatch[1].trim();
       if (rawVal === '>' || rawVal === '|' || rawVal === '>-' || rawVal === '|-') {
         // Collect following indented lines
         const collected = [];

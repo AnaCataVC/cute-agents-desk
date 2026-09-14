@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Delivery Pipeline:
@@ -36,7 +37,7 @@ function saveDelivery(delivery) {
   } else {
     all.push(delivery);
   }
-  fs.writeFileSync(paths.deliveries, JSON.stringify(all, null, 2));
+  paths.writeJsonAtomic(paths.deliveries, all);
 }
 
 /**
@@ -246,7 +247,7 @@ async function deliverAgent(opts) {
 
   if (hasRemote) {
     try {
-      git(worktreeDir, ['push', '-u', 'origin', branch], { env: subprocessEnv });
+      git(worktreeDir, ['push', '-u', 'origin', branch], { env: subprocessEnv, timeout: 45000 });
     } catch (pushErr) {
       return { ok: false, error: `Error al empujar la rama a origin: ${pushErr.message}` };
     }
@@ -281,6 +282,7 @@ async function deliverAgent(opts) {
         encoding: 'utf8',
         env: subprocessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 45000,
       });
 
       const match = out.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/(\d+)/);

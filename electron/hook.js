@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * The reporter. Claude Code runs this on every hook event and on every status-line render,

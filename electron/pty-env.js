@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * The environment a spawned agent gets.

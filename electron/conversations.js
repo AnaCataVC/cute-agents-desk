@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * A conversation is a folder. Everything a topic owns -- its own workers, its own caps, its

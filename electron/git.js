@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /** Two ways to shell out to git, depending on whether a failure is exceptional or just "no answer". */
 

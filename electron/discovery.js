@@ -1,3 +1,4 @@
+'use strict';
 // @ts-check
 /**
  * Walk the declared folders, find git repos, and read just enough about each to draw the tree
