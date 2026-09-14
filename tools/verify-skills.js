@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { parseSkillFrontmatter, readSkillFrontmatter } = require('../electron/frontmatter.js');
+const { parseSkillFrontmatter } = require('../electron/frontmatter.js');
 const { scanSkills, sanitizePath, defaultRoots } = require('../electron/skills.js');
 
 // ---- 1. Frontmatter Unit Tests ----

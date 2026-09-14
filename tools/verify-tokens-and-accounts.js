@@ -5,10 +5,9 @@
  * Run with: node tools/verify-tokens-and-accounts.js
  */
 
-const { dir } = require('./test-home.js');
+require('./test-home.js');
 const assert = require('node:assert');
 const fs = require('node:fs');
-const path = require('node:path');
 const paths = require('../electron/paths.js');
 const { Registry } = require('../electron/events.js');
 const { updateAccountColor, addAccountFolder, removeAccountFolder, readAccountsConfig, getAccountsConfigPath } = require('../electron/accounts.js');
@@ -41,6 +40,7 @@ const statusPayload = {
 registry.apply('token-probe', statusPayload);
 
 assert.ok(publishedAgents, 'Registry should publish on Status event');
+assert.ok(publishedUsage, 'Registry should publish usage on Status event');
 const current = publishedAgents.find((a) => a.id === 'token-probe');
 assert.strictEqual(current.tokens, 1500, 'Agent tokens should update to 1500');
 assert.strictEqual(current.costUsd, 0.15, 'Agent cost should update to 0.15');

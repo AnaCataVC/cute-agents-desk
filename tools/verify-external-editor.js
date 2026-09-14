@@ -12,7 +12,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { resolveEditor, openInEditor } = require('../electron/editor.js');
 const {
-  readAccountsConfig,
   updateAccountEditor,
   buildAccounts,
   getAccountsConfigPath,

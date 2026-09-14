@@ -106,6 +106,6 @@ app.whenReady().then(() => {
     console.log(ok
       ? '\ncoordinador->trabajador end-to-end OK: el pedido escrito genero un agente real que hizo el trabajo'
       : '\ncoordinador->trabajador end-to-end NO cumple');
-    app.exit(ok ? 0 : 1);
+    app.exit(ok ? 0 : (code || 1));
   }
 });

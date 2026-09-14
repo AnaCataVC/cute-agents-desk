@@ -7,6 +7,7 @@
  */
 
 const assert = require('node:assert');
+const { performance } = require('node:perf_hooks');
 
 (async () => {
   // Import ES module dynamically in CommonJS test runner

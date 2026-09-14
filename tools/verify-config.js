@@ -10,14 +10,11 @@ const { dir } = require('./test-home.js');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const paths = require('../electron/paths.js');
 const {
   readConfig,
-  writeConfig,
   updateConfigKey,
   resetConfig,
   getConfigPath,
-  DEFAULT_CONFIG,
 } = require('../electron/config.js');
 const { Scheduler } = require('../electron/scheduler.js');
 

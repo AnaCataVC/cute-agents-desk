@@ -78,7 +78,7 @@ async function main() {
 
   // Verify all non-boolean settings in data.getSettings() have metadata
   const settings = dataModule.getSettings();
-  for (const [subtab, rows] of Object.entries(settings)) {
+  for (const [_subtab, rows] of Object.entries(settings)) {
     for (const [label, value, section, key] of rows) {
       if (typeof value !== 'boolean' && section && key) {
         const metaKey = `${section}.${key}`;

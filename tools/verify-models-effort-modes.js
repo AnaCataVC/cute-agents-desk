@@ -105,7 +105,7 @@ function checkSpawnArgvAndManifest() {
     const { spawn } = require('../electron/agent.js');
 
     // 1. Claude with custom model, effort, and auto mode
-    const claudeAgent = spawn({
+    spawn({
       id: 'probe-claude-full',
       cwd: 'C:/fake-repo',
       task: 'tarea 1',
@@ -141,7 +141,7 @@ function checkSpawnArgvAndManifest() {
       'claude en modo plan debe recibir --permission-mode plan');
 
     // 3. Agy with custom model, effort, and plan mode
-    const agyAgent = spawn({
+    spawn({
       id: 'probe-agy-full',
       cwd: 'C:/fake-repo',
       task: 'tarea agy',
