@@ -6,7 +6,7 @@
  * questions: colour says which state, motion says whether anything is advancing.
  */
 
-import { ring, shortTokens, elapsed } from './ring.js';
+import { ring, shortTokens } from './ring.js';
 import { renderTerminal } from './terminal.js';
 import { esc } from './esc.js';
 

@@ -222,12 +222,12 @@ const ACTIONS = {
   view: (/** @type {string} */ v) => {
     state.view = v;
     if (v === 'usage' && window.desk?.quotas) {
-      window.desk.quotas().then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } });
+      window.desk.quotas().then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } }).catch(() => {});
     }
   },
   refreshQuotas: () => {
     if (window.desk?.quotas) {
-      window.desk.quotas({ forceRefresh: true }).then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } });
+      window.desk.quotas({ forceRefresh: true }).then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } }).catch(() => {});
     }
   },
   flowView: (/** @type {any} */ v) => { state.flowView = v; },
@@ -398,11 +398,12 @@ const ACTIONS = {
     window.desk?.createConversation?.({ title, topic: topic || undefined })
       .then((/** @type {{ id: any; }} */ created) => {
         if (created?.id) {
-          window.desk?.spawnCoordinator?.({ conversationId: created.id });
+          window.desk?.spawnCoordinator?.({ conversationId: created.id })?.catch(() => {});
         }
         return window.desk.conversations();
       })
-      .then((/** @type {object[]} */ conversations) => { data.setLiveConversations(conversations); render(); });
+      .then((/** @type {object[]} */ conversations) => { data.setLiveConversations(conversations); render(); })
+      .catch((err) => { state.error = err?.message || String(err); render(); });
   },
   dismissError: () => { state.error = null; },
 
@@ -411,7 +412,7 @@ const ACTIONS = {
   openCoordinator: (/** @type {any} */ conversationId) => {
     window.desk?.spawnCoordinator?.({ conversationId }).then((/** @type {{ error: any; }} */ result) => {
       if (result?.error) { state.error = result.error; render(); }
-    });
+    }).catch((err) => { state.error = err?.message || String(err); render(); });
   },
   archive: (/** @type {any} */ conversationId) => {
     if (!conversationId) return;
@@ -421,7 +422,7 @@ const ACTIONS = {
         data.setLiveConversations(conversations);
         render();
       });
-    });
+    }).catch((err) => { state.error = err?.message || String(err); render(); });
   },
   closeIdle: (/** @type {any} */ flowId) => {
     const agents = data.getAgents();
@@ -438,7 +439,7 @@ const ACTIONS = {
     window.desk?.reapWorktree?.(agentId).then((/** @type {{ error: any; }} */ result) => {
       if (result?.error) { state.error = result.error; render(); return; }
       return window.desk.worktrees().then((/** @type {object[]} */ worktrees) => { data.setLiveWorktrees(worktrees); render(); });
-    });
+    }).catch((err) => { state.error = err?.message || String(err); render(); });
   },
 
   /** Batch reap of clean or delivered inactive worktrees. */
@@ -455,8 +456,8 @@ const ACTIONS = {
       window.desk.worktrees().then((/** @type {object[]} */ worktrees) => {
         data.setLiveWorktrees(worktrees);
         render();
-      });
-    });
+      }).catch(() => {});
+    }).catch((err) => { state.error = err?.message || String(err); render(); });
   },
 
   /** One real agent on the toy repo, proving the plumbing works end-to-end. */
@@ -468,7 +469,7 @@ const ACTIONS = {
   },
   stopAgent: (/** @type {any} */ id) => window.desk.stop(id),
   refreshSkills: () => {
-    window.desk?.skills?.().then((/** @type {any[]} */ skills) => { data.setLiveSkills(skills); render(); });
+    window.desk?.skills?.().then((/** @type {any[]} */ skills) => { data.setLiveSkills(skills); render(); }).catch(() => {});
   },
 
   /** Deliver an agent's work as a branch + draft PR. */
@@ -713,6 +714,12 @@ const ACTIONS = {
           else state.inspectedSkill.content = res?.content || '';
           render();
         }
+      }).catch((err) => {
+        if (state.inspectedSkill && state.inspectedSkill.name === name) {
+          state.inspectedSkill.loading = false;
+          state.inspectedSkill.error = err?.message || String(err);
+          render();
+        }
       });
     }
   },
@@ -742,6 +749,12 @@ const ACTIONS = {
           else state.inspectedTask.logs = res?.logs || '';
           render();
         }
+      }).catch((err) => {
+        if (state.inspectedTask && state.inspectedTask.id === id) {
+          state.inspectedTask.loading = false;
+          state.inspectedTask.error = err?.message || String(err);
+          render();
+        }
       });
     }
   },
@@ -758,6 +771,9 @@ const ACTIONS = {
           state.error = res.error;
           render();
         }
+      }).catch((err) => {
+        state.error = err?.message || String(err);
+        render();
       });
     }
   },
@@ -1031,7 +1047,7 @@ if (window.desk?.isDesk) {
       data.setLiveQuotas(quotas);
       scheduleRender();
     }
-  });
+  }).catch(() => {});
 
   Promise.allSettled(initialLoads).finally(() => {
     state.loading = false;
@@ -1043,7 +1059,7 @@ if (window.desk?.isDesk) {
   // so it gets its own poll, cheap fs reads only, and only while the tab is actually open.
   setInterval(() => {
     if (state.view === 'scheduled') {
-      window.desk.scheduledTasks().then((/** @type {object[]} */ tasks) => { data.setLiveScheduledTasks(tasks); render(); });
+      window.desk.scheduledTasks().then((/** @type {object[]} */ tasks) => { data.setLiveScheduledTasks(tasks); render(); }).catch(() => {});
     }
   }, 5000);
 }

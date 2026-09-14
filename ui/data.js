@@ -628,14 +628,19 @@ export function getUsage() {
     series[currentHour] = Math.max(1, Math.round(totalTokens / 1000));
   }
 
-  const claudeBudget = Math.min(1, claudeTokens / 1600000);
-  const agyBudget = Math.min(1, agyTokens / 900000);
+  const claudeCap = Number(liveConfig?.engines?.claude?.contextCap) || 200000;
+  const agyCap = Number(liveConfig?.engines?.agy?.contextCap) || 200000;
+  const claudeBudget = claudeCap > 0 ? Math.min(1, claudeTokens / claudeCap) : 0;
+  const agyBudget = agyCap > 0 ? Math.min(1, agyTokens / agyCap) : 0;
 
   return {
     today: {
       total: fmtTokens(totalTokens),
       claude: fmtTokens(claudeTokens),
       agy: fmtTokens(agyTokens),
+      claudeTokens,
+      agyTokens,
+      totalTokens,
     },
     cost: {
       total: fmtCost(totalCost),
@@ -660,8 +665,8 @@ export function getUsage() {
     },
     series,
     budgets: [
-      { engine: 'claude cli', used: claudeBudget, cap: '1.6 M', color: 'var(--color-lilac)' },
-      { engine: 'agy cli', used: agyBudget, cap: '900 k', color: 'var(--color-blue)' },
+      { engine: 'claude cli', used: claudeBudget, cap: fmtTokens(claudeCap).trim(), color: 'var(--color-lilac)' },
+      { engine: 'agy cli', used: agyBudget, cap: fmtTokens(agyCap).trim(), color: 'var(--color-blue)' },
     ],
     accounts,
   };

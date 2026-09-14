@@ -139,21 +139,6 @@ function queueDialog(state, data) {
 function scanDialog(state, data) {
   const account = data.getAccounts().find((/** @type {any} */ a) => a.id === state.scan);
   if (!account) return '';
-  const s = data.getScanSummary();
-
-  const rows = data.getScanCandidates().map((/** @type {any} */ c) => {
-    const tagColor = c.tag === 'ok' ? 'var(--color-dark-text-3)'
-      : c.tag === 'sin remoto' ? 'var(--app-dirty)' : 'var(--state-approval)';
-    return `
-    <div style="display:flex;align-items:center;gap:10px;padding:7px 11px;background:var(--color-dark-bg);
-         border:1px solid var(--color-dark-border);border-radius:8px">
-      <span class="toggle-track" data-on="${c.picked}"><span class="toggle-knob" data-on="${c.picked}"></span></span>
-      <span class="mono" style="font-size:11px;font-weight:500">${esc(c.name)}</span>
-      <span class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);overflow:hidden;
-            text-overflow:ellipsis;white-space:nowrap">${esc(c.remote)}</span>
-      <span style="margin-left:auto;font:500 9px var(--font-body);color:${tagColor};flex:none">${esc(c.tag)}</span>
-    </div>`;
-  }).join('');
 
   /** @param {number} d */
   const depthChip = (d) => `<button class="chip" aria-pressed="${state.scanDepth === d}"

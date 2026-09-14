@@ -9,7 +9,7 @@
  * coordinator, the agent, you, the harness, or a tool.
  */
 
-import { ring, shortTokens, elapsed } from './ring.js';
+import { shortTokens } from './ring.js';
 import { esc } from './esc.js';
 
 const AUTHOR_LABEL = {

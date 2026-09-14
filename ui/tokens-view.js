@@ -32,13 +32,17 @@ function statCard({ label, value, claude, agy, hint }) {
 }
 
 /** Hourly bars, claude stacked over agy. Hours the day has not reached are flat and grey. */
-function hourlyChart(series) {
-  const max = Math.max(...series);
+function hourlyChart(series, usage) {
+  const max = Math.max(...series, 1);
+  const totalClaude = usage?.today?.claudeTokens ?? 0;
+  const totalAgy = usage?.today?.agyTokens ?? 0;
+  const total = totalClaude + totalAgy;
+  // Real deterministic split derived directly from recorded engine token proportion:
+  const claudeShare = total > 0 ? (totalClaude / total) : 0.5;
+
   const bars = series.map((v, i) => {
     const future = i >= SERIES_NO_DATA_FROM;
-    // A deterministic split so the mock reads like a real day instead of a straight line.
-    const claudeShare = 0.5 + 0.22 * Math.sin(i * 1.3);
-    const h = (v / max) * 100;
+    const h = max > 0 ? (v / max) * 100 : 0;
     const claudeH = h * claudeShare;
     const seg = (height, color) => `<div style="height:${height.toFixed(1)}%;background:${color}"></div>`;
     return `
@@ -273,7 +277,7 @@ export function renderUsage(state, data) {
     </div>
 
     <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;margin-top:14px;align-items:start">
-      ${hourlyChart(u.series)}
+      ${hourlyChart(u.series, u)}
       <div class="panel" style="padding:14px 15px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
           <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
