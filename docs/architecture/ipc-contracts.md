@@ -173,6 +173,23 @@ Provides structured inter-agent message histories and interactive user input inj
   }
   ```
 
+#### `dag` (pushed inside `desk:patch`, not its own channel)
+* **Direction:** Main $\to$ Renderer (pushed as a field on `desk:patch`)
+* **Trigger:** `Scheduler.enqueueTask()` queuing a dependency-blocked task, or `Scheduler.onTaskCompleted()` / `onTaskFailed()` releasing or cascading one.
+* **Schema:**
+  ```typescript
+  interface DagEntry {
+    id: string;                      // task id, the same id a future agent would register under
+    state: 'pending' | 'failed';     // tasks that ran (even if they later failed) are excluded --
+                                      // they already have a real agent record, this is only for
+                                      // the part of the DAG that never got one
+    dependsOn: string[];
+    conversationId: string;          // which coordinator queued it, from a side table in main.js
+                                      // (Scheduler itself is conversation-agnostic)
+  }
+  ```
+* **Consumption:** `ui/data.js`'s `synthesizeFlows()` renders each entry as a ghost roster item (`state: 'queued'` or `'failed'`) in its owning flow, shown in `boss-graph.js`'s parked row since it never has a live PTY or thread.
+
 #### `desk:sendInput`
 * **Direction:** Renderer $\to$ Main (Invoke / Handle)
 * **Arguments:** `{ agentId: string, text: string }`
@@ -237,6 +254,6 @@ The main process broadcasts state mutations reactively to all active `BrowserWin
 
 | Channel | Trigger Event | Payload Description |
 | :--- | :--- | :--- |
-| `desk:patch` | Agent state changes, token increments, or threads updates | Incremental state diff object applied optimistically in `ui/data.js`. |
+| `desk:patch` | Agent state changes, token increments, threads updates, or Scheduler DAG changes | Incremental state diff object applied optimistically in `ui/data.js`. Agent records also carry `mode`, `deniedCount` (read-mode calls the hook actually denied) and `lastVerify` (`'pass'\|'fail'\|'ran'\|null`, from the last test/verify command's exit code); an optional `dag` field carries queued/cascade-failed tasks (see §2.6). |
 | `desk:agent-log` | Worker or coordinator PTY output chunk | `{ agentId: string, chunk: string }` stream for live terminal views. |
 | `desk:task-status` | Scheduled task execution start / completion | `{ taskId: string, status: string, timestamp: number }`. |

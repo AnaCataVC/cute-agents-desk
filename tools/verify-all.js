@@ -25,6 +25,7 @@ const FAST = [
   'verify-coordinator.js',
   'verify-coordinator-status.js',
   'verify-worker-outbox.js',
+  'verify-delegation-privilege.js',
   'verify-token-cap.js',
   'verify-forced-kill.js',
   'verify-worktree-isolation.js',

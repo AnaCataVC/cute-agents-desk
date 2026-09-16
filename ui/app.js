@@ -1026,6 +1026,7 @@ if (window.desk?.isDesk) {
     if (patch.usage) data.setLiveUsage(patch.usage);
     if (patch.repoData) data.setLiveRepoData(patch.repoData);
     if (patch.threads) data.setLiveThreads(patch.threads);
+    if (patch.dag) data.setLiveDag(patch.dag);
     scheduleRender();
   });
 

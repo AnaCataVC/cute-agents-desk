@@ -29,7 +29,7 @@ para cada uno — la tarjeta nunca adivina el estado leyendo la terminal.
 - **Buzón desacoplado basado en archivos y coordinación autónoma:** Arquitectura de comunicación asíncrona sin puertos TCP ni sockets expuestos en red. El agente coordinador delega subtareas generando `spawn-requests` en colas JSON vigiladas en disco. Los workers reportan su estado (nacimiento, bloqueo, finalización y mensajes libres) inyectando entradas directamente en la terminal interactiva del coordinador.
 - **Pipeline automatizado de entrega y Pull Requests:** Ciclo de cierre seguro y auditable. Al finalizar una tarea en worktree, el sistema realiza commit con el autor y correo correspondientes a la cuenta asociada, realiza push seguro de la rama a `origin` sin tocar `main`, y crea automáticamente un Pull Request en borrador (`gh pr create --draft`) enlazando el informe de ejecución y persistiendo el registro en `deliveries.json`.
 - **Gobernanza de recursos, cuotas de tokens y paralelismo:** Programador de tareas (`scheduler.js`) con límites estrictos de concurrencia a nivel global y por conversación. Telemetría de cuotas oficiales de suscripción consultadas directamente en los CLIs (`claude -p /usage` y `agy -p /usage`) con reporte en tiempo real de porcentaje semanal, ventanas de 5h y fechas de reinicio, complementado con topes diarios locales de seguridad y políticas defensivas de sólo lectura (listas negras en Claude vs. listas blancas estrictas en Antigravity).
-- **Visualización radial de flujos y enlaces de dependencias:** Pestaña "Flujos de trabajo" con grafo SVG radial (`ui/boss-graph.js`) que muestra al coordinador en el hub central con telemetría interactiva en vivo, trabajadores orbitando en el anillo, y arcos dinámicos animados representando dependencias (`dependsOn`) y transferencias de contexto entre agentes. Soporta archivado atómico no destructivo y gestión de sesiones en reposo.
+- **Visualización radial de flujos y enlaces de dependencias:** Pestaña "Flujos de trabajo" con grafo SVG radial (`ui/boss-graph.js`) que muestra al coordinador en el hub central con telemetría interactiva en vivo, trabajadores orbitando en el anillo, y arcos dinámicos animados representando dependencias (`dependsOn`) y transferencias de contexto entre agentes. Soporta archivado atómico no destructivo y gestión de sesiones en reposo. Cada nodo lleva, cuando aplica, un candado de modo lectura y el resultado (✓/✗) del último test o verify que el agente corrió; el contador "bloqueados" cuenta llamadas realmente denegadas por el hook de modo lectura (no un estimado), y las tareas que el `Scheduler` tiene en cola por una dependencia o abortó en cascada aparecen como entradas fantasma en la fila de aparcados, en vez de estar invisibles hasta que arrancan.
 
 ### Los dos motores, en la práctica
 
@@ -87,7 +87,7 @@ npm test        # corre de un tiro los 28 que son rápidos y no necesitan un CLI
 npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm test` (`tools/verify-all.js`) corre los 28 `verify-*.js` que MEDIDO tardan segundos bajo
+`npm test` (`tools/verify-all.js`) corre los 29 `verify-*.js` que MEDIDO tardan segundos bajo
 `node` puro. Los que quedan afuera necesitan un turno real de CLI, una ventana de Electron o validación
 del binario empaquetado (`verify-dist-binary.js` tras `npm run dist`). Esos se corren aparte, uno a la vez:
 

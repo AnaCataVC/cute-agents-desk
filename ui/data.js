@@ -17,6 +17,12 @@ export const STATES = {
   blocked: { label: 'bloqueado', color: 'var(--state-blocked)' },
   idle: { label: 'idle', color: 'var(--state-idle)' },
   done: { label: 'entregado', color: 'var(--color-emerald-400)' },
+  // A task the Scheduler is still holding on a dependency: never spawned, so it has no thread or
+  // tokens of its own yet -- shown parked, next to idle/delivered, not on the live ring.
+  queued: { label: 'en cola', color: 'var(--color-dark-text-3)' },
+  // Also what an exited agent with a non-zero code used to fall back to (unnamed, so it silently
+  // read as idle) -- naming it here fixes that for real agents too, not just DAG cascades.
+  failed: { label: 'falló', color: 'var(--state-blocked)' },
 };
 
 export const LIVE = ['thinking', 'tool', 'approval', 'blocked'];
@@ -180,6 +186,8 @@ function fromLive(a) {
     conversationId: a.conversationId,
     role: a.role,
     replyTo: a.replyTo,
+    deniedCount: a.deniedCount || 0,
+    lastVerify: a.lastVerify || null,
   };
 }
 
@@ -204,9 +212,11 @@ export function getDelivered() { return liveDelivered; }
  * @param {object[]} [agents]
  * @param {object[]} [conversations]
  * @param {object[]} [accounts]
+ * @param {{id:string,state:'pending'|'failed',dependsOn:string[],conversationId:string}[]} [dag]
+ *   tasks the Scheduler is holding or cascade-failed before they ever became a real agent
  * @returns {object[]}
  */
-export function synthesizeFlows(agents = [], conversations = [], accounts = []) {
+export function synthesizeFlows(agents = [], conversations = [], accounts = [], dag = []) {
   const flows = [];
   const handledAgentIds = new Set();
 
@@ -233,9 +243,36 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
             task: a.task,
             tool: a.tool,
             dependsOn: a.dependsOn || [],
+            mode: a.mode || 'write',
+            deniedCount: a.deniedCount || 0,
+            lastVerify: a.lastVerify || null,
           });
         }
       }
+    }
+
+    // Tasks the coordinator asked for that the Scheduler is still holding on a dependency (or
+    // aborted in cascade before they ever ran): these never got an agent id in `agents` above, so
+    // without this they simply don't exist anywhere in the graph.
+    const knownIds = new Set(roster.map((r) => r.id));
+    for (const t of dag) {
+      if (t.conversationId !== conv.id || knownIds.has(t.id)) continue;
+      roster.push({
+        id: t.id,
+        state: t.state === 'failed' ? 'failed' : 'queued',
+        repo: '—',
+        branch: '—',
+        tokens: 0,
+        ctxPct: 0,
+        costUsd: 0,
+        role: 'worker',
+        task: `en cola: depende de ${t.dependsOn.join(', ') || '—'}`,
+        tool: '',
+        dependsOn: t.dependsOn,
+        mode: 'write',
+        deniedCount: 0,
+        lastVerify: null,
+      });
     }
 
     const reposList = [...new Set(roster.map((r) => r.repo).filter((r) => r && r !== '—'))];
@@ -244,7 +281,8 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
     let status = 'en espera';
     if (conv.status === 'archived' || conv.status === 'archivado') {
       status = 'archivado';
-    } else if (roster.some((r) => r.state === 'blocked') || coordinator?.state === 'blocked') {
+    } else if (roster.some((r) => r.state === 'blocked' || r.state === 'failed')
+      || coordinator?.state === 'blocked' || coordinator?.state === 'failed') {
       status = 'bloqueado';
     } else if (roster.some((r) => LIVE.includes(r.state)) || (coordinator && LIVE.includes(coordinator.state))) {
       status = 'activo';
@@ -294,13 +332,17 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
         tool: coordinator.tool || 'coordinando',
         task: coordinator.task,
         engine: coordinator.engine,
+        mode: coordinator.mode || 'write',
+        deniedCount: coordinator.deniedCount || 0,
+        lastVerify: coordinator.lastVerify || null,
       } : null,
       roster,
       defined: conv.cap || 3,
       turns: `${roster.length + (coordinator ? 1 : 0)} turnos`,
       cost: Number((totalCost || 0).toFixed(2)),
       rate: roster.reduce((sum, r) => sum + (r.state === 'thinking' || r.state === 'tool' ? 120 : 0), 0),
-      hooks: (roster.length + (coordinator ? 1 : 0)) * 3,
+      // Denied tool calls under read mode, real count -- replaces the old `roster.length*3` guess.
+      blocked: roster.reduce((sum, r) => sum + (r.deniedCount || 0), 0) + (coordinator?.deniedCount || 0),
       loops: [],
       links,
       status,
@@ -321,10 +363,13 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
       role: a.role || 'worker',
       task: a.task,
       tool: a.tool,
+      mode: a.mode || 'write',
+      deniedCount: a.deniedCount || 0,
+      lastVerify: a.lastVerify || null,
     }));
     const reposList = [...new Set(orphanRoster.map((r) => r.repo).filter((r) => r && r !== '—'))];
     const totalCost = orphanAgents.reduce((sum, a) => sum + (a.costUsd || 0), 0);
-    const hasBlocked = orphanAgents.some((a) => a.state === 'blocked');
+    const hasBlocked = orphanAgents.some((a) => a.state === 'blocked' || a.state === 'failed');
     const hasLive = orphanAgents.some((a) => LIVE.includes(a.state));
 
     flows.push({
@@ -340,7 +385,7 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
       turns: `${orphanAgents.length} turnos`,
       cost: Number((totalCost || 0).toFixed(2)),
       rate: orphanRoster.reduce((sum, r) => sum + (r.state === 'thinking' || r.state === 'tool' ? 120 : 0), 0),
-      hooks: orphanAgents.length * 3,
+      blocked: orphanRoster.reduce((sum, r) => sum + (r.deniedCount || 0), 0),
       loops: [],
       links: [],
       status: hasBlocked ? 'bloqueado' : (hasLive ? 'activo' : 'en espera'),
@@ -354,10 +399,16 @@ export function synthesizeFlows(agents = [], conversations = [], accounts = []) 
 let liveFlows = [];
 /** @param {object[]} flows */
 export function setLiveFlows(flows) { liveFlows = Array.isArray(flows) ? flows : []; }
+
+/** @type {object[]} tasks the Scheduler is holding on a dependency or cascade-failed, from main.js */
+let liveDag = [];
+/** @param {object[]} dag */
+export function setLiveDag(dag) { liveDag = Array.isArray(dag) ? dag : []; }
+
 /** Coordinators, each with the full roster it opened. */
 export function getFlows() {
   if (liveFlows.length > 0) return liveFlows;
-  return synthesizeFlows(getAgents(), getConversations(), getAccounts());
+  return synthesizeFlows(getAgents(), getConversations(), getAccounts(), liveDag);
 }
 
 /** @type {Record<string, any[]>} */

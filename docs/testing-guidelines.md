@@ -130,4 +130,4 @@ Before submitting or committing changes, execute:
 ```powershell
 npm test
 ```
-The test suite must report `28/28 verify scripts OK` (or higher) with zero failures.
+The test suite must report `29/29 verify scripts OK` (or higher) with zero failures.

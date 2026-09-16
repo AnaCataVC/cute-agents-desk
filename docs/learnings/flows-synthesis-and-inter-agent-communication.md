@@ -40,14 +40,32 @@ During our adversarial stress-test review, we evaluated failure modes, race cond
   * The operation mutates `conversation.json` in-place, updating `status: 'archived'` and stamping `archivedAt` without modifying or deleting worktrees or session logs.
   * The "Flujos" UI view respects the `showArch` toggle, dimming archived flows and rendering an inactive grey ring without discarding metrics.
 
+### 2.5 Denied-Call Counter Was A Guess, Not Telemetry (E-05)
+* **Risk**: `flow.hooks` was computed as `(roster.length + coordinator) * 3` -- a number with no relationship to anything the harness actually observed. A coordinator with three idle workers always showed "hooks: 12" whether or not a single tool call had ever run.
+* **Hardening**: `electron/read-mode.js` extracts the deny/allow verdict `hook.js` already computes for `CAD_MODE=read`, so `electron/events.js` can re-derive the same verdict from each `PreToolUse` payload and increment a real `agent.deniedCount` when it matches. `synthesizeFlows()` sums it into `flow.blocked`; `boss-graph.js`'s `metaRow` renamed the item to "bloqueados" and colors it once it's non-zero.
+
+### 2.6 Read Mode Had No Visual Signal On The Node (E-06)
+* **Risk**: A read-mode agent (`mode: 'read'`) was visually identical to a write-mode one on the ring -- the only trace of the distinction was denied-call messages buried in its own thread.
+* **Hardening**: `agent.mode` (already tracked per-agent, since it also drives `CAD_MODE` at spawn) now reaches the roster and coordinator objects `synthesizeFlows()` builds. `boss-graph.js` draws a 🔒 badge on the node only when it differs from the write-mode default, so a write-mode ring stays uncluttered.
+
+### 2.7 Verification Runs Were Indistinguishable From Any Other Tool Call (E-07)
+* **Risk**: An agent invoking `npm test` looked identical to one invoking any other Bash command. There was no way to tell from the graph whether an agent had checked its own work, let alone whether that check passed.
+* **Hardening**: `electron/tool-name.js` adds `isVerificationCommand()` (a regex over the Bash/`run_command` command text) and `exitCodeOf()` (reads `tool_result.exit_code` off the matching `PostToolUse` payload). The exit-code field is per Claude Code's public hooks doc, not measured against a live payload the way the `Status` shape elsewhere in this file was -- if it's ever absent or renamed, `exitCodeOf()` returns `undefined` and the badge falls back to a neutral "ran" instead of a guessed pass/fail. `events.js` correlates the two across one agent's Pre/PostToolUse pair, safe because a single CLI session never runs two tool calls concurrently. `boss-graph.js` shows ✓/✗ on the node from `agent.lastVerify`.
+
+### 2.8 Dependency-Blocked And Cascade-Failed Tasks Never Existed In The Graph (E-08)
+* **Risk**: `Scheduler`'s `pendingQueue` and fail-fast cascade (`onTaskFailed`, tested in `verify-scheduler-dag.js`) are real logic, but a task still waiting on a dependency -- or aborted before its dependency ever finished -- never got an agent record. It was invisible everywhere except a text note dropped into the coordinator's own thread.
+* **Hardening**: `Scheduler.spawnedIds` tracks which task ids actually got `spawnFn` called, so the new `Scheduler.snapshot()` can return only the ones that never did (state `pending` or cascade-`failed`). `electron/main.js` publishes that snapshot, with a conversation id attached from a side table (`Scheduler` itself is conversation-agnostic), as a `dag` field on `desk:patch`. `synthesizeFlows()` turns each entry into a ghost roster item (`state: 'queued'` or `'failed'`) placed in the flow it belongs to -- rendered by the existing parked row, no new SVG needed since a ghost never has a live PTY or thread. A `failed` state, real or ghost, now also flips `flow.status` to `'bloqueado'`, which it never did before.
+
 ---
 
 ## 3. Implementation Blueprint
 
 ### 3.1 Data Contracts & Synthesis
-* `flow.coordinator`: Preserves `{ id, state, tokens, tokenCap, ctxPct, costUsd, tool, task, engine }`.
+* `flow.coordinator`: Preserves `{ id, state, tokens, tokenCap, ctxPct, costUsd, tool, task, engine, mode, deniedCount, lastVerify }`.
 * `flow.short`: Normalized to `conv.title || conv.id`, preventing undefined string interpolation in dialog pickers.
 * `flow.links`: Derived dynamically by correlating `worker.dependsOn` arrays with sibling agent IDs in the conversation roster, emitting `[depId, worker.id]` tuples for SVG bezier curve generation.
+* `flow.blocked`: Sum of `deniedCount` across roster and coordinator -- real read-mode denials, not the `roster.length*3` guess it replaced (§2.5).
+* Roster items also carry `mode`, `deniedCount`, `lastVerify` per agent (§2.6, §2.7), and may be ghost entries synthesized from `dag` with no live agent behind them at all (§2.8).
 * `fromLive.messages`: Reflects `liveThreads[a.id]?.length || 0`, providing accurate real-time counts on agent cards.
 
 ### 3.2 UI & SVG Radial Graph Enhancements
@@ -61,7 +79,8 @@ During our adversarial stress-test review, we evaluated failure modes, race cond
 ## 4. Verification & Testing
 
 All enhancements are verified via fast, hermetic unit tests passing under plain `node`:
-* `tools/verify-flows-synthesis.mjs`: Tests empty state, coordinator preservation, `short` title extraction, DAG-to-links synthesis, blocked state propagation, and orphan agent dispatch.
+* `tools/verify-flows-synthesis.mjs`: Tests empty state, coordinator preservation, `short` title extraction, DAG-to-links synthesis, blocked state propagation, orphan agent dispatch, `mode`/`deniedCount`/`lastVerify` passthrough, `flow.blocked` aggregation, and ghost-task synthesis from `dag` (queued, cascade-failed, and conversation isolation between the two).
+* `tools/verify-scheduler-dag.js`: Tests sequential/diamond dependency resolution, DFS cycle detection, fail-fast cascades, and `Scheduler.snapshot()` excluding any task id that actually spawned (queued or cascade-failed only).
 * `tools/verify-worker-outbox.js`: Verifies outbox draining, coordinator notification tagging, single-record thread deduplication, and resilient handling of exited agents.
 * `tools/verify-conversations.js`: Verifies conversation creation, retrieval, active agent counts, status persistence, and atomic archiving.
-* Total test suite pass rate: **26/26 verification scripts OK** (`npm test`).
+* Total test suite pass rate: **28/28 verification scripts OK** (`npm test`).

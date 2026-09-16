@@ -19,6 +19,10 @@ class Scheduler {
     this.dependencies = new Map();
     /** @type {Map<string, { req: any, spawnFn: (req: any) => any }>} */
     this.pendingQueue = new Map();
+    /** @type {Set<string>} task ids that actually got spawnFn called -- what tells `snapshot()`
+     * apart a task still waiting on a dependency (or cascade-failed before ever running) from one
+     * that ran and has its own real agent record elsewhere. */
+    this.spawnedIds = new Set();
   }
 
   /**
@@ -89,6 +93,7 @@ class Scheduler {
     if (deps.length === 0) {
       if (taskId) {
         this.taskStates.set(taskId, 'running');
+        this.spawnedIds.add(taskId);
       }
       spawnFn(req);
       return { ok: true, queued: false };
@@ -113,6 +118,7 @@ class Scheduler {
       if (taskId) {
         this.dependencies.set(taskId, deps);
         this.taskStates.set(taskId, 'running');
+        this.spawnedIds.add(taskId);
       }
       spawnFn(req);
       return { ok: true, queued: false };
@@ -148,6 +154,7 @@ class Scheduler {
         if (allDone) {
           this.pendingQueue.delete(pendingId);
           this.taskStates.set(pendingId, 'running');
+          this.spawnedIds.add(pendingId);
           released.push(pendingId);
           try {
             item.spawnFn(item.req);
@@ -193,6 +200,22 @@ class Scheduler {
     }
 
     return cascadeFailed;
+  }
+
+  /**
+   * Tasks that never got a real agent spawned for them: still queued on a dependency, or
+   * cascade-failed before their turn ever came. A task that ran (even if it later failed) has its
+   * own agent record already, so it's excluded here -- this is only for the part of the DAG the
+   * flow graph otherwise has no way to show at all.
+   * @returns {{id: string, state: 'pending'|'failed', dependsOn: string[]}[]}
+   */
+  snapshot() {
+    const out = [];
+    for (const [id, state] of this.taskStates) {
+      if (this.spawnedIds.has(id)) continue;
+      out.push({ id, state, dependsOn: this.dependencies.get(id) || [] });
+    }
+    return out;
   }
 }
 

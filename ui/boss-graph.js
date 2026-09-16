@@ -83,11 +83,23 @@ function graph({ flow, agents, width, height, scale, labels = true, simple = fal
     const dim = agent.state === 'blocked' ? 0.6 : 1;
     const label = labels ? `<text x="${p.x}" y="${(p.y + 38).toFixed(1)}" text-anchor="middle"
       opacity="${dim}" style="fill:var(--color-dark-text-2);font:400 9px var(--font-mono)">${esc(agent.id)}</text>` : '';
+    // Read mode is a real behavioral gate (hook.js denies every write), not just a setting, so it
+    // gets a badge only when it differs from the default -- a write-mode node stays uncluttered.
+    const modeBadge = agent.mode === 'read' ? `<text x="${(p.x + 13).toFixed(1)}" y="${(p.y - 12).toFixed(1)}"
+      text-anchor="middle" font-size="11" opacity="${dim}">🔒</text>` : '';
+    // Last test/verify run this agent's hook saw it invoke, opposite corner from the mode badge.
+    const verifyBadge = agent.lastVerify === 'pass'
+      ? `<text x="${(p.x - 13).toFixed(1)}" y="${(p.y - 12).toFixed(1)}" text-anchor="middle" font-size="12"
+          style="fill:var(--color-emerald-400)" opacity="${dim}">✓</text>`
+      : agent.lastVerify === 'fail'
+        ? `<text x="${(p.x - 13).toFixed(1)}" y="${(p.y - 12).toFixed(1)}" text-anchor="middle" font-size="12"
+            style="fill:var(--state-blocked)" opacity="${dim}">✗</text>`
+        : '';
     // The hit area is a transparent circle, not the glyph: the robot has holes.
     const hit = `<circle cx="${p.x}" cy="${p.y}" r="26" fill="transparent" style="cursor:pointer"
       data-act="tip" data-arg="${esc(`${flow.id}|${agent.id}`)}"></circle>`;
     return robot({ x: p.x, y: p.y, scale, color: skin.color, variant: skin.variant, opacity: dim, simple })
-      + label + hit;
+      + label + modeBadge + verifyBadge + hit;
   }).join('');
 
   const coord = flow.coordinator;
@@ -176,13 +188,15 @@ function parkedRow(flow, agents, states) {
 /** The numbers that say whether this coordinator is worth your attention right now. */
 function metaRow(flow) {
   const roster = flow.roster || [];
-  const item = (label, value) => `
+  const item = (label, value, color = 'var(--color-dark-text-2)') => `
     <div style="min-width:0">
       <div style="font:400 8.5px var(--font-body);color:var(--color-dark-text-3);
            letter-spacing:.05em;text-transform:uppercase">${label}</div>
-      <div class="mono" style="font-size:10.5px;color:var(--color-dark-text-2);overflow:hidden;
+      <div class="mono" style="font-size:10.5px;color:${color};overflow:hidden;
            text-overflow:ellipsis;white-space:nowrap">${value}</div>
     </div>`;
+
+  const blocked = flow.blocked || 0;
 
   return `
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:9px;
@@ -191,7 +205,7 @@ function metaRow(flow) {
     ${item('turnos', esc(flow.turns || `${roster.length} turnos`))}
     ${item('costo', `$${(flow.cost || 0).toFixed(2)}`)}
     ${item('ritmo', flow.rate ? `${flow.rate} tok/min` : '—')}
-    ${item('hooks', String(flow.hooks || 0))}
+    ${item('bloqueados', String(blocked), blocked > 0 ? 'var(--state-blocked)' : undefined)}
     ${item('bucles', (flow.loops || []).length ? esc(flow.loops.join(', ')) : '—')}
   </div>`;
 }
@@ -267,6 +281,9 @@ function legend() {
     ${item(`<svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke-width="1.1"
       stroke-dasharray="3 5" opacity="0.5" style="stroke:var(--state-blocked)"></line></svg>`,
     'quieto = detenido, nadie avanza por esa arista')}
+    ${item('<span style="font-size:12px">🔒</span>', 'modo sólo lectura: el hook niega cualquier escritura')}
+    ${item('<span style="font-size:13px;color:var(--color-emerald-400)">✓</span> / '
+      + '<span style="font-size:13px;color:var(--state-blocked)">✗</span>', 'resultado del último test/verify que corrió')}
   </div>`;
 }
 

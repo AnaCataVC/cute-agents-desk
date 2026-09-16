@@ -29,7 +29,7 @@ guesses status by reading the terminal.
 - **File-Based Decoupled Mailbox & Autonomous Coordination:** Asynchronous inter-process messaging utilizing disk-backed JSON queues (`events/`, `outbox/`) without exposing local TCP ports or network sockets. The coordinator agent delegates subtasks via atomic `spawn-requests`, while worker agents report lifecycle transitions (born, blocked, done, and arbitrary updates) directly into the coordinator's interactive PTY session.
 - **Automated Delivery Pipeline & Draft Pull Requests:** Robust, auditable delivery lifecycle upon task completion. Changes in the worktree are committed using the exact author identity (name and email) configured in `accounts.json`, securely pushed to `origin`, and registered via GitHub CLI as a draft Pull Request (`gh pr create --draft`) containing linked task reports and persisted audit trails in `deliveries.json`.
 - **Resource Governance, Token Budgets & Parallelism Limits:** Integrated task scheduler (`scheduler.js`) enforcing strict concurrency ceilings globally and per conversation. Real-time telemetry tracking official subscription quotas directly from CLIs (`claude -p /usage` and `agy -p /usage`) with live weekly usage, 5-hour rolling windows, and reset timestamps, backed by local safety caps and defensive read-only policies (denylist for Claude Code vs. strict tool allowlist for Antigravity CLI).
-- **Radial Workflow Topologies & Dependency Graph:** Dedicated "Workflows" tab rendering a radial SVG topology (`ui/boss-graph.js`) featuring the coordinator at the central hub with interactive live telemetry, orbiting worker nodes, and dynamic animated bezier curves representing prerequisite task dependencies (`dependsOn`) and context handoffs. Supports atomic conversation archiving and inactive session cleanup.
+- **Radial Workflow Topologies & Dependency Graph:** Dedicated "Workflows" tab rendering a radial SVG topology (`ui/boss-graph.js`) featuring the coordinator at the central hub with interactive live telemetry, orbiting worker nodes, and dynamic animated bezier curves representing prerequisite task dependencies (`dependsOn`) and context handoffs. Supports atomic conversation archiving and inactive session cleanup. Each node carries, when it applies, a read-mode lock badge and the outcome (✓/✗) of the last test/verify run it invoked; the "blocked" counter reflects calls the read-mode hook actually denied (not an estimate), and tasks the `Scheduler` is holding on a dependency or aborted in cascade show up as ghost entries in the parked row instead of staying invisible until they start.
 
 ### The two engines, in practice
 
@@ -86,7 +86,7 @@ npm test        # runs the 28 fast scripts that need no real CLI and no window, 
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 28 `verify-*.js` scripts MEASURED to finish in
+`npm test` (`tools/verify-all.js`) runs the 29 `verify-*.js` scripts MEASURED to finish in
 seconds under plain `node`. The rest need a real CLI turn, an Electron window, or packaged
 binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay manual, run one at a time:
 

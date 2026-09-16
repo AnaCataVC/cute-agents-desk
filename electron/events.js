@@ -13,7 +13,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const paths = require('./paths.js');
 const conv = require('./conversations.js');
-const { toolNameOf } = require('./tool-name.js');
+const { toolNameOf, isVerificationCommand, exitCodeOf } = require('./tool-name.js');
+const { isDeniedInReadMode } = require('./read-mode.js');
 const { drainJsonQueue, watchJsonQueue } = require('./json-queue.js');
 const { readAccountsConfig, accountIdForCwd } = require('./accounts.js');
 
@@ -184,6 +185,9 @@ class Registry {
       replyTo: opts.replyTo,
       role: opts.role,
       dependsOn: opts.dependsOn || [],
+      deniedCount: 0,
+      verifying: false,
+      lastVerify: null,
     });
     this.handles.set(agent.id, { write: agent.write, kill: agent.kill });
     this.watch(agent.id);
@@ -288,9 +292,23 @@ class Registry {
       if (ALWAYS_ASK.test(toolNameOf(report.payload))) {
         agent.state = 'approval';
       }
+      // Not telemetry-only: hook.js already denied this call on the agent's own turn if it's
+      // read-mode and write-shaped -- this only re-derives the same verdict from the same payload
+      // to count it, so a read-mode agent's denied attempts show up as a real number in the graph
+      // instead of the flat, made-up `roster.length*3` it used to show.
+      if (agent.mode === 'read' && isDeniedInReadMode(report.payload)) {
+        agent.deniedCount = (agent.deniedCount || 0) + 1;
+        this.recordMessage(id, 'sys', 'harness', `Bloqueado en modo lectura: ${tool || toolNameOf(report.payload)}`);
+      }
+      agent.verifying = isVerificationCommand(report.payload);
     }
     if (report.event === 'PostToolUse') {
       agent.tool = 'pensando';
+      if (agent.verifying) {
+        const code = exitCodeOf(report.payload);
+        agent.lastVerify = code === undefined ? 'ran' : (code === 0 ? 'pass' : 'fail');
+        agent.verifying = false;
+      }
     }
     if (report.event === 'Notification' && report.payload?.message) {
       agent.tool = report.payload.message;

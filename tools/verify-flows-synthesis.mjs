@@ -49,6 +49,9 @@ function testCoordinatorWithWorkers() {
       branch: 'claude/auth-fix',
       accountId: 'work-acc',
       tool: 'Edit · src/login.ts',
+      mode: 'read',
+      deniedCount: 2,
+      lastVerify: 'fail',
     },
     {
       id: 'w-2',
@@ -84,6 +87,12 @@ function testCoordinatorWithWorkers() {
   assert.strictEqual(f.coordinator.id, 'co-1');
   assert.strictEqual(f.coordinator.state, 'thinking');
 
+  assert.strictEqual(f.roster[0].mode, 'read', 'mode must pass through from the raw agent');
+  assert.strictEqual(f.roster[0].deniedCount, 2, 'deniedCount must pass through from the raw agent');
+  assert.strictEqual(f.roster[0].lastVerify, 'fail', 'lastVerify must pass through from the raw agent');
+  assert.strictEqual(f.roster[1].mode, 'write', 'mode defaults to write when the agent has none');
+  assert.strictEqual(f.blocked, 2, 'blocked must sum deniedCount across roster and coordinator, not a guessed count');
+
   console.log('testCoordinatorWithWorkers OK');
 }
 
@@ -99,6 +108,36 @@ function testCoordinatorLinksFromDependsOn() {
   assert.strictEqual(flows.length, 1);
   assert.deepStrictEqual(flows[0].links, [['w-a', 'w-b']], 'Links must be synthesized from dependsOn');
   console.log('testCoordinatorLinksFromDependsOn OK');
+}
+
+function testDagGhostTasks() {
+  const conversations = [{ id: 'c-dag2', title: 'DAG with queue', cap: 3 }];
+  const agents = [
+    { id: 'co-dag2', role: 'coordinator', conversationId: 'c-dag2', state: 'idle' },
+    { id: 'w-done', role: 'worker', conversationId: 'c-dag2', state: 'done' },
+  ];
+  const dag = [
+    { id: 'w-queued', state: 'pending', dependsOn: ['w-done'], conversationId: 'c-dag2' },
+    { id: 'w-aborted', state: 'failed', dependsOn: ['w-queued'], conversationId: 'c-dag2' },
+    { id: 'other-conv-task', state: 'pending', dependsOn: [], conversationId: 'some-other-conv' },
+  ];
+
+  const flows = synthesizeFlows(agents, conversations, [], dag);
+  assert.strictEqual(flows.length, 1);
+  const f = flows[0];
+
+  const queued = f.roster.find((r) => r.id === 'w-queued');
+  assert.ok(queued, 'A pending Scheduler task must appear as a ghost roster entry');
+  assert.strictEqual(queued.state, 'queued', 'A pending task is shown as queued, not idle');
+
+  const aborted = f.roster.find((r) => r.id === 'w-aborted');
+  assert.ok(aborted, 'A cascade-failed task that never spawned must still appear');
+  assert.strictEqual(aborted.state, 'failed');
+
+  assert.strictEqual(f.status, 'bloqueado', 'A failed ghost task must flip the flow to bloqueado');
+  assert.ok(!f.roster.some((r) => r.id === 'other-conv-task'), 'A task from a different conversation must not leak in');
+
+  console.log('testDagGhostTasks OK');
 }
 
 function testBlockedStatePropagation() {
@@ -169,6 +208,7 @@ function testGetFlowsFallback() {
 testEmptyState();
 testCoordinatorWithWorkers();
 testCoordinatorLinksFromDependsOn();
+testDagGhostTasks();
 testBlockedStatePropagation();
 testOrphanAgentsFlow();
 testGetFlowsFallback();

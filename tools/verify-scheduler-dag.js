@@ -134,10 +134,31 @@ async function testSchedulerDAG() {
   assert.deepStrictEqual(releasedFromC, ['D']);
   assert.strictEqual(diamondScheduler.taskStates.get('D'), 'running');
   console.log('Diamond DAG OK: Tarea D espera a que ramas paralelas B y C concluyan');
+
+  // --- 5. snapshot() only surfaces tasks that never got a real agent spawned for them ---
+  const snapScheduler = new Scheduler();
+  snapScheduler.enqueueTask({ id: 'ran-task' }, () => {});
+  snapScheduler.enqueueTask({ id: 'queued-task', dependsOn: ['ran-task'] }, () => {});
+  snapScheduler.enqueueTask({ id: 'queued-grandchild', dependsOn: ['queued-task'] }, () => {});
+
+  let snap = snapScheduler.snapshot();
+  assert.ok(!snap.some((t) => t.id === 'ran-task'), 'A task that already spawned must not appear in snapshot');
+  assert.deepStrictEqual(snap.find((t) => t.id === 'queued-task'), { id: 'queued-task', state: 'pending', dependsOn: ['ran-task'] });
+
+  // ran-task later fails at runtime (its own agent exited non-zero): it already has a real agent
+  // record, so it must stay out of snapshot even after onTaskFailed marks it 'failed'.
+  const cascadeIds = snapScheduler.onTaskFailed('ran-task', 'exit 1');
+  assert.ok(cascadeIds.includes('queued-task') && cascadeIds.includes('queued-grandchild'));
+  snap = snapScheduler.snapshot();
+  assert.ok(!snap.some((t) => t.id === 'ran-task'), 'A task that spawned and failed later must not become a ghost');
+  const ghostChild = snap.find((t) => t.id === 'queued-task');
+  assert.ok(ghostChild, 'A cascade-failed task that never spawned must still appear');
+  assert.strictEqual(ghostChild.state, 'failed');
+  console.log('Snapshot OK: solo expone tareas que nunca llegaron a spawnearse (en cola o abortadas en cascada)');
 }
 
 testSchedulerDAG().then(() => {
-  console.log('\nverify-scheduler-dag OK: 4/4 checks passing');
+  console.log('\nverify-scheduler-dag OK: 5/5 checks passing');
 }).catch((err) => {
   console.error('verify-scheduler-dag FAILED:', err);
   process.exit(1);

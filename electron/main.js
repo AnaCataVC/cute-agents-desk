@@ -27,6 +27,7 @@ const { pathToFileURL, URL } = require('node:url');
 const { Registry } = require('./events.js');
 const { spawn, engineFor, validateAndSanitizeParams } = require('./agent.js');
 const { toyRepo } = require('./toy-repo.js');
+const { mayDelegate } = require('./read-mode.js');
 const { Scheduler } = require('./scheduler.js');
 const {
   readAccountsConfig,
@@ -248,6 +249,17 @@ function wireAgents(win) {
     if (!win.isDestroyed()) win.webContents.send('desk:patch', { agents, usage, threads });
   });
   const scheduler = new Scheduler({ globalCap: appConfig.exec?.maxParallel || 5 });
+  /** @type {Map<string, string>} task id -> the conversation whose coordinator queued it --
+   * Scheduler itself only knows dependency ids, never which conversation owns a task, so the
+   * flow graph needs this side table to place a queued/cascade-failed ghost in the right card. */
+  const taskConversation = new Map();
+  function publishDag() {
+    if (win.isDestroyed()) return;
+    const dag = scheduler.snapshot()
+      .map((t) => ({ ...t, conversationId: taskConversation.get(t.id) }))
+      .filter((t) => t.conversationId);
+    win.webContents.send('desk:patch', { dag });
+  }
 
   /**
    * The lifecycle wiring a plain worker and a coordinator both need: forward output through
@@ -276,6 +288,7 @@ function wireAgents(win) {
             registry.note('scheduler', 'TaskCascadeFailed', { taskId: failedId, causedBy: id });
           }
         }
+        publishDag();
       },
     };
   }
@@ -400,6 +413,9 @@ function wireAgents(win) {
    * @param {string} [o.replyTo]  the coordinator's agent id, when this worker was spawned on its
    *   behalf rather than directly from the window
    * @param {'read'|'write'|'plan'|'auto'} [o.mode]
+   * @param {boolean} [o.viaCoordinator]  true only for a coordinator's own spawn-request file, the
+   *   one caller whose privileges the request must not exceed. The window's own IPC is the user
+   *   asking directly, so it is not gated by whichever coordinator happens to be running.
    * @param {string} [o.bin]
    * @param {string} [o.engine]
    * @param {string} [o.model]
@@ -407,7 +423,7 @@ function wireAgents(win) {
    * @returns {Promise<string | { error: string }>}
    */
   async function spawnWorker(opts = {}) {
-    let { cwd, task, conversationId, replyTo, bin, engine, model, effort, mode, id: customId, dependsOn } = opts;
+    let { cwd, task, conversationId, replyTo, bin, engine, model, effort, mode, id: customId, dependsOn, viaCoordinator } = opts;
 
     // Auto-resolve replyTo to the active coordinator if conversationId is given without explicit replyTo
     if (conversationId && !replyTo) {
@@ -416,6 +432,19 @@ function wireAgents(win) {
           replyTo = a.id;
           break;
         }
+      }
+    }
+
+    // A coordinator cannot delegate what it is not allowed to do itself. See `mayDelegate` in
+    // read-mode.js for why. Refused rather than silently downgraded to a read worker: a downgrade
+    // reads as "the task ran" in the status line the coordinator plans against.
+    if (viaCoordinator && replyTo) {
+      const boss = registry.agents.get(replyTo);
+      if (boss && !mayDelegate(boss.mode, mode)) {
+        const reason = `el coordinador esta en modo ${boss.mode}: no puede delegar una tarea en modo ${mode || 'write'}`;
+        registry.note(conversationId || 'scheduler', 'SpawnRefused', { reason, cwd, task });
+        registry.notifyCoordinator(replyTo, 'scheduler', `pedido rechazado: ${reason}`);
+        return { error: reason };
       }
     }
 
@@ -577,12 +606,15 @@ function wireAgents(win) {
         task: taskReq.objective,
         conversationId,
         replyTo: agent.id,
+        viaCoordinator: true,
         mode: taskReq.mode,
         bin: taskReq.bin || taskReq.engine,
         model: taskReq.model,
         effort: taskReq.effort,
         dependsOn: taskReq.dependsOn,
       }));
+      if (req.id) taskConversation.set(req.id, conversationId);
+      publishDag();
       if (!enqueueRes.ok) {
         registry.notifyCoordinator(agent.id, 'scheduler', `pedido rechazado: ${enqueueRes.reason}`);
         registry.note(conversationId, 'SpawnRefused', { reason: enqueueRes.reason, req });
