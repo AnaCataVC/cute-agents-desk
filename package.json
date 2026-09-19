@@ -34,12 +34,8 @@
     "win": {
       "icon": "assets/icon.ico",
       "target": [
-        "portable",
         "nsis"
       ]
-    },
-    "portable": {
-      "artifactName": "CuteAgentsDesk-${version}-portable.exe"
     },
     "nsis": {
       "oneClick": false,

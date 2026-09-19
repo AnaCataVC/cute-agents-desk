@@ -233,8 +233,20 @@ const ACTIONS = {
     }
   },
   refreshQuotas: () => {
+    if (state.isRefreshingQuotas) return;
+    state.isRefreshingQuotas = true;
+    render();
     if (window.desk?.quotas) {
-      window.desk.quotas({ forceRefresh: true }).then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); render(); } }).catch(() => {});
+      window.desk.quotas({ forceRefresh: true })
+        .then((/** @type {object} */ q) => { if (q) { data.setLiveQuotas(q); } })
+        .catch(() => {})
+        .finally(() => {
+          state.isRefreshingQuotas = false;
+          render();
+        });
+    } else {
+      state.isRefreshingQuotas = false;
+      render();
     }
   },
   flowView: (/** @type {any} */ v) => { state.flowView = v; },

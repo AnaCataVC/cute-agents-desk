@@ -85,11 +85,14 @@ function quotaBar(label, pctUsed, color, detail = '') {
   </div>`;
 }
 
-function quotasSection(quotas) {
+function quotasSection(quotas, state) {
+  const isRefreshing = state?.isRefreshingQuotas;
+
   if (!quotas) {
     return `
-    <div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:6px 0">
-      Consultando cuotas oficiales de CLIs...
+    <div style="display:flex;align-items:center;gap:9px;padding:10px 2px;font:400 11px var(--font-body);color:var(--color-dark-text-3)">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--color-lilac);animation:antenna 1.4s ease-in-out infinite"></span>
+      <span>Consultando cuotas oficiales de CLIs...</span>
     </div>`;
   }
 
@@ -115,6 +118,12 @@ function quotasSection(quotas) {
       const detail = c.weekResetsAt ? `reinicio: ${c.weekResetsAt}` : '';
       rows.push(quotaBar('Claude Code (Semana)', weekUsed, weekUsed >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));
     }
+  } else if (isRefreshing || !quotas.updatedAt) {
+    rows.push(`
+    <div style="display:flex;align-items:center;gap:7px;padding:6px 0;font:400 10.5px var(--font-body);color:var(--color-dark-text-3)">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--color-lilac);animation:antenna 1.4s ease-in-out infinite"></span>
+      <span>Consultando cuotas de Claude Code...</span>
+    </div>`);
   }
 
   if (quotas.agy) {
@@ -129,6 +138,12 @@ function quotasSection(quotas) {
       const detail = ag.claude.fiveHourRemainingPct !== null ? `${ag.claude.fiveHourRemainingPct}% disponible en ventana 5h` : '';
       rows.push(quotaBar('AGY (Claude/GPT semanal)', used, used >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));
     }
+  } else if (isRefreshing || !quotas.updatedAt) {
+    rows.push(`
+    <div style="display:flex;align-items:center;gap:7px;padding:6px 0;font:400 10.5px var(--font-body);color:var(--color-dark-text-3)">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--color-blue);animation:antenna 1.4s ease-in-out infinite"></span>
+      <span>Consultando cuotas de AGY...</span>
+    </div>`);
   }
 
   if (!rows.length) {
@@ -262,9 +277,14 @@ export function renderUsage(state, data) {
           <div class="font-display" style="font:600 12px var(--font-display);letter-spacing:.05em;
                text-transform:uppercase">Cuotas oficiales (CLI)</div>
           <button class="btn btn-secondary" style="font-size:10px;padding:2px 7px" data-act="refreshQuotas"
-                  title="Consulta /usage directamente en claude y agy">Actualizar</button>
+                  ${state?.isRefreshingQuotas ? 'disabled' : ''}
+                  title="Consulta /usage directamente en claude y agy">
+            ${state?.isRefreshingQuotas
+              ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--color-lilac);animation:antenna 1.2s ease-in-out infinite;margin-right:4px;vertical-align:middle"></span>Actualizando...'
+              : 'Actualizar'}
+          </button>
         </div>
-        ${quotasSection(data.getQuotas())}
+        ${quotasSection(data.getQuotas(), state)}
         <div style="margin-top:14px;padding-top:11px;border-top:1px solid var(--color-dark-border)">
           <div class="font-display" style="font:600 10.5px var(--font-display);letter-spacing:.05em;
                text-transform:uppercase;color:var(--color-dark-text-3);margin-bottom:8px">Tope diario del arnés</div>

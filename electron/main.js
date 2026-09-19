@@ -301,8 +301,15 @@ function wireAgents(win) {
 
   ipcMain.handle('desk:usage', () => registry.getUsage());
   ipcMain.handle('desk:quotas', (_ev, opts = {}) => {
-    return getQuotas(opts);
+    return getQuotas(opts, (quotas) => {
+      if (!win.isDestroyed()) win.webContents.send('desk:patch', { quotas });
+    });
   });
+
+  // Pre-fetch quotas in background so the "Uso" tab displays immediately
+  getQuotas({}, (quotas) => {
+    if (!win.isDestroyed()) win.webContents.send('desk:patch', { quotas });
+  }).catch(() => {});
 
   ipcMain.handle('desk:config', () => config.readConfig());
   ipcMain.handle('desk:updateConfig', (_ev, { section, key, value } = {}) => {

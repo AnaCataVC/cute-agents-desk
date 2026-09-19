@@ -170,17 +170,36 @@ async function fetchClaudeUsage(usageTimeoutMs = 20000, authTimeoutMs = 5000) {
   }
 }
 
+const updateListeners = new Set();
+
+function notifyUpdate(quotas) {
+  for (const listener of updateListeners) {
+    try { listener(quotas); } catch { /* ignore */ }
+  }
+}
+
 /**
  * Fetches current quota statuses for Claude and AGY.
  * @param {{forceRefresh?: boolean, timeoutMs?: number}} [opts]
+ * @param {(quotas: object) => void} [onUpdate]
  */
-async function getQuotas(opts = {}) {
+async function getQuotas(opts = {}, onUpdate = null) {
+  if (typeof onUpdate === 'function') {
+    updateListeners.add(onUpdate);
+  }
+
   const now = Date.now();
   if (cachedQuotas) {
     if (!opts.forceRefresh && (now - lastFetchedAt < CACHE_TTL_MS)) {
+      if (typeof onUpdate === 'function') {
+        try { onUpdate(cachedQuotas); } catch { /* ignore */ }
+      }
       return cachedQuotas;
     }
     if (opts.forceRefresh && (now - lastFetchedAt < FORCE_REFRESH_COOLDOWN_MS)) {
+      if (typeof onUpdate === 'function') {
+        try { onUpdate(cachedQuotas); } catch { /* ignore */ }
+      }
       return cachedQuotas;
     }
   }
@@ -191,18 +210,39 @@ async function getQuotas(opts = {}) {
 
   activeFetchPromise = (async () => {
     try {
-      const [claude, agyRaw] = await Promise.all([
-        fetchClaudeUsage(opts.timeoutMs || 22000, 5000),
-        execCli('agy', ['-p', '/usage'], opts.timeoutMs || 12000),
-      ]);
-
-      const agy = parseAgyUsage(agyRaw);
-
-      cachedQuotas = {
+      let currentResult = cachedQuotas ? { ...cachedQuotas } : {
         updatedAt: new Date().toISOString(),
-        claude,
-        agy,
+        claude: null,
+        agy: null,
       };
+
+      const pClaude = fetchClaudeUsage(opts.timeoutMs || 22000, 5000).then((claude) => {
+        currentResult = {
+          ...currentResult,
+          updatedAt: new Date().toISOString(),
+          claude,
+        };
+        cachedQuotas = currentResult;
+        lastFetchedAt = Date.now();
+        notifyUpdate(currentResult);
+        return claude;
+      });
+
+      const pAgy = execCli('agy', ['-p', '/usage'], opts.timeoutMs || 18000).then((agyRaw) => {
+        const agy = parseAgyUsage(agyRaw);
+        currentResult = {
+          ...currentResult,
+          updatedAt: new Date().toISOString(),
+          agy,
+        };
+        cachedQuotas = currentResult;
+        lastFetchedAt = Date.now();
+        notifyUpdate(currentResult);
+        return agy;
+      });
+
+      await Promise.all([pClaude, pAgy]);
+      cachedQuotas = currentResult;
       lastFetchedAt = Date.now();
       return cachedQuotas;
     } finally {
