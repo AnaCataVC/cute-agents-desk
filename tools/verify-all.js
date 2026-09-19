@@ -46,6 +46,7 @@ const FAST = [
   'verify-scheduler-dag.js',
   'verify-external-editor.js',
   'verify-syntax-highlight.js',
+  'verify-dropdown-stability.js',
 ];
 
 const MANUAL = [

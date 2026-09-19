@@ -27,7 +27,7 @@ This repository follows strict engineering, architectural, and documentation sta
 
 - **Fast & Hermetic Test Suite (`npm test`):**
   - All automated fast unit tests live in `tools/verify-*.js` and must pass under plain `node` in seconds without spawning real CLI agents or opening Electron windows.
-  - All tests must maintain 100% pass rate (`29/29 verify scripts OK`).
+  - All tests must maintain 100% pass rate (`30/30 verify scripts OK`).
 - **Zero Mock Telemetry:** Never introduce artificial oscillations or mock animations in production telemetry cards (`ui/tokens-view.js`). Metrics must reflect deterministic, live state.
 - **Windows Process Management:** Always terminate child process trees cleanly on Windows via `taskkill /PID <pid> /T /F` when handling CLI timeouts.
 - **IPC Architecture Reference:** Refer to `docs/architecture/ipc-contracts.md` and `docs/architecture/subsystems-overview.md` before introducing new channels or modifying Electron preload boundaries.
