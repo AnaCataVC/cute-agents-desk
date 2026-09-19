@@ -36,8 +36,11 @@
 ### Root Cause
 - In Windows (`win32`), running `spawn('claude', ['-p', '/usage'], { shell: true })` spawns an intermediate `cmd.exe` process.
 - Calling `child.kill('SIGKILL')` upon timeout only signals the `cmd.exe` shell, leaving the underlying `claude.exe` or `agy.exe` process running orphaned in the background.
-- Running `claude -p "/usage"` without closing `stdin` (`stdio: ['ignore', 'pipe', 'pipe']`) introduced a 3-second delay waiting for input before proceeding.
+- Running `claude -p "/usage"` with `stdio: ['ignore', 'pipe', 'pipe']` does NOT close stdin with EOF; Claude CLI detects non-TTY input and waits 3 seconds (`Warning: no stdin data received in 3s, proceeding without it`).
+- Claude CLI's `/usage` diagnostic contacts Anthropic cloud APIs over the network, requiring 12–14 seconds on Windows. A low 8-second timeout caused `taskkill` to terminate the process prematurely every single time, returning `claude: null`.
 
 ### Resolution & Pattern
 - **Process Tree Murder on Windows:** On timeout, inspect `child.pid` and execute `taskkill /PID <pid> /T /F` synchronously to terminate the entire process hierarchy.
-- **Explicit Stdin Suppression:** Always configure `stdio: ['ignore', 'pipe', 'pipe']` for non-interactive CLI diagnostics.
+- **Immediate EOF Stdin Suppression:** Configure `stdio: ['pipe', 'pipe', 'pipe']` and immediately invoke `child.stdin?.end()` to send EOF, eliminating the 3-second stdin wait.
+- **Realistic Split Timeouts & Cooldowns:** Allot up to 20–22 seconds for remote `/usage` fetches while capping fast local commands (`auth status --json`) to 5 seconds. Apply a 10-second cooldown on manual refreshes to prevent process exhaustion.
+- **Dual Limit Visualization:** Render both current session usage (`sessionUsedPct`, `sessionResetsAt`) and weekly usage (`weekAllModelsUsedPct`, `weekResetsAt`) for complete parity with AGY.

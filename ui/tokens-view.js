@@ -106,6 +106,11 @@ function quotasSection(quotas) {
         <div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3)">Ejecuta "claude auth login" para ver cuotas</div>
       </div>`);
     } else {
+      if (c.sessionUsedPct !== null && c.sessionUsedPct !== undefined) {
+        const sessUsed = c.sessionUsedPct;
+        const sessDetail = c.sessionResetsAt ? `reinicio: ${c.sessionResetsAt}` : '';
+        rows.push(quotaBar('Claude Code (Sesión)', sessUsed, sessUsed >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', sessDetail));
+      }
       const weekUsed = c.weekAllModelsUsedPct ?? 0;
       const detail = c.weekResetsAt ? `reinicio: ${c.weekResetsAt}` : '';
       rows.push(quotaBar('Claude Code (Semana)', weekUsed, weekUsed >= 90 ? 'var(--app-dirty)' : 'var(--color-lilac)', detail));

@@ -51,8 +51,24 @@ What's contributing to your limits usage?
 const parsedClaude = parseClaudeUsage(realClaudeSample);
 assert.ok(parsedClaude, 'parseClaudeUsage should parse valid output');
 assert.strictEqual(parsedClaude.sessionUsedPct, 0);
+assert.strictEqual(parsedClaude.sessionResetsAt, null);
 assert.strictEqual(parsedClaude.weekAllModelsUsedPct, 100);
 assert.strictEqual(parsedClaude.weekResetsAt, 'Sep 13, 3:59pm');
+
+// Real sample with session reset timestamp
+const realClaudeWithSessionReset = `
+You are currently using your subscription to power your Claude Code usage
+
+Current session: 13% used · resets Sep 19, 6:39pm (America/Santiago)
+Current week (all models): 85% used · resets Sep 20, 3:59pm (America/Santiago)
+Current week (Fable): 0% used · resets Sep 20, 4pm (America/Santiago)
+`;
+const parsedWithSessionReset = parseClaudeUsage(realClaudeWithSessionReset);
+assert.ok(parsedWithSessionReset, 'should parse session with reset timestamp');
+assert.strictEqual(parsedWithSessionReset.sessionUsedPct, 13);
+assert.strictEqual(parsedWithSessionReset.sessionResetsAt, 'Sep 19, 6:39pm');
+assert.strictEqual(parsedWithSessionReset.weekAllModelsUsedPct, 85);
+assert.strictEqual(parsedWithSessionReset.weekResetsAt, 'Sep 20, 3:59pm');
 
 // Null and garbage inputs
 assert.strictEqual(parseClaudeUsage(''), null);

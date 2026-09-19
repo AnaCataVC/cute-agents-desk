@@ -16,6 +16,12 @@ const path = require('node:path');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cute-agents-desk-verify-'));
 process.env.CUTE_AGENTS_DESK_HOME = dir;
-process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
+process.on('exit', () => {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch {
+    // Ignore teardown failure during process exit on Windows
+  }
+});
 
 module.exports = { dir };

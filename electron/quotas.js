@@ -54,6 +54,7 @@ function parseClaudeUsage(raw) {
   if (!raw || typeof raw !== 'string') return null;
 
   let sessionUsedPct = null;
+  let sessionResetsAt = null;
   let weekAllModelsUsedPct = null;
   let weekResetsAt = null;
 
@@ -63,36 +64,40 @@ function parseClaudeUsage(raw) {
     weekResetsAt = mWeek[2] ? mWeek[2].trim() : null;
   }
 
-  const mSess = raw.match(/Current session:\s*(\d+)%\s*used/i);
+  const mSess = raw.match(/Current session:\s*(\d+)%\s*used(?:\s*·\s*resets\s*([^(\n\r]+))?/i);
   if (mSess) {
     sessionUsedPct = parseInt(mSess[1], 10);
+    sessionResetsAt = mSess[2] ? mSess[2].trim() : null;
   }
 
   if (sessionUsedPct === null && weekAllModelsUsedPct === null) return null;
 
   return {
     sessionUsedPct,
+    sessionResetsAt,
     weekAllModelsUsedPct,
     weekResetsAt,
   };
 }
 
 /**
- * Executes a CLI command with stdin ignored and strict timeout.
+ * Executes a CLI command with stdin closed immediately and strict timeout.
  * @param {string} bin
  * @param {string[]} args
  * @param {number} [timeoutMs]
  * @returns {Promise<string>}
  */
-function execCli(bin, args, timeoutMs = 7000) {
+function execCli(bin, args, timeoutMs = 15000) {
   return new Promise((resolve) => {
     let out = '';
     let isSettled = false;
 
     const child = spawn(bin, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       shell: process.platform === 'win32',
     });
+
+    try { child.stdin?.end(); } catch { /* ignore */ }
 
     const timer = setTimeout(() => {
       if (!isSettled) {
@@ -127,6 +132,7 @@ function execCli(bin, args, timeoutMs = 7000) {
 }
 
 const CACHE_TTL_MS = 60 * 1000;
+const FORCE_REFRESH_COOLDOWN_MS = 10 * 1000;
 let cachedQuotas = null;
 let lastFetchedAt = 0;
 let activeFetchPromise = null;
@@ -134,11 +140,12 @@ let activeFetchPromise = null;
 /**
  * Fetches Claude Code quota or authentication status.
  * Checks `claude auth status --json` first to avoid hanging or timing out when not logged in.
- * @param {number} [timeoutMs]
+ * @param {number} [usageTimeoutMs]
+ * @param {number} [authTimeoutMs]
  */
-async function fetchClaudeUsage(timeoutMs = 8000) {
+async function fetchClaudeUsage(usageTimeoutMs = 20000, authTimeoutMs = 5000) {
   try {
-    const authRaw = await execCli('claude', ['auth', 'status', '--json'], timeoutMs);
+    const authRaw = await execCli('claude', ['auth', 'status', '--json'], authTimeoutMs);
     if (authRaw) {
       try {
         const auth = JSON.parse(authRaw);
@@ -146,6 +153,7 @@ async function fetchClaudeUsage(timeoutMs = 8000) {
           return {
             notLoggedIn: true,
             sessionUsedPct: null,
+            sessionResetsAt: null,
             weekAllModelsUsedPct: null,
             weekResetsAt: null,
           };
@@ -155,7 +163,7 @@ async function fetchClaudeUsage(timeoutMs = 8000) {
       }
     }
 
-    const usageRaw = await execCli('claude', ['-p', '/usage'], timeoutMs);
+    const usageRaw = await execCli('claude', ['-p', '/usage'], usageTimeoutMs);
     return parseClaudeUsage(usageRaw);
   } catch {
     return null;
@@ -168,8 +176,13 @@ async function fetchClaudeUsage(timeoutMs = 8000) {
  */
 async function getQuotas(opts = {}) {
   const now = Date.now();
-  if (!opts.forceRefresh && cachedQuotas && (now - lastFetchedAt < CACHE_TTL_MS)) {
-    return cachedQuotas;
+  if (cachedQuotas) {
+    if (!opts.forceRefresh && (now - lastFetchedAt < CACHE_TTL_MS)) {
+      return cachedQuotas;
+    }
+    if (opts.forceRefresh && (now - lastFetchedAt < FORCE_REFRESH_COOLDOWN_MS)) {
+      return cachedQuotas;
+    }
   }
 
   if (activeFetchPromise) {
@@ -179,8 +192,8 @@ async function getQuotas(opts = {}) {
   activeFetchPromise = (async () => {
     try {
       const [claude, agyRaw] = await Promise.all([
-        fetchClaudeUsage(opts.timeoutMs || 8000),
-        execCli('agy', ['-p', '/usage'], opts.timeoutMs || 8000),
+        fetchClaudeUsage(opts.timeoutMs || 22000, 5000),
+        execCli('agy', ['-p', '/usage'], opts.timeoutMs || 12000),
       ]);
 
       const agy = parseAgyUsage(agyRaw);

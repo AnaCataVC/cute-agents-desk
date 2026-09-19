@@ -22,4 +22,17 @@ function makeDisposableRepo(prefix = 'cute-agents-desk-toy-') {
   return dir;
 }
 
-module.exports = { makeDisposableRepo };
+/**
+ * Resilient directory removal for Windows test environments where file watchers,
+ * Git subprocesses, or antivirus scanners may hold locks briefly.
+ * @param {string} dir
+ */
+function safeRmSync(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch {
+    // Best-effort cleanup in test teardown
+  }
+}
+
+module.exports = { makeDisposableRepo, safeRmSync };
