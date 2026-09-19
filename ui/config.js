@@ -298,7 +298,7 @@ function bossesPanel(data) {
          text-transform:uppercase;margin-bottom:8px">Coordinadores vivos</div>
     <div style="display:flex;flex-direction:column;gap:7px">${live.length ? live.map(bossRow).join('') : '<div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);padding:6px 0">No hay coordinadores vivos en este momento.</div>'}</div>
     <div style="display:flex;align-items:center;gap:10px;margin-top:11px">
-      <button class="btn-ghost" data-act="openQueue" data-arg="" style="border-style:dashed">Crear coordinador…</button>
+      <button class="btn-ghost" data-act="toggleNewConversation" style="border-style:dashed">Crear coordinador…</button>
       <span style="font-size:10.5px;color:var(--color-dark-text-3)">Los terminados se archivan con su entrega.</span>
     </div>
   </div>`;

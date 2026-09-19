@@ -536,10 +536,14 @@ function wireAgents(win) {
   ipcMain.handle('desk:conversations', () => conv.listConversations());
   ipcMain.handle('desk:createConversation', (_ev, o) => conv.createConversation(o));
   ipcMain.handle('desk:archiveConversation', (_ev, id) => conv.archiveConversation(id));
+  ipcMain.handle('desk:deleteConversation', (_ev, id) => conv.deleteConversation(id, { agents: registry.agents }));
 
-  ipcMain.handle('desk:spawnCoordinator', async (_ev, { conversationId, bin, engine, model, effort, mode } = {}) => {
+  ipcMain.handle('desk:spawnCoordinator', async (_ev, { conversationId, bin, engine, model, effort, mode, cwd } = {}) => {
     const conversation = conv.getConversation(conversationId);
     if (!conversation) return { error: `conversacion desconocida: ${conversationId}` };
+    if (conversation.status === 'archived' || conversation.status === 'archivado') {
+      return { error: 'No se puede iniciar un coordinador archivado. Desarchívelo si desea reanudarlo.' };
+    }
 
     // Reuse coordinator if one is already alive for this conversation
     for (const a of registry.agents.values()) {
@@ -596,6 +600,7 @@ function wireAgents(win) {
       model: effectiveModel,
       effort: effectiveEffort,
       mode: effectiveMode,
+      cwd: cwd || conversation.cwd,
       ...wireLifecycle(() => agent.id, (id) => {
         spawnRequestWatchers.get(id)?.close();
         spawnRequestWatchers.delete(id);

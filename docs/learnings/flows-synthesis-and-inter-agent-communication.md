@@ -56,6 +56,16 @@ During our adversarial stress-test review, we evaluated failure modes, race cond
 * **Risk**: `Scheduler`'s `pendingQueue` and fail-fast cascade (`onTaskFailed`, tested in `verify-scheduler-dag.js`) are real logic, but a task still waiting on a dependency -- or aborted before its dependency ever finished -- never got an agent record. It was invisible everywhere except a text note dropped into the coordinator's own thread.
 * **Hardening**: `Scheduler.spawnedIds` tracks which task ids actually got `spawnFn` called, so the new `Scheduler.snapshot()` can return only the ones that never did (state `pending` or cascade-`failed`). `electron/main.js` publishes that snapshot, with a conversation id attached from a side table (`Scheduler` itself is conversation-agnostic), as a `dag` field on `desk:patch`. `synthesizeFlows()` turns each entry into a ghost roster item (`state: 'queued'` or `'failed'`) placed in the flow it belongs to -- rendered by the existing parked row, no new SVG needed since a ghost never has a live PTY or thread. A `failed` state, real or ghost, now also flips `flow.status` to `'bloqueado'`, which it never did before.
 
+### 2.9 Safe Deletion Lifecycle & Custom CWD Governance (E-09)
+* **Risk**: Lack of conversation deletion forced disk clutter, while ad-hoc filesystem purging on Windows risked `EPERM`/`EBUSY` locks if running coordinators had open PTY file handles. Furthermore, accepting arbitrary IDs over IPC risked Path Traversal, and coordinators were rigidly bound to their internal mailbox folder instead of user-selected repositories.
+* **Hardening**:
+  * Added `deleteConversation(id)` in `electron/conversations.js` and IPC `desk:deleteConversation`.
+  * Enforces strict regex validation (`/^[a-zA-Z0-9_-]+$/`) and path containment checks ensuring execution stays strictly within `<appData>/conversations/`.
+  * Rejection gate: unconditionally refuses deletion if any agent is currently active (`runningInConversation > 0`).
+  * In `electron/main.js`, `desk:spawnCoordinator` rejects spawning processes in archived conversations (`status === 'archived'`).
+  * Both coordinators and individual agent dispatch dialogs now expose editable working directories (`cwd`) with native folder picker integrations (`desk:pickDirectory`).
+  * In `ui/sidebar.js`, archived conversations are segregated into a collapsible drawer with a destructive "Eliminar" button (and confirmation prompt) to keep the primary view decluttered.
+
 ---
 
 ## 3. Implementation Blueprint
@@ -72,7 +82,7 @@ During our adversarial stress-test review, we evaluated failure modes, race cond
 * **Dynamic Hub Robot**: In `ui/boss-graph.js`, the central hub robot dynamically reflects the coordinator's state color (`coordSkin.color`) and opacity.
 * **Interactive Hub Tooltip**: A transparent hit area (`r=32`) intercepts clicks on the hub, opening a dedicated tooltip with real-time tokens, context consumption percentage, and a direct button to view the coordinator's interactive thread (`openChat`).
 * **Active Coordinator Display**: `detailCard` renders the radial graph whenever `live.length > 0` OR when `flow.coordinator` is in an active state (`LIVE.includes(coord.state)`).
-* **Flow Actions**: `archive` invokes `window.desk.archiveConversation(flowId)`, while `closeIdle` safely halts dormant worker sessions (`state === 'idle' || state === 'done'`) in that flow.
+* **Flow Actions**: `archive` invokes `window.desk.archiveConversation(flowId)`, `deleteConversation` permanently deletes archived conversations after user confirmation, while `closeIdle` safely halts dormant worker sessions (`state === 'idle' || state === 'done'`) in that flow.
 
 ---
 
@@ -82,5 +92,5 @@ All enhancements are verified via fast, hermetic unit tests passing under plain 
 * `tools/verify-flows-synthesis.mjs`: Tests empty state, coordinator preservation, `short` title extraction, DAG-to-links synthesis, blocked state propagation, orphan agent dispatch, `mode`/`deniedCount`/`lastVerify` passthrough, `flow.blocked` aggregation, and ghost-task synthesis from `dag` (queued, cascade-failed, and conversation isolation between the two).
 * `tools/verify-scheduler-dag.js`: Tests sequential/diamond dependency resolution, DFS cycle detection, fail-fast cascades, and `Scheduler.snapshot()` excluding any task id that actually spawned (queued or cascade-failed only).
 * `tools/verify-worker-outbox.js`: Verifies outbox draining, coordinator notification tagging, single-record thread deduplication, and resilient handling of exited agents.
-* `tools/verify-conversations.js`: Verifies conversation creation, retrieval, active agent counts, status persistence, and atomic archiving.
-* Total test suite pass rate: **28/28 verification scripts OK** (`npm test`).
+* `tools/verify-conversations.js`: Verifies conversation creation, retrieval, active agent counts, status persistence, atomic archiving, safe deletion, and custom `cwd` configuration.
+* Total test suite pass rate: **30/30 verification scripts OK** (`npm test`).

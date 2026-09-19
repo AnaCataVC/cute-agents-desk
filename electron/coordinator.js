@@ -125,13 +125,16 @@ function buildCoordinatorPrompt(conversation, repos, opts = {}) {
  * @param {(kind: string, detail: object) => void} [o.onNotice]
  * @returns {{ id: string } & ReturnType<typeof import('./agent.js').spawn>}
  */
-function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, model, effort, mode, skills, repoDocs, onOutput, onExit, onNotice }) {
+function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, model, effort, mode, cwd, skills, repoDocs, onOutput, onExit, onNotice }) {
   const dir = conv.conversationPaths(conversationId).dir;
   fs.mkdirSync(dir, { recursive: true });
   const id = `co${Date.now().toString(36).slice(-5)}`;
+  const effectiveCwd = (cwd && fs.existsSync(cwd)) ? cwd
+    : (conversation && conversation.cwd && fs.existsSync(conversation.cwd)) ? conversation.cwd
+    : dir;
   const agent = spawn({
     id,
-    cwd: dir,
+    cwd: effectiveCwd,
     task: 'Empieza: revisa tu system prompt y decide en que repos delegar trabajo.',
     bin,
     model,

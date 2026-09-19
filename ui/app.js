@@ -42,6 +42,7 @@ const state = {
   chatTab: 'hilo',             // ficha | hilo | diff, within that panel
   queue: null,                 // repo name being queued, or '' for "pick a repo"
   queueRepo: '',
+  queueCwd: '',
   queueTask: '',
   queueEngine: 'claude',
   queueModel: 'default',
@@ -56,10 +57,12 @@ const state = {
   newConvOpen: false,          // the sidebar's "+ nueva conversación" inline form
   newConvTitle: '',
   newConvTopic: '',
+  newConvCwd: '',
   newConvEngine: 'claude',
   newConvModel: 'default',
   newConvEffort: 'default',
   newConvMode: 'write',
+  sidebarArchivedOpen: false,  // toggle collapsed archived list in sidebar
   tick: 0,
   error: null,                 // last IPC refusal (scheduler cap, still-alive agent, ...), or null
   inspectedSkill: null,        // data for currently inspected skill in dialog
@@ -283,6 +286,7 @@ const ACTIONS = {
   openQueue: (/** @type {string} */ repo) => {
     state.queue = repo ?? '';
     state.queueRepo = repo ?? '';
+    state.queueCwd = '';
     state.queueTask = '';
     state.queueEngine = 'claude';
     state.queueModel = 'default';
@@ -290,7 +294,16 @@ const ACTIONS = {
     state.queueMode = 'write';
     state.queueCoord = '';
   },
-  closeQueue: () => { state.queue = null; },
+  closeQueue: () => { state.queue = null; state.queueCwd = ''; },
+  browseQueueFolder: async () => {
+    if (window.desk?.pickDirectory) {
+      const folder = await window.desk.pickDirectory();
+      if (folder) {
+        state.queueCwd = folder;
+        render();
+      }
+    }
+  },
   queueMode: (/** @type {string} */ m) => { state.queueMode = m || 'write'; },
   submitQueue: async () => {
     const task = (state.queueTask || '').trim();
@@ -298,7 +311,8 @@ const ACTIONS = {
     const repos = data.getRepos();
     const repoIdentifier = state.queueRepo || state.queue;
     const repo = repos.find((r) => r.path === repoIdentifier || r.name === repoIdentifier);
-    const cwd = repo ? (repo.path || (repo.folder ? `${repo.folder}/${repo.name}` : repo.name)) : undefined;
+    const resolvedFromRepo = repo ? (repo.path || (repo.folder ? `${repo.folder}/${repo.name}` : repo.name)) : undefined;
+    const cwd = (state.queueCwd && state.queueCwd.trim()) ? state.queueCwd.trim() : resolvedFromRepo;
     const model = (state.queueModel && state.queueModel !== 'default') ? state.queueModel.trim() : undefined;
     const effort = (state.queueEffort && state.queueEffort !== 'default') ? state.queueEffort.trim() : undefined;
 
@@ -316,6 +330,7 @@ const ACTIONS = {
       state.error = result.error;
     } else {
       state.queue = null;
+      state.queueCwd = '';
       state.queueTask = '';
     }
     render();
@@ -392,11 +407,25 @@ const ACTIONS = {
     state.newConvOpen = !state.newConvOpen;
     state.newConvTitle = '';
     state.newConvTopic = '';
+    state.newConvCwd = '';
     const defaultEng = (data.getEngines?.() || [])[0]?.id || 'claude';
     state.newConvEngine = defaultEng;
     state.newConvModel = 'default';
     state.newConvEffort = 'default';
     state.newConvMode = 'write';
+  },
+  browseNewConvFolder: async () => {
+    if (window.desk?.pickDirectory) {
+      const folder = await window.desk.pickDirectory();
+      if (folder) {
+        state.newConvCwd = folder;
+        render();
+      }
+    }
+  },
+  toggleSidebarArchived: () => {
+    state.sidebarArchivedOpen = !state.sidebarArchivedOpen;
+    render();
   },
   /** Creates the conversation, then refetches the list -- there is no live push for it yet. */
   newConversation: () => {
@@ -407,6 +436,7 @@ const ACTIONS = {
     const model = state.newConvModel || 'default';
     const effort = state.newConvEffort || 'default';
     const mode = state.newConvMode || 'write';
+    const cwd = (state.newConvCwd || '').trim() || undefined;
 
     state.newConvOpen = false;
     window.desk?.createConversation?.({
@@ -416,6 +446,7 @@ const ACTIONS = {
       model: model !== 'default' ? model : undefined,
       effort: effort !== 'default' ? effort : undefined,
       mode,
+      cwd,
     })
       .then((/** @type {{ id: any; }} */ created) => {
         if (created?.id) {
@@ -426,6 +457,7 @@ const ACTIONS = {
             model: model !== 'default' ? model : undefined,
             effort: effort !== 'default' ? effort : undefined,
             mode,
+            cwd,
           })?.catch(() => {});
         }
         return window.desk.conversations();
@@ -445,6 +477,19 @@ const ACTIONS = {
   archive: (/** @type {any} */ conversationId) => {
     if (!conversationId) return;
     window.desk?.archiveConversation?.(conversationId).then((/** @type {{ error: any; }} */ res) => {
+      if (res?.error) { state.error = res.error; render(); return; }
+      return window.desk.conversations().then((/** @type {object[]} */ conversations) => {
+        data.setLiveConversations(conversations);
+        render();
+      });
+    }).catch((err) => { state.error = err?.message || String(err); render(); });
+  },
+  deleteConversation: (/** @type {string} */ conversationId) => {
+    if (!conversationId) return;
+    const confirmDelete = window.confirm ? window.confirm(`¿Eliminar definitivamente la conversación "${conversationId}" y todos sus archivos? Esta acción no se puede deshacer.`) : true;
+    if (!confirmDelete) return;
+
+    window.desk?.deleteConversation?.(conversationId).then((/** @type {{ error: any; ok: boolean }} */ res) => {
       if (res?.error) { state.error = res.error; render(); return; }
       return window.desk.conversations().then((/** @type {object[]} */ conversations) => {
         data.setLiveConversations(conversations);

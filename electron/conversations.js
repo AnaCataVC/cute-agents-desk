@@ -35,8 +35,9 @@ function conversationPaths(id) {
  * @param {string} [o.model]
  * @param {string} [o.effort]
  * @param {string} [o.mode]
+ * @param {string} [o.cwd]
  */
-function createConversation({ title, topic = '', cap = 3, engine, model, effort, mode }) {
+function createConversation({ title, topic = '', cap = 3, engine, model, effort, mode, cwd }) {
   // Readable in a directory listing, like an agent id, not a uuid.
   const id = `c${Date.now().toString(36).slice(-6)}`;
   const p = conversationPaths(id);
@@ -53,9 +54,12 @@ function createConversation({ title, topic = '', cap = 3, engine, model, effort,
     createdAt: new Date().toISOString(),
     status: 'active',
   };
+  if (cwd) {
+    conversation.cwd = path.resolve(cwd);
+  }
   fs.writeFileSync(p.conversation, JSON.stringify(conversation, null, 2));
   fs.writeFileSync(p.status, JSON.stringify({}, null, 2));
-  return conversation;
+  return JSON.parse(JSON.stringify(conversation));
 }
 
 /** @returns {object[]} every conversation, newest first */
@@ -91,6 +95,7 @@ function getConversation(id) {
  */
 function runningInConversation(id, agents) {
   let n = 0;
+  if (!agents) return 0;
   for (const agent of agents.values()) {
     if (agent.conversationId === id && agent.state !== 'done' && agent.state !== 'failed') n++;
   }
@@ -125,4 +130,50 @@ function archiveConversation(id) {
   }
 }
 
-module.exports = { createConversation, listConversations, getConversation, archiveConversation, runningInConversation, writeStatus, conversationPaths };
+/**
+ * Safely and permanently deletes a conversation and its disk directory.
+ * Strict invariants:
+ * 1. Sanitizes the id against path traversal (`^[a-zA-Z0-9_-]+$`).
+ * 2. Ensures the directory is strictly contained within CONVERSATIONS_DIR.
+ * 3. Refuses to delete if any agents are currently alive in the conversation.
+ * @param {string} id
+ * @param {object} [opts]
+ * @param {Map<string, any>} [opts.agents]
+ * @returns {{ ok: boolean, error?: string }}
+ */
+function deleteConversation(id, opts = {}) {
+  if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+    return { ok: false, error: 'Identificador de conversación inválido.' };
+  }
+
+  const p = conversationPaths(id);
+  const resolvedDir = path.resolve(p.dir);
+  const resolvedBase = path.resolve(CONVERSATIONS_DIR);
+  if (!resolvedDir.startsWith(resolvedBase + path.sep) && resolvedDir !== resolvedBase) {
+    return { ok: false, error: 'Violación de contención de ruta de conversación.' };
+  }
+
+  if (opts.agents && runningInConversation(id, opts.agents) > 0) {
+    return { ok: false, error: 'No se puede eliminar: la conversación tiene agentes activos en ejecución.' };
+  }
+
+  try {
+    if (fs.existsSync(p.dir)) {
+      fs.rmSync(p.dir, { recursive: true, force: true });
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+}
+
+module.exports = {
+  createConversation,
+  listConversations,
+  getConversation,
+  archiveConversation,
+  deleteConversation,
+  runningInConversation,
+  writeStatus,
+  conversationPaths,
+};

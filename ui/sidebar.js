@@ -76,6 +76,15 @@ function newConversationForm(state, data) {
     </div>
 
     <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 9px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3)">Directorio de trabajo</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input data-act="newConvCwd" value="${esc(state.newConvCwd || '')}" placeholder="Buzón por defecto (~/.cute-agents-desk)…"
+          style="${INPUT};flex:1;font-size:10px">
+        <button class="btn-ghost" data-act="browseNewConvFolder" type="button" style="flex:none;padding:5px 8px;font-size:10px" title="Elegir carpeta existente">Elegir…</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:3px">
       <span style="font:600 9px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3)">Modo</span>
       <select data-act="newConvMode" style="${INPUT}">
         <option value="write" ${(!state.newConvMode || state.newConvMode === 'write') ? 'selected' : ''}>Escritura (habilita delegar write)</option>
@@ -99,21 +108,35 @@ function newConversationForm(state, data) {
   </div>`;
 }
 
-function conversationRow(conv, data) {
+function conversationRow(conv, data, isArchived = false) {
   const coord = (data?.getAgents() || []).find((a) => a.conversationId === conv.id && a.role === 'coordinator' && a.state !== 'done' && a.state !== 'failed');
-  const coordButton = coord
-    ? `<button class="chip" data-act="openChat" data-arg="${esc(coord.id)}"
-        title="Ver hilo del coordinador" style="font-size:9.5px;padding:3px 8px;border-color:var(--color-lilac);color:var(--color-lilac)">
-        coordinando · ver hilo
-      </button>`
-    : `<button class="chip" data-act="openCoordinator" data-arg="${esc(conv.id)}"
-        title="Abrir coordinador" style="font-size:9.5px;padding:3px 8px">
-        abrir coordinador
-      </button>`;
+  
+  let actionButton = '';
+  if (isArchived) {
+    actionButton = `
+      <div style="display:flex;align-items:center;gap:4px">
+        <span class="chip" style="font-size:8.5px;padding:2px 6px;color:var(--color-dark-text-3)">archivado</span>
+        <button class="btn-ghost" data-act="deleteConversation" data-arg="${esc(conv.id)}"
+          title="Eliminar permanentemente de disco"
+          style="font-size:9.5px;padding:2px 6px;color:var(--state-blocked);border-color:var(--state-blocked)">
+          Eliminar
+        </button>
+      </div>`;
+  } else if (coord) {
+    actionButton = `<button class="chip" data-act="openChat" data-arg="${esc(coord.id)}"
+      title="Ver hilo del coordinador" style="font-size:9.5px;padding:3px 8px;border-color:var(--color-lilac);color:var(--color-lilac)">
+      coordinando · ver hilo
+    </button>`;
+  } else {
+    actionButton = `<button class="chip" data-act="openCoordinator" data-arg="${esc(conv.id)}"
+      title="Abrir coordinador" style="font-size:9.5px;padding:3px 8px">
+      abrir coordinador
+    </button>`;
+  }
 
   return `
   <div style="display:flex;flex-direction:column;gap:3px;padding:8px 9px;border-radius:var(--radius-sm);
-       background:var(--app-surface-tree)">
+       background:var(--app-surface-tree);${isArchived ? 'opacity:.72' : ''}">
     <div style="display:flex;align-items:center;gap:6px">
       <span class="mono" style="font-size:10.5px;font-weight:600;flex:1;min-width:0;overflow:hidden;
             text-overflow:ellipsis;white-space:nowrap">${esc(conv.title)}</span>
@@ -121,11 +144,13 @@ function conversationRow(conv, data) {
     </div>
     ${conv.topic ? `<div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);overflow:hidden;
       text-overflow:ellipsis;white-space:nowrap">${esc(conv.topic)}</div>` : ''}
+    ${conv.cwd ? `<div class="mono" style="font-size:8.5px;color:var(--color-dark-text-3);overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap" title="${esc(conv.cwd)}">📁 ${esc(conv.cwd)}</div>` : ''}
     <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
       ${conv.engine ? `<span class="chip" style="font-size:8.5px;padding:1px 5px;background:var(--color-dark-surface)">${esc(conv.engine)}</span>` : ''}
       ${conv.mode && conv.mode !== 'write' ? `<span class="chip" style="font-size:8.5px;padding:1px 5px;background:var(--color-dark-surface)">${esc(conv.mode)}</span>` : ''}
       <span class="mono" style="font-size:9px;color:var(--color-dark-text-3);flex:1">${esc(relTime(conv.createdAt))}</span>
-      ${coordButton}
+      ${actionButton}
     </div>
   </div>`;
 }
@@ -133,14 +158,30 @@ function conversationRow(conv, data) {
 /** @returns {string} */
 export function renderSidebar(state, data) {
   const conversations = data.getConversations();
+  const active = conversations.filter((c) => c.status !== 'archived' && c.status !== 'archivado');
+  const archived = conversations.filter((c) => c.status === 'archived' || c.status === 'archivado');
 
-  const list = conversations.length
-    ? `<div style="display:flex;flex-direction:column;gap:7px">${conversations.map((c) => conversationRow(c, data)).join('')}</div>`
+  const activeList = active.length
+    ? `<div style="display:flex;flex-direction:column;gap:7px">${active.map((c) => conversationRow(c, data, false)).join('')}</div>`
     : `<div class="mono" style="font-size:10px;line-height:1.5;color:var(--color-dark-text-3);
          padding:9px;background:var(--color-dark-bg);border:1px dashed var(--color-dark-border);
          border-radius:var(--radius-sm)">
-         Sin conversaciones todavía. Creá una para abrir un coordinador.
+         Sin conversaciones activas. Creá una para abrir un coordinador.
        </div>`;
+
+  const archivedSection = archived.length
+    ? `<div style="margin-top:auto;padding-top:10px;border-top:1px solid var(--color-dark-border);display:flex;flex-direction:column;gap:8px">
+         <button class="chip" data-act="toggleSidebarArchived" style="font-size:9.5px;justify-content:space-between;width:100%">
+           <span>Archivadas (${archived.length})</span>
+           <span>${state.sidebarArchivedOpen ? '▲' : '▼'}</span>
+         </button>
+         ${state.sidebarArchivedOpen
+           ? `<div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto">
+                ${archived.map((c) => conversationRow(c, data, true)).join('')}
+              </div>`
+           : ''}
+       </div>`
+    : '';
 
   return `
   <div style="width:220px;flex:none;padding:16px 12px;border-right:1px solid var(--color-dark-border);
@@ -149,6 +190,7 @@ export function renderSidebar(state, data) {
     <div class="font-display" style="font:600 11px var(--font-display);letter-spacing:.05em;
          text-transform:uppercase">Conversaciones</div>
     ${newConversationForm(state, data)}
-    ${list}
+    ${activeList}
+    ${archivedSection}
   </div>`;
 }

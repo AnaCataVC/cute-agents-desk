@@ -217,15 +217,21 @@ function detailCard(flow, state, states, data) {
   const acc = (data?.getAccounts() || []).find((a) => a.id === flow.accountId);
   const account = acc ? (acc.name || acc.id) : (flow.accountId || '—');
 
+  const archived = flow.status === 'archivado';
+  const actionButton = archived
+    ? `<button class="chip" data-act="deleteConversation" data-arg="${esc(flow.id)}"
+        style="margin-left:auto;font-size:9px;color:var(--state-blocked);border-color:var(--state-blocked)">Eliminar</button>`
+    : `<button class="chip" data-act="archive" data-arg="${esc(flow.id)}"
+        style="margin-left:auto;font-size:9px">Archivar</button>`;
+
   return `
-  <div class="panel" style="padding:14px;position:relative">
+  <div class="panel" style="padding:14px;position:relative;${archived ? 'opacity:.8' : ''}">
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:3px">
       <span class="mono" style="font-size:11.5px;font-weight:600">${esc(flow.name || flow.id)}</span>
       ${splitPill(flow.split || 'por tema')}
       <span style="padding:1px 7px;border-radius:var(--radius-full);background:var(--color-dark-bg);
             color:var(--color-dark-text-2);font:500 9px var(--font-body)">${esc(flow.engine || 'claude cli')}</span>
-      <button class="chip" data-act="archive" data-arg="${esc(flow.id)}"
-        style="margin-left:auto;font-size:9px">Archivar</button>
+      ${actionButton}
     </div>
     <div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);margin-bottom:9px">
       ${esc(account)} · ${esc(flow.repos || '—')}</div>
@@ -245,6 +251,11 @@ function compactCard(flow, states) {
   const statusColor = flow.status === 'bloqueado' ? 'var(--state-blocked)'
     : archived ? 'var(--color-dark-text-3)' : 'var(--color-lilac)';
 
+  const delBtn = archived
+    ? `<button class="chip" data-act="deleteConversation" data-arg="${esc(flow.id)}"
+        style="padding:1px 6px;font-size:8.5px;color:var(--state-blocked);border-color:var(--state-blocked)">Eliminar</button>`
+    : '';
+
   return `
   <div style="padding:11px 11px 8px;background:var(--color-dark-surface);
        border:1px solid var(--color-dark-border);border-radius:14px;${archived ? 'opacity:.55' : ''}">
@@ -252,6 +263,7 @@ function compactCard(flow, states) {
       <span class="mono" style="font-size:10.5px;font-weight:600;min-width:0;overflow:hidden;
             text-overflow:ellipsis;white-space:nowrap">${esc(flow.name || flow.id)}</span>
       <span style="margin-left:auto;font:500 9px var(--font-body);color:${statusColor}">${esc(flow.status || 'activo')}</span>
+      ${delBtn}
     </div>
     <div style="font:400 9px var(--font-body);color:var(--color-dark-text-3);margin-top:1px">
       ${esc(flow.split || 'por tema')} · ${roster.length} agentes · $${(flow.cost || 0).toFixed(2)}</div>

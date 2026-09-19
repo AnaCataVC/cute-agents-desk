@@ -54,5 +54,27 @@ assert.strictEqual(archived.status, 'archived');
 assert.ok(archived.archivedAt);
 assert.strictEqual(conv.getConversation(created.id).status, 'archived');
 
-fs.rmSync(conv.conversationPaths(created.id).dir, { recursive: true, force: true });
-console.log('conversaciones OK: crear, listar, leer, archivar y contar agentes vivos por conversacion');
+// deleteConversation tests
+// 1. Rejects invalid or malicious id
+assert.strictEqual(conv.deleteConversation('../escaped').ok, false, 'deberia rechazar path traversal');
+assert.strictEqual(conv.deleteConversation('').ok, false, 'deberia rechazar id vacio');
+
+// 2. Refuses deletion if agents are alive
+const busyAgents = new Map([['live1', { conversationId: created.id, state: 'thinking' }]]);
+const refuseRes = conv.deleteConversation(created.id, { agents: busyAgents });
+assert.strictEqual(refuseRes.ok, false, 'deberia rechazar eliminacion con agentes vivos');
+assert.ok(refuseRes.error.includes('agentes activos'));
+
+// 3. Deletes successfully when no agents are alive
+const delRes = conv.deleteConversation(created.id, { agents: new Map() });
+assert.strictEqual(delRes.ok, true, 'deberia eliminar la conversacion');
+assert.strictEqual(fs.existsSync(conv.conversationPaths(created.id).dir), false, 'el directorio ya no debe existir');
+assert.strictEqual(conv.getConversation(created.id), null, 'getConversation debe retornar null');
+assert.ok(!conv.listConversations().some((c) => c.id === created.id), 'ya no debe aparecer en listConversations');
+
+// 4. Conversation with custom cwd
+const customCwd = conv.createConversation({ title: 'con cwd', cwd: '.' });
+assert.ok(customCwd.cwd, 'deberia persistir cwd');
+conv.deleteConversation(customCwd.id);
+
+console.log('conversaciones OK: crear con cwd, listar, leer, archivar, eliminar con seguridad y contar agentes vivos');

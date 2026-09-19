@@ -65,14 +65,20 @@ function queueDialog(state, data) {
   const modes = (data.ENGINE_MODES && data.ENGINE_MODES[engineId]) || [];
   const activeMode = state.queueMode || 'write';
 
-  const repoField = repo
-    ? `<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--color-dark-bg);
-         border:1px solid var(--color-dark-border);border-radius:var(--radius-sm)"
-         title="${esc(repo.path || `${repo.folder}/${repo.name}`)}">
-        <span class="mono" style="font-size:11.5px;font-weight:600">${esc(repo.name)}</span>
-        <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(repo.relPath || repo.folder)}</span>
-       </div>`
-    : `<select style="${INPUT}" data-act="queueRepo">${repos.slice(0, 20).map((/** @type {any} */ r) => `<option value="${esc(r.path || r.name)}" ${(state.queueRepo === r.path || state.queueRepo === r.name) ? 'selected' : ''}>${esc(r.relPath || r.name)}</option>`).join('')}</select>`;
+  const currentCwd = state.queueCwd !== undefined
+    ? state.queueCwd
+    : (repo ? (repo.path || `${repo.folder}/${repo.name}`) : (state.queueRepo || ''));
+
+  const repoPicker = `<div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <select style="${INPUT};flex:1" data-act="queueRepo">
+        <option value="">-- Elegir repositorio configurado --</option>
+        ${repos.slice(0, 30).map((/** @type {any} */ r) => `<option value="${esc(r.path || r.name)}" ${(state.queueRepo === r.path || state.queueRepo === r.name) ? 'selected' : ''}>${esc(r.relPath || r.name)}</option>`).join('')}
+      </select>
+      <button class="btn-ghost" data-act="browseQueueFolder" type="button" style="flex:none;padding:8px 12px;font-size:11px">Elegir carpeta…</button>
+    </div>
+    <input type="text" data-act="queueCwd" value="${esc(currentCwd)}" placeholder="Ruta absoluta de trabajo (CWD)…" style="${INPUT};font-size:10.5px">
+  </div>`;
 
   const modeHint = activeMode === 'read' ? 'En modo lectura los hooks niegan Edit y Write'
     : activeMode === 'plan' ? 'En modo planificación el agente diagnostica y diseña sin modificar código'
@@ -87,7 +93,7 @@ function queueDialog(state, data) {
       </div>
     </div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:13px">
-      ${field('Repo', repoField)}
+      ${field('Directorio de trabajo / Repositorio', repoPicker, 'Carpeta donde se parará el agente o se clonará el worktree')}
       ${field('Qué hay que hacer', `<textarea rows="3" data-act="queueTask" style="${INPUT};resize:vertical"
         placeholder="Cachear las rutas resueltas sin cambiar el contrato del endpoint…">${esc(state.queueTask || '')}</textarea>`)}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">

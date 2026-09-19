@@ -217,6 +217,11 @@ Manages high-level conversation scopes, coordinator lifecycle, and atomic state 
     title: string;                   // Human-readable initiative label
     topic?: string;                  // Scope or repository focus
     cap: number;                     // Max simultaneous workers (e.g. 3)
+    cwd?: string;                    // Working directory override for coordinator execution
+    engine?: string;                 // e.g. "claude" | "agy"
+    model?: string;                  // Model alias or ID
+    effort?: string;                 // Reasoning effort budget
+    mode?: string;                   // "write" | "plan" | "read"
     createdAt: string;               // ISO 8601 timestamp
     status: 'active' | 'archived';
     archivedAt?: string;
@@ -225,9 +230,9 @@ Manages high-level conversation scopes, coordinator lifecycle, and atomic state 
 
 #### `desk:createConversation`
 * **Direction:** Renderer $\to$ Main (Invoke / Handle)
-* **Arguments:** `{ title: string, topic?: string, cap?: number }`
+* **Arguments:** `{ title: string, topic?: string, cap?: number, engine?: string, model?: string, effort?: string, mode?: string, cwd?: string }`
 * **Returns:** `Promise<Conversation>`
-* **Behavior:** Initializes directory structure `<appData>/conversations/<id>/`, creates `conversation.json`, and initializes empty `status.json`.
+* **Behavior:** Initializes directory structure `<appData>/conversations/<id>/`, creates `conversation.json`, and initializes empty `status.json`. Persists optional custom working directory (`cwd`).
 
 #### `desk:archiveConversation`
 * **Direction:** Renderer $\to$ Main (Invoke / Handle)
@@ -237,14 +242,25 @@ Manages high-level conversation scopes, coordinator lifecycle, and atomic state 
   - Non-destructive atomic update of `conversation.json`.
   - Sets `status: 'archived'` and timestamps `archivedAt`.
 
+#### `desk:deleteConversation`
+* **Direction:** Renderer $\to$ Main (Invoke / Handle)
+* **Arguments:** `id: string`
+* **Returns:** `Promise<{ ok: boolean, error?: string }>`
+* **Invariants:**
+  - Strict ID sanitization (`/^[a-zA-Z0-9_-]+$/`) preventing Path Traversal vulnerabilities.
+  - Path containment check ensuring targeted directory is strictly within `<appData>/conversations/`.
+  - Safety barrier: unconditionally refuses deletion if active agent processes are running in the conversation (`runningInConversation > 0`).
+  - Recursively and permanently purges the conversation folder from disk upon confirmation.
+
 #### `desk:spawnCoordinator`
 * **Direction:** Renderer $\to$ Main (Invoke / Handle)
-* **Arguments:** `{ conversationId: string, bin?: string, engine?: string, model?: string, effort?: string, mode?: string }`
+* **Arguments:** `{ conversationId: string, bin?: string, engine?: string, model?: string, effort?: string, mode?: string, cwd?: string }`
 * **Returns:** `Promise<string | { error: string }>`
 * **Invariants:**
   - Idempotent: returns existing active coordinator agent ID if already running in `conversationId`.
   - Gates spawn against global scheduler concurrency.
-  - Spawns coordinator with PTY cwd in conversation mailbox, wiring filesystem queues (`spawn-requests/`).
+  - Refuses execution if conversation is archived (`status === 'archived'`).
+  - Spawns coordinator with PTY cwd set to custom `cwd` if valid or fallback to conversation mailbox, wiring filesystem queues (`spawn-requests/`).
 
 ---
 
