@@ -36,8 +36,9 @@ function conversationPaths(id) {
  * @param {string} [o.effort]
  * @param {string} [o.mode]
  * @param {string} [o.cwd]
+ * @param {boolean} [o.multiRepoWorkspace]
  */
-function createConversation({ title, topic = '', cap = 3, engine, model, effort, mode, cwd }) {
+function createConversation({ title, topic = '', cap = 3, engine, model, effort, mode, cwd, multiRepoWorkspace = false }) {
   // Readable in a directory listing, like an agent id, not a uuid.
   const id = `c${Date.now().toString(36).slice(-6)}`;
   const p = conversationPaths(id);
@@ -51,6 +52,7 @@ function createConversation({ title, topic = '', cap = 3, engine, model, effort,
     model: model || undefined,
     effort: effort || undefined,
     mode: mode || undefined,
+    multiRepoWorkspace: !!multiRepoWorkspace,
     createdAt: new Date().toISOString(),
     status: 'active',
   };

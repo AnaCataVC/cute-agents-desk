@@ -62,6 +62,7 @@ const state = {
   newConvModel: 'default',
   newConvEffort: 'default',
   newConvMode: 'write',
+  newConvMultiRepo: false,
   sidebarArchivedOpen: false,  // toggle collapsed archived list in sidebar
   tick: 0,
   error: null,                 // last IPC refusal (scheduler cap, still-alive agent, ...), or null
@@ -496,6 +497,7 @@ const ACTIONS = {
     state.newConvModel = 'default';
     state.newConvEffort = 'default';
     state.newConvMode = 'write';
+    state.newConvMultiRepo = false;
   },
   browseNewConvFolder: async () => {
     if (window.desk?.pickDirectory) {
@@ -520,6 +522,7 @@ const ACTIONS = {
     const effort = state.newConvEffort || 'default';
     const mode = state.newConvMode || 'write';
     const cwd = (state.newConvCwd || '').trim() || undefined;
+    const multiRepoWorkspace = !!state.newConvMultiRepo;
 
     state.newConvOpen = false;
     window.desk?.createConversation?.({
@@ -530,6 +533,7 @@ const ACTIONS = {
       effort: effort !== 'default' ? effort : undefined,
       mode,
       cwd,
+      multiRepoWorkspace,
     })
       .then((/** @type {{ id: any; }} */ created) => {
         if (created?.id) {
@@ -541,6 +545,7 @@ const ACTIONS = {
             effort: effort !== 'default' ? effort : undefined,
             mode,
             cwd,
+            multiRepoWorkspace,
           })?.catch(() => {});
         }
         return window.desk.conversations();
@@ -993,6 +998,7 @@ app.addEventListener('change', (ev) => {
   if (el.dataset.act === 'newConvEffort') { state.newConvEffort = el.value; }
   if (el.dataset.act === 'newConvMode') { state.newConvMode = el.value; }
   if (el.dataset.act === 'newConvModel') { state.newConvModel = el.value; }
+  if (el.dataset.act === 'newConvMultiRepo') { state.newConvMultiRepo = el.checked; }
   if (el.dataset.act === 'queueEngine') {
     state.queueEngine = el.value;
     if (state.queueEngine === 'agy') {

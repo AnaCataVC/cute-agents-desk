@@ -82,6 +82,10 @@ function newConversationForm(state, data) {
           style="${INPUT};flex:1;font-size:10px">
         <button class="btn-ghost" data-act="browseNewConvFolder" type="button" style="flex:none;padding:5px 8px;font-size:10px" title="Elegir carpeta existente">Elegir…</button>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:3px;cursor:pointer" title="Permite al coordinador operar sobre una carpeta que agrupa varios repositorios y delegar tareas en sus sub-repos">
+        <input type="checkbox" data-act="newConvMultiRepo" ${state.newConvMultiRepo ? 'checked' : ''} style="cursor:pointer">
+        <span style="font:400 9.5px var(--font-body);color:var(--color-dark-text-2)">Habilitar como carpeta paraguas / workspace multi-repo</span>
+      </label>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:3px">

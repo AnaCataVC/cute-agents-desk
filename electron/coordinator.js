@@ -11,16 +11,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 const conv = require('./conversations.js');
 const { drainJsonQueue, watchJsonQueue } = require('./json-queue.js');
+const { findRepos } = require('./discovery.js');
 
 /**
  * The system prompt appended to the coordinator's own, per the plan's "cuatro cosas": the repo
  * table, the mailbox protocol, its own cap, and where its status lives. Written for a CLI agent
  * to act on, not for a person to read -- concrete and short, not prose.
- * @param {{id: string, cap: number}} conversation
+ * @param {{id: string, cap: number, cwd?: string, multiRepoWorkspace?: boolean}} conversation
  * @param {Array<{name: string, accountGh: string, branch: string, path: string}>} repos
  * @param {object} [opts]
  * @param {string|Array<any>} [opts.skills]
  * @param {Array<{relativePath: string, absolutePath: string, engine?: string, scope?: string, excerpt?: string}>} [opts.repoDocs]
+ * @param {string} [opts.effectiveCwd]
  */
 function buildCoordinatorPrompt(conversation, repos, opts = {}) {
   const p = conv.conversationPaths(conversation.id);
@@ -36,6 +38,38 @@ function buildCoordinatorPrompt(conversation, repos, opts = {}) {
     'Repos disponibles:',
     repoLines,
   ];
+
+  // Inyectar contexto de carpeta contenedora multi-repo si la conversación lo tiene habilitado
+  if (conversation && conversation.multiRepoWorkspace) {
+    const workspaceRoot = opts.effectiveCwd || conversation.cwd;
+    if (workspaceRoot && fs.existsSync(workspaceRoot)) {
+      let subRepos = [];
+      try {
+        subRepos = findRepos(workspaceRoot, 2);
+      } catch {
+        subRepos = [];
+      }
+      promptParts.push(
+        '',
+        'MODO WORKSPACE MULTI-REPO ACTIVADO:',
+        `Te encuentras operando sobre la carpeta contenedora/paraguas: ${workspaceRoot}`,
+        'Puedes inspeccionar este directorio para entender la arquitectura global de los proyectos.',
+        'Sub-repositorios Git detectados dentro de esta carpeta contenedora:'
+      );
+      if (subRepos.length > 0) {
+        for (const sub of subRepos) {
+          const rel = path.relative(workspaceRoot, sub).replace(/\\/g, '/') || '.';
+          promptParts.push(`- Sub-repo: "${rel}" -> ruta absoluta: ${sub}`);
+        }
+        promptParts.push(
+          'Cuando delegues tareas que modifiquen codigo, especifica el sub-repo correspondiente en el campo "cwd"',
+          'de tu spawn-request para que el worker cree su rama aislada por git worktree sin colisiones.'
+        );
+      } else {
+        promptParts.push('(No se detectaron sub-repositorios con .git inmediatamente en este workspace).');
+      }
+    }
+  }
 
   // Inyectar indice estructurado de documentacion anidada (si existe, con tope defensivo de 12 docs)
   if (Array.isArray(opts.repoDocs) && opts.repoDocs.length > 0) {
@@ -140,7 +174,7 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, mod
     model,
     effort,
     mode,
-    systemPrompt: buildCoordinatorPrompt(conversation, repos, { skills, repoDocs }),
+    systemPrompt: buildCoordinatorPrompt(conversation, repos, { skills, repoDocs, effectiveCwd }),
     // The conversation folder is never a git repo, so a worktree here would always fail to
     // create — skip the doomed `git rev-parse` call and the spurious error log entirely.
     worktree: false,

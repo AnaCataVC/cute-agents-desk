@@ -150,4 +150,4 @@ async function findRepoDocsAsync(repoPath, maxDepth = 3, maxFiles = 6) {
   return results;
 }
 
-module.exports = { inspectRepo, scanRepos, findRepoDocsAsync };
+module.exports = { findRepos, inspectRepo, scanRepos, findRepoDocsAsync };
