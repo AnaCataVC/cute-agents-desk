@@ -48,6 +48,7 @@ const FAST = [
   'verify-syntax-highlight.js',
   'verify-dropdown-stability.js',
   'verify-repo-mismatch-fix.js',
+  'verify-multi-repo-workspace.js',
 ];
 
 const MANUAL = [

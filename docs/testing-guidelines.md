@@ -52,6 +52,7 @@ The testing framework is split into two primary tiers:
 | `verify-external-editor.js` | External editor resolution (VS Code / Antigravity IDE / System), account preferences, and path privacy. |
 | `verify-syntax-highlight.js` | Lightweight diff tokenization, language auto-detection, XSS prevention, and high-volume performance. |
 | `verify-dropdown-stability.js` | Dropdown interaction detection, UI render deferral, and flush lifecycle. |
+| `verify-multi-repo-workspace.js` | Multi-repo parent workspace opt-in detection, coordinator prompt injection, and conversation persistence. |
 
 ### Isolation & Packaged Binary Tier (`MANUAL`)
 | Script | Execution Command | When to Run |
