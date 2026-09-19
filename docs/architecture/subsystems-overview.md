@@ -71,6 +71,14 @@ This document outlines the core architecture, subsystems, data flow, and concurr
   - Upon successful task completion, commits with author identity tied to the associated GitHub account and opens a draft PR via `gh pr create --draft`.
   - Completed worktree trees are pruned cleanly.
 
+### 2.5 Coordinator vs. Worker Roles & Radial Topology (`electron/coordinator.js`, `ui/boss-graph.js`)
+* **Architectural Roles:**
+  - **Coordinator (Hub):** A real CLI agent process operating strictly inside its conversation mailbox directory (`~/.cute-agents-desk/conversations/<id>/`). It possesses full visibility across all registered repositories and accounts. It **never modifies source code directly**; its sole responsibility is decomposing objectives, emitting atomic `spawn-requests/*.json`, and reading progress in `status.json`. This keeps its context window light and focused on orchestration.
+  - **Worker Agent (Spoke):** An autonomous CLI execution process operating inside a dedicated repository or ephemeral Git worktree (`<engine>/<task>-<id>`). Each worker starts with a completely pristine, independent context window dedicated solely to completing its assigned task.
+* **Subagent Hierarchy & Delegation Invariants:**
+  - **Radial Star Topology (Hub-and-Spoke):** Workers do not spawn arbitrary recursive subagents. All task scheduling flows through the central Coordinator and the global `Scheduler`. Workers communicate upstream by writing structured messages to their `outbox/` queue, relayed directly into the coordinator's interactive PTY session.
+  - **Privilege Ceiling (`Delegation Never Escalates Privilege`):** A coordinator running in `read` or `plan` mode cannot spawn workers with `write` permissions (`mayDelegate()` in `electron/read-mode.js`), mathematically preventing accidental code mutations in production trees.
+
 ---
 
 ## 3. Concurrency & Safety Controls

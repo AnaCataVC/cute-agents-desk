@@ -817,7 +817,7 @@ app.addEventListener('click', (ev) => {
   if (!act) return;
   ev.preventDefault();
   act(el.dataset.arg, el);
-  render();
+  render(true);
 });
 
 app.addEventListener('input', (ev) => {
@@ -845,7 +845,7 @@ app.addEventListener('submit', (ev) => {
   const act = ACTIONS[el.dataset.act || ''];
   if (act) {
     act(el.dataset.arg, el);
-    render();
+    render(true);
   }
 });
 
@@ -859,7 +859,8 @@ app.addEventListener('change', (ev) => {
     state.newConvEngine = el.value;
     state.newConvModel = 'default';
     state.newConvEffort = 'default';
-    render();
+    render(true);
+    return;
   }
   if (el.dataset.act === 'newConvEffort') { state.newConvEffort = el.value; }
   if (el.dataset.act === 'newConvMode') { state.newConvMode = el.value; }
@@ -870,12 +871,23 @@ app.addEventListener('change', (ev) => {
       if (state.queueMode === 'auto') state.queueMode = 'write';
       if (state.queueEffort === 'xhigh' || state.queueEffort === 'max') state.queueEffort = 'default';
     }
-    render();
+    render(true);
+    return;
   }
   if (el.dataset.act === 'queueEffort') { state.queueEffort = el.value; }
   if (el.dataset.act === 'queueRepo') { state.queueRepo = el.value; }
   if (el.dataset.act === 'queueCoord') { state.queueCoord = el.value; }
   if (el.dataset.act === 'queueModel') { state.queueModel = el.value; }
+  flushDeferredRender();
+});
+
+app.addEventListener('focusout', (ev) => {
+  const target = /** @type {HTMLElement|null} */ (ev.target);
+  if (target && (target.tagName === 'SELECT' || (target.tagName === 'INPUT' && target.hasAttribute('list')))) {
+    setTimeout(() => {
+      flushDeferredRender();
+    }, 20);
+  }
 });
 
 document.addEventListener('keydown', (ev) => {
@@ -889,7 +901,7 @@ document.addEventListener('keydown', (ev) => {
   else if (state.terminal) state.terminal = null;
   else if (state.newConvOpen) state.newConvOpen = false;
   else return;
-  render();
+  render(true);
 });
 
 const TABS = [
@@ -973,8 +985,46 @@ function keepFocus(paint) {
   if (caret !== null && next.setSelectionRange) next.setSelectionRange(caret, caret);
 }
 
-function render() {
+/**
+ * Detects whether the user is actively focused on or interacting with a dropdown/select control.
+ * In Chromium/Electron, rebuilding the DOM while a native select or datalist popup is open
+ * immediately closes the popup before the user can select an option.
+ * @returns {boolean}
+ */
+export function isInteractingWithDropdown() {
+  const active = /** @type {HTMLElement|null} */ (document.activeElement);
+  if (!active) return false;
+  const tag = active.tagName;
+  if (tag === 'SELECT') return true;
+  if (tag === 'INPUT' && active.hasAttribute('list')) return true;
+  return false;
+}
+
+let deferredRender = false;
+
+/**
+ * Renders the application artboard.
+ * When force is false, background polls and telemetry streams defer repainting
+ * if a select or datalist element is currently focused to prevent the OS dropdown popup from collapsing.
+ * @param {boolean} [force=false]
+ */
+export function render(force = false) {
+  if (!force && isInteractingWithDropdown()) {
+    deferredRender = true;
+    return;
+  }
+  deferredRender = false;
   keepFocus(() => paint());
+}
+
+/**
+ * Flushes any deferred render once the user completes dropdown selection or leaves the control.
+ */
+export function flushDeferredRender() {
+  if (deferredRender && !isInteractingWithDropdown()) {
+    deferredRender = false;
+    keepFocus(() => paint());
+  }
 }
 
 /**
@@ -983,11 +1033,11 @@ function render() {
 function showToast(message, type = 'success') {
   if (state.toastTimer) clearTimeout(state.toastTimer);
   state.toast = { message, type, id: Date.now() };
-  render();
+  render(true);
   state.toastTimer = setTimeout(() => {
     state.toast = null;
     state.toastTimer = null;
-    render();
+    render(true);
   }, 3500);
 }
 
@@ -1047,7 +1097,7 @@ let renderScheduled = false;
 function scheduleRender() {
   if (renderScheduled) return;
   renderScheduled = true;
-  requestAnimationFrame(() => { renderScheduled = false; render(); });
+  requestAnimationFrame(() => { renderScheduled = false; render(false); });
 }
 
 /**
@@ -1107,6 +1157,10 @@ if (window.desk?.isDesk) {
 setInterval(() => {
   state.tick++;
   if (state.loading) return;
+  // Don't repaint the whole artboard on every second if a modal dialog is actively open
+  const modalOpen = state.queue !== null || state.editConfig !== null || state.scan !== null
+    || state.inspectedSkill !== null || state.inspectedTask !== null || state.newConvOpen;
+  if (modalOpen) return;
   if (state.view === 'dispatch' || state.view === 'usage') render();
 }, 1000);
 
