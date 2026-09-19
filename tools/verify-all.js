@@ -47,6 +47,7 @@ const FAST = [
   'verify-external-editor.js',
   'verify-syntax-highlight.js',
   'verify-dropdown-stability.js',
+  'verify-repo-mismatch-fix.js',
 ];
 
 const MANUAL = [

@@ -23,6 +23,9 @@ async function main() {
   const configJs = fs.readFileSync(path.join(__dirname, '..', 'ui', 'config.js'), 'utf8');
   assert.ok(configJs.includes('data-act="editConfigValue"'), 'settingsRow must render data-act="editConfigValue" for non-booleans');
   assert.ok(configJs.includes('data-act="toggleConfig"'), 'settingsRow must render data-act="toggleConfig" for booleans');
+  assert.ok(configJs.includes('data-act="rescanRepos"'), 'scanSummaryCard must render data-act="rescanRepos"');
+  assert.ok(configJs.includes('data-act="fixMismatch"'), 'mismatchPanel must render data-act="fixMismatch"');
+  assert.ok(configJs.includes('data-act="ignoreMismatch"'), 'mismatchPanel must render data-act="ignoreMismatch"');
 
   // 2. Inspect dialogs.js content to ensure editConfigDialog is present and wired in renderDialogs
   const dialogsJs = fs.readFileSync(path.join(__dirname, '..', 'ui', 'dialogs.js'), 'utf8');
@@ -39,6 +42,9 @@ async function main() {
   assert.ok(appJs.includes('editConfigValue:'), 'app.js must handle editConfigValue');
   assert.ok(appJs.includes('submitEditConfig:'), 'app.js must handle submitEditConfig');
   assert.ok(appJs.includes('closeEditConfig:'), 'app.js must handle closeEditConfig');
+  assert.ok(appJs.includes('rescanRepos:'), 'app.js must handle rescanRepos');
+  assert.ok(appJs.includes('fixMismatch:'), 'app.js must handle fixMismatch');
+  assert.ok(appJs.includes('ignoreMismatch:'), 'app.js must handle ignoreMismatch');
   assert.ok(appJs.includes('function showToast('), 'app.js must define function showToast');
   assert.ok(appJs.includes('function toastContainer()'), 'app.js must define function toastContainer');
   assert.ok(appJs.includes('${toastContainer()}'), 'app.js must render toastContainer');

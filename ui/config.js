@@ -118,7 +118,7 @@ function accountCard(ac, data) {
   </div>`;
 }
 
-function mismatchPanel(mismatches) {
+function mismatchPanel(mismatches, state) {
   if (!mismatches.length) {
     return `
     <div class="panel" style="margin-top:18px;padding:16px;border-left:4px solid var(--color-mint)">
@@ -145,22 +145,30 @@ function mismatchPanel(mismatches) {
       apunta a la otra. No se bloquea nada: el aviso reaparece en la tarjeta del agente justo antes de empujar.
     </div>
     <div style="display:flex;flex-direction:column;gap:7px">
-      ${mismatches.map((m) => `
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;
-           background:var(--who-system-bg);border:1px solid var(--state-approval);border-radius:10px">
-        <span class="mono" style="font-weight:500;font-size:11.5px">${esc(m.repo)}</span>
-        <span class="mono" style="font-size:10.5px;color:var(--app-on-warning)">${esc(m.detail)}</span>
-        <button style="margin-left:auto;padding:5px 11px;border:none;border-radius:var(--radius-full);
-          background:var(--state-approval);color:var(--app-on-accent);font:600 10.5px var(--font-body);
-          cursor:pointer">Usar ${esc(m.fix)}</button>
-        <button class="btn-ghost" style="border-color:var(--state-approval);
-          color:var(--state-approval)">Dejar así</button>
-      </div>`).join('')}
+      ${mismatches.map((m) => {
+        const isFixing = state?.fixingRepo === m.path;
+        return `
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;
+             background:var(--who-system-bg);border:1px solid var(--state-approval);border-radius:10px">
+          <span class="mono" style="font-weight:500;font-size:11.5px">${esc(m.repo)}</span>
+          <span class="mono" style="font-size:10.5px;color:var(--app-on-warning)">${esc(m.detail)}</span>
+          <button style="margin-left:auto;padding:5px 11px;border:none;border-radius:var(--radius-full);
+            background:var(--state-approval);color:var(--app-on-accent);font:600 10.5px var(--font-body);
+            cursor:${isFixing ? 'not-allowed' : 'pointer'};opacity:${isFixing ? '0.7' : '1'}"
+            data-act="fixMismatch"
+            data-arg="${esc(m.path)}|${esc(m.targetEmail)}|${esc(m.accountName)}"
+            ${isFixing ? 'disabled' : ''}>${isFixing ? 'Aplicando…' : `Usar ${esc(m.fix)}`}</button>
+          <button class="btn-ghost" style="border-color:var(--state-approval);
+            color:var(--state-approval)"
+            data-act="ignoreMismatch"
+            data-arg="${esc(m.path)}">Dejar así</button>
+        </div>`;
+      }).join('')}
     </div>
   </div>`;
 }
 
-function accountsPanel(data) {
+function accountsPanel(data, state) {
   return `
   <div>
     <div style="font:600 12.5px var(--font-display);margin-bottom:4px">Cuentas y rutas</div>
@@ -171,7 +179,7 @@ function accountsPanel(data) {
     </div>
     <div style="display:flex;flex-direction:column;gap:14px">
       ${data.getAccounts().map((ac) => accountCard(ac, data)).join('')}</div>
-    ${mismatchPanel(data.getMismatches())}
+    ${mismatchPanel(data.getMismatches(), state)}
   </div>`;
 }
 
@@ -306,11 +314,13 @@ function bossesPanel(data) {
 
 /* ---- sidebar ---- */
 
-function scanSummaryCard(data) {
+function scanSummaryCard(data, state) {
   const s = data.getScanSummary();
   const row = (label, value, color) => `
     <div style="display:flex;justify-content:space-between;${color ? `color:${color}` : ''}">
       <span>${label}</span><span class="mono">${value}</span></div>`;
+
+  const isScanning = Boolean(state?.rescanning);
 
   return `
   <div class="panel" style="padding:16px">
@@ -325,7 +335,10 @@ function scanSummaryCard(data) {
       ${row('Cuenta desajustada', s.mismatched, 'var(--state-approval)')}
     </div>
     <button class="btn-primary" style="width:100%;justify-content:center;margin-top:14px;
-      border-radius:10px">Volver a escanear</button>
+      border-radius:10px;cursor:${isScanning ? 'not-allowed' : 'pointer'};opacity:${isScanning ? '0.8' : '1'}"
+      data-act="rescanRepos" ${isScanning ? 'disabled' : ''}>
+      ${isScanning ? '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:ringSpin 0.8s linear infinite;margin-right:8px"></span>Escaneando repositorios…' : 'Volver a escanear'}
+    </button>
     <div style="font-size:10px;color:var(--color-dark-text-3);margin-top:8px;text-align:center">
       ${esc(s.when)} · ${esc(s.took)}</div>
   </div>`;
@@ -400,7 +413,7 @@ function deliverInfoCard() {
 export function renderConfig(state, data) {
   const s = data.getSettings();
   const bodies = {
-    accounts: () => accountsPanel(data),
+    accounts: () => accountsPanel(data, state),
     engines: () => enginesPanel(data),
     skills: () => skillsPanel(data),
     bosses: () => bossesPanel(data),
@@ -425,7 +438,7 @@ export function renderConfig(state, data) {
       ${(bodies[state.cfgTab] || bodies.accounts)()}
     </div>
     <div style="display:flex;flex-direction:column;gap:14px">
-      ${scanSummaryCard(data)}
+      ${scanSummaryCard(data, state)}
       ${worktreesCard(data, state)}
       ${deliverInfoCard()}
     </div>

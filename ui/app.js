@@ -69,6 +69,8 @@ const state = {
   inspectedTask: null,         // data for currently inspected scheduled task in dialog
   chatInput: '',               // active input text in chat modal
   editConfig: null,            // data for currently edited non-boolean config key
+  rescanning: false,           // true while live background repository scan is running
+  fixingRepo: null,            // path of repository currently applying git identity fix
   toast: null,                 // { message, type, id } for transient save confirmation
   toastTimer: null,            // timeout id for dismissing toast
 };
@@ -413,6 +415,75 @@ const ACTIONS = {
         render();
       }
     }
+  },
+
+  rescanRepos: async () => {
+    if (state.rescanning) return;
+    state.rescanning = true;
+    render();
+    try {
+      if (window.desk?.rescanRepos) {
+        const res = await window.desk.rescanRepos();
+        if (res?.repoData) {
+          data.setLiveRepoData(res.repoData);
+          const count = res.repoData.repos?.length || 0;
+          showToast(`Escaneo completado: ${count} repositorios sincronizados`, 'success');
+        } else {
+          showToast('Escaneo completado sin cambios', 'success');
+        }
+      } else {
+        // Fallback for browser preview mode
+        showToast('Escaneo simulado completado', 'success');
+      }
+    } catch (err) {
+      showToast(`Error al reescanear: ${err?.message || err}`, 'error');
+    } finally {
+      state.rescanning = false;
+      render();
+    }
+  },
+
+  fixMismatch: async (/** @type {string} */ arg) => {
+    if (!arg) return;
+    const [repoPath, accountEmail, accountName] = arg.split('|');
+    if (!repoPath || !accountEmail) return;
+    if (state.fixingRepo === repoPath) return;
+
+    state.fixingRepo = repoPath;
+    render();
+
+    try {
+      if (window.desk?.fixMismatch) {
+        const res = await window.desk.fixMismatch({ repoPath, accountEmail, accountName });
+        if (res?.ok) {
+          if (res.repoData) {
+            data.setLiveRepoData(res.repoData);
+          }
+          const repoName = repoPath.split(/[\\/]/).pop() || repoPath;
+          showToast(`Alineado: ${repoName} → ${accountEmail}`, 'success');
+        } else {
+          showToast(`Error al alinear repo: ${res?.error || 'falló git config'}`, 'error');
+        }
+      } else {
+        // Fallback for browser preview mode
+        const repoName = repoPath.split(/[\\/]/).pop() || repoPath;
+        data.ignoreMismatch(repoPath);
+        showToast(`Alineado (simulado): ${repoName} → ${accountEmail}`, 'success');
+      }
+    } catch (err) {
+      showToast(`Excepción al alinear: ${err?.message || err}`, 'error');
+    } finally {
+      state.fixingRepo = null;
+      render();
+    }
+  },
+
+  ignoreMismatch: (/** @type {string} */ repoPath) => {
+    if (!repoPath) return;
+    data.ignoreMismatch(repoPath);
+    const repoName = repoPath.split(/[\\/]/).pop() || repoPath;
+    showToast(`Desajuste ignorado para ${repoName}`, 'success');
+    render();
   },
 
   toggleNewConversation: () => {

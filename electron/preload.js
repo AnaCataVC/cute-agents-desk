@@ -19,6 +19,15 @@ contextBridge.exposeInMainWorld('desk', {
   /** The declared accounts and every repo found under their folders, scanned for real. */
   repos: () => ipcRenderer.invoke('desk:repos'),
 
+  /** Forces a live background rescan of accounts and repository folders, updating cached data. */
+  rescanRepos: () => ipcRenderer.invoke('desk:rescanRepos'),
+
+  /**
+   * Fixes Git account identity mismatch by configuring user.email (and user.name) in target repo.
+   * @param {{ repoPath: string, accountEmail: string, accountName?: string }} o
+   */
+  fixMismatch: (o) => ipcRenderer.invoke('desk:fixMismatch', o),
+
   /** Every conversation folder, newest first. */
   conversations: () => ipcRenderer.invoke('desk:conversations'),
 

@@ -37,6 +37,7 @@ const {
   addAccountFolder,
   removeAccountFolder,
 } = require('./accounts.js');
+const { gitAsync } = require('./git.js');
 const { scanRepos, findRepoDocsAsync } = require('./discovery.js');
 const conv = require('./conversations.js');
 const coordinator = require('./coordinator.js');
@@ -298,6 +299,30 @@ function wireAgents(win) {
   // Scanning 71 real repos takes a moment; the renderer asks for this once on load, not on
   // every repaint, and getRepoData() caches the scan itself so re-invoking this handler is cheap.
   ipcMain.handle('desk:repos', () => getRepoData());
+
+  ipcMain.handle('desk:rescanRepos', async () => {
+    const fresh = await refreshRepoData();
+    return { ok: true, repoData: fresh };
+  });
+
+  ipcMain.handle('desk:fixMismatch', async (_ev, { repoPath, accountEmail, accountName } = {}) => {
+    if (!repoPath || !accountEmail) {
+      return { ok: false, error: 'Faltan parámetros de repositorio o correo de cuenta' };
+    }
+    if (!fs.existsSync(repoPath)) {
+      return { ok: false, error: `Ruta inexistente: ${repoPath}` };
+    }
+    try {
+      await gitAsync(repoPath, ['config', 'user.email', accountEmail]);
+      if (accountName) {
+        await gitAsync(repoPath, ['config', 'user.name', accountName]);
+      }
+      const fresh = await refreshRepoData();
+      return { ok: true, repoData: fresh };
+    } catch (err) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
 
   ipcMain.handle('desk:usage', () => registry.getUsage());
   ipcMain.handle('desk:quotas', (_ev, opts = {}) => {

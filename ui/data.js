@@ -84,7 +84,15 @@ let liveScheduledTasks = null;
 export function setLiveScheduledTasks(tasks) { liveScheduledTasks = tasks; }
 export function getScheduledTasks() { return liveScheduledTasks ?? []; }
 
-/** @returns {{name:string, index:number, accountId:string, folder:string, path?:string, relPath?:string, subfolder?:string, dirty:boolean, noRemote:boolean}[]} */
+/** @type {Set<string>} Paths of repos whose mismatch the user explicitly chose to ignore in this session */
+const ignoredMismatches = new Set();
+/** @param {string} repoPath */
+export function ignoreMismatch(repoPath) { if (repoPath) ignoredMismatches.add(repoPath); }
+/** @param {string} repoPath */
+export function isMismatchIgnored(repoPath) { return ignoredMismatches.has(repoPath); }
+export function clearIgnoredMismatches() { ignoredMismatches.clear(); }
+
+/** @returns {{name:string, index:number, accountId:string, folder:string, path:string, relPath?:string, subfolder?:string, dirty:boolean, noRemote:boolean, mismatch:boolean, branch:string, email?:string}[]} */
 export function getRepos() {
   if (!liveRepos) return [];
   return liveRepos.map((r, i) => ({
@@ -99,6 +107,7 @@ export function getRepos() {
     noRemote: !r.remote,
     mismatch: r.mismatch,
     branch: r.branch,
+    email: r.email,
   }));
 }
 
@@ -674,10 +683,15 @@ export function getUsage() {
 export function getMismatches() {
   const repos = getRepos();
   const accounts = getAccounts();
-  return repos.filter((r) => r.mismatch).map((r) => {
+  return repos.filter((r) => r.mismatch && !isMismatchIgnored(r.path)).map((r) => {
     const acc = accounts.find((a) => a.id === r.accountId);
     return {
       repo: r.name,
+      path: r.path,
+      currentEmail: r.email,
+      targetEmail: acc?.email || '',
+      accountGh: r.accountId,
+      accountName: acc?.name || r.accountId,
       detail: `${r.path} → ${r.email || '(sin email)'}`,
       fix: acc?.name || r.accountId,
     };
