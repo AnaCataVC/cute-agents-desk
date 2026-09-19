@@ -11,9 +11,20 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const conv = require('../electron/conversations.js');
 
-const created = conv.createConversation({ title: 'prueba de verificacion', cap: 2 });
+const created = conv.createConversation({
+  title: 'prueba de verificacion',
+  cap: 2,
+  engine: 'agy',
+  model: 'gemini-3.8-flash-low',
+  effort: 'low',
+  mode: 'plan',
+});
 assert.ok(created.id, 'deberia asignar un id');
 assert.strictEqual(created.cap, 2);
+assert.strictEqual(created.engine, 'agy');
+assert.strictEqual(created.model, 'gemini-3.8-flash-low');
+assert.strictEqual(created.effort, 'low');
+assert.strictEqual(created.mode, 'plan');
 assert.ok(fs.existsSync(conv.conversationPaths(created.id).conversation));
 assert.ok(fs.existsSync(conv.conversationPaths(created.id).agents), 'deberia crear su carpeta de agentes');
 

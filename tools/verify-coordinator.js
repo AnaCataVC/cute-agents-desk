@@ -173,11 +173,45 @@ function checkSkillsAndRepoDocsInCoordinatorPrompt() {
   console.log('buildCoordinatorPrompt with skills and repoDocs OK: inyecta docs anidados delimitados y skills segregadas');
 }
 
+function checkSpawnCoordinatorParameters() {
+  const conversation = { id: 'c000test', cap: 3 };
+  const repos = [
+    { name: 'my-project', accountGh: 'my-org', branch: 'main', path: 'C:/repos/my-project' },
+  ];
+  const { spawnCoordinator } = require('../electron/coordinator.js');
+  let capturedOpts = null;
+  const fakeSpawn = (opts) => {
+    capturedOpts = opts;
+    return { id: opts.id, pty: {}, kill() {} };
+  };
+
+  const coord = spawnCoordinator({
+    conversationId: 'c000test',
+    conversation,
+    repos,
+    spawn: fakeSpawn,
+    bin: 'agy',
+    model: 'gemini-3.8-flash-low',
+    effort: 'low',
+    mode: 'plan',
+  });
+
+  assert.ok(coord.id, 'deberia generar id de coordinador');
+  assert.strictEqual(capturedOpts.bin, 'agy');
+  assert.strictEqual(capturedOpts.model, 'gemini-3.8-flash-low');
+  assert.strictEqual(capturedOpts.effort, 'low');
+  assert.strictEqual(capturedOpts.mode, 'plan');
+  assert.strictEqual(capturedOpts.worktree, false, 'nunca crea worktree en la carpeta de conversacion');
+
+  console.log('spawnCoordinator parameters OK: propaga bin, model, effort y mode');
+}
+
 (async () => {
   await checkWatchSpawnRequests();
   checkBuildCoordinatorPrompt();
   checkSpawnSystemPromptArgs();
   checkSkillsAndRepoDocsInCoordinatorPrompt();
-  console.log('coordinador OK: buzon de spawn-requests, prompt del coordinador, docs anidados y skills segregadas');
+  checkSpawnCoordinatorParameters();
+  console.log('coordinador OK: buzon de spawn-requests, prompt del coordinador, docs anidados, skills segregadas y parametros');
   process.exit(0);
 })();

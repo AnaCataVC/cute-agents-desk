@@ -31,13 +31,28 @@ function conversationPaths(id) {
  * @param {string} [o.topic]
  * @param {number} [o.cap]  workers this conversation may have alive at once — separate from the
  *   machine-wide cap the scheduler also enforces
+ * @param {string} [o.engine]
+ * @param {string} [o.model]
+ * @param {string} [o.effort]
+ * @param {string} [o.mode]
  */
-function createConversation({ title, topic = '', cap = 3 }) {
+function createConversation({ title, topic = '', cap = 3, engine, model, effort, mode }) {
   // Readable in a directory listing, like an agent id, not a uuid.
   const id = `c${Date.now().toString(36).slice(-6)}`;
   const p = conversationPaths(id);
   fs.mkdirSync(p.agents, { recursive: true });
-  const conversation = { id, title, topic, cap, createdAt: new Date().toISOString(), status: 'active' };
+  const conversation = {
+    id,
+    title,
+    topic,
+    cap,
+    engine: engine || undefined,
+    model: model || undefined,
+    effort: effort || undefined,
+    mode: mode || undefined,
+    createdAt: new Date().toISOString(),
+    status: 'active',
+  };
   fs.writeFileSync(p.conversation, JSON.stringify(conversation, null, 2));
   fs.writeFileSync(p.status, JSON.stringify({}, null, 2));
   return conversation;

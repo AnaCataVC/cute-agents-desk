@@ -19,7 +19,7 @@ function relTime(iso) {
   return new Date(then).toLocaleDateString();
 }
 
-function newConversationForm(state) {
+function newConversationForm(state, data) {
   if (!state.newConvOpen) {
     return `
     <button class="btn-ghost" data-act="toggleNewConversation"
@@ -28,18 +28,67 @@ function newConversationForm(state) {
     </button>`;
   }
 
-  const INPUT = 'width:100%;padding:7px 9px;border-radius:var(--radius-sm);'
+  const INPUT = 'width:100%;padding:6px 8px;border-radius:var(--radius-sm);'
     + 'border:1px solid var(--color-dark-border);background:var(--color-dark-bg);'
     + 'color:var(--color-dark-text-1);font:400 11px var(--font-body)';
+
+  const engineId = state.newConvEngine || 'claude';
+  const models = (data?.ENGINE_MODELS && data.ENGINE_MODELS[engineId]) || [];
+  const efforts = (data?.ENGINE_EFFORTS && data.ENGINE_EFFORTS[engineId]) || [];
+  const repos = data?.getRepos?.() || [];
+  const accounts = data?.getAccounts?.() || [];
 
   return `
   <div style="display:flex;flex-direction:column;gap:7px;padding:10px;background:var(--color-dark-surface);
        border:1px solid var(--color-dark-border);border-radius:var(--radius-sm)">
-    <input data-act="newConvTitle" value="${esc(state.newConvTitle || '')}" placeholder="título…"
+    <div style="font:600 10px var(--font-body);text-transform:uppercase;letter-spacing:.05em;color:var(--color-dark-text-3)">
+      Nuevo Coordinador
+    </div>
+    <input data-act="newConvTitle" value="${esc(state.newConvTitle || '')}" placeholder="título (ej. Refactor Auth)…"
       style="${INPUT}">
-    <input data-act="newConvTopic" value="${esc(state.newConvTopic || '')}" placeholder="tema (opcional)"
+    <input data-act="newConvTopic" value="${esc(state.newConvTopic || '')}" placeholder="tema u objetivo (opcional)"
       style="${INPUT}">
-    <div style="display:flex;gap:7px">
+
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 9px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3)">Motor</span>
+      <select data-act="newConvEngine" style="${INPUT}">
+        <option value="claude" ${engineId === 'claude' ? 'selected' : ''}>Claude Code</option>
+        <option value="agy" ${engineId === 'agy' ? 'selected' : ''}>Antigravity CLI</option>
+      </select>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 9px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3)">Modelo</span>
+      <input list="newconv-models" data-act="newConvModel" style="${INPUT}"
+        value="${esc(state.newConvModel || 'default')}" placeholder="default (ambient)">
+      <datalist id="newconv-models">
+        <option value="default">Predeterminado (ambient)</option>
+        ${models.map((/** @type {any} */ m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+      </datalist>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 9px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3)">Nivel de esfuerzo</span>
+      <select data-act="newConvEffort" style="${INPUT}">
+        <option value="default" ${(!state.newConvEffort || state.newConvEffort === 'default') ? 'selected' : ''}>default (ambient)</option>
+        ${efforts.map((/** @type {any} */ ef) => `<option value="${esc(ef)}" ${state.newConvEffort === ef ? 'selected' : ''}>${esc(ef)}</option>`).join('')}
+      </select>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 9px var(--font-body);text-transform:uppercase;color:var(--color-dark-text-3)">Modo</span>
+      <select data-act="newConvMode" style="${INPUT}">
+        <option value="write" ${(!state.newConvMode || state.newConvMode === 'write') ? 'selected' : ''}>Escritura (habilita delegar write)</option>
+        <option value="plan" ${state.newConvMode === 'plan' ? 'selected' : ''}>Planificación (solo delega plan/read)</option>
+        <option value="read" ${state.newConvMode === 'read' ? 'selected' : ''}>Solo lectura (solo delega read)</option>
+      </select>
+    </div>
+
+    <div style="font:400 9px/1.35 var(--font-body);color:var(--color-dark-text-3);padding:4px 0;border-top:1px dashed var(--color-dark-border)">
+      Alcance: orquestará sobre <strong>${repos.length} repos</strong> de <strong>${accounts.length} cuentas</strong> configuradas.
+    </div>
+
+    <div style="display:flex;gap:7px;margin-top:2px">
       <button class="btn-primary" data-act="newConversation" style="flex:1;padding:7px 10px;font-size:11px">
         Crear
       </button>
@@ -72,7 +121,9 @@ function conversationRow(conv, data) {
     </div>
     ${conv.topic ? `<div class="mono" style="font-size:9.5px;color:var(--color-dark-text-3);overflow:hidden;
       text-overflow:ellipsis;white-space:nowrap">${esc(conv.topic)}</div>` : ''}
-    <div style="display:flex;align-items:center;gap:7px;margin-top:2px">
+    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
+      ${conv.engine ? `<span class="chip" style="font-size:8.5px;padding:1px 5px;background:var(--color-dark-surface)">${esc(conv.engine)}</span>` : ''}
+      ${conv.mode && conv.mode !== 'write' ? `<span class="chip" style="font-size:8.5px;padding:1px 5px;background:var(--color-dark-surface)">${esc(conv.mode)}</span>` : ''}
       <span class="mono" style="font-size:9px;color:var(--color-dark-text-3);flex:1">${esc(relTime(conv.createdAt))}</span>
       ${coordButton}
     </div>
@@ -97,7 +148,7 @@ export function renderSidebar(state, data) {
        align-self:stretch">
     <div class="font-display" style="font:600 11px var(--font-display);letter-spacing:.05em;
          text-transform:uppercase">Conversaciones</div>
-    ${newConversationForm(state)}
+    ${newConversationForm(state, data)}
     ${list}
   </div>`;
 }

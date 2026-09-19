@@ -554,11 +554,17 @@ function wireAgents(win) {
       registry.note(conversationId, 'SpawnRefused', { reason: gate.reason });
       return { error: gate.reason };
     }
-    const rawBin = bin || engine || 'claude';
+    // Fallback to conversation-saved preferences if not passed explicitly in IPC
+    const effectiveEngine = bin || engine || conversation.engine || config.readConfig().coordinators?.defaultEngine || 'claude';
+    const effectiveModel = model !== undefined ? model : (conversation.model || undefined);
+    const effectiveEffort = effort !== undefined ? effort : (conversation.effort || undefined);
+    const effectiveMode = mode !== undefined ? mode : (conversation.mode || undefined);
+
+    const rawBin = effectiveEngine.toLowerCase().includes('agy') ? 'agy' : 'claude';
     const effectiveBin = ALLOWED_ENGINES.has(path.basename(rawBin).toLowerCase()) ? rawBin : 'claude';
 
     try {
-      validateAndSanitizeParams({ engine: engineFor(effectiveBin), mode, model, effort });
+      validateAndSanitizeParams({ engine: engineFor(effectiveBin), mode: effectiveMode, model: effectiveModel, effort: effectiveEffort });
     } catch (err) {
       registry.note(conversationId, 'SpawnRefused', { reason: err.message });
       return { error: err.message };
@@ -587,9 +593,9 @@ function wireAgents(win) {
       repoDocs,
       spawn,
       bin: effectiveBin,
-      model,
-      effort,
-      mode,
+      model: effectiveModel,
+      effort: effectiveEffort,
+      mode: effectiveMode,
       ...wireLifecycle(() => agent.id, (id) => {
         spawnRequestWatchers.get(id)?.close();
         spawnRequestWatchers.delete(id);

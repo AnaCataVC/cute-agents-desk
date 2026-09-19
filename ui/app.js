@@ -56,6 +56,10 @@ const state = {
   newConvOpen: false,          // the sidebar's "+ nueva conversación" inline form
   newConvTitle: '',
   newConvTopic: '',
+  newConvEngine: 'claude',
+  newConvModel: 'default',
+  newConvEffort: 'default',
+  newConvMode: 'write',
   tick: 0,
   error: null,                 // last IPC refusal (scheduler cap, still-alive agent, ...), or null
   inspectedSkill: null,        // data for currently inspected skill in dialog
@@ -388,17 +392,41 @@ const ACTIONS = {
     state.newConvOpen = !state.newConvOpen;
     state.newConvTitle = '';
     state.newConvTopic = '';
+    const defaultEng = (data.getEngines?.() || [])[0]?.id || 'claude';
+    state.newConvEngine = defaultEng;
+    state.newConvModel = 'default';
+    state.newConvEffort = 'default';
+    state.newConvMode = 'write';
   },
   /** Creates the conversation, then refetches the list -- there is no live push for it yet. */
   newConversation: () => {
     const title = (state.newConvTitle || '').trim();
     if (!title) return;
     const topic = (state.newConvTopic || '').trim();
+    const engine = state.newConvEngine || 'claude';
+    const model = state.newConvModel || 'default';
+    const effort = state.newConvEffort || 'default';
+    const mode = state.newConvMode || 'write';
+
     state.newConvOpen = false;
-    window.desk?.createConversation?.({ title, topic: topic || undefined })
+    window.desk?.createConversation?.({
+      title,
+      topic: topic || undefined,
+      engine,
+      model: model !== 'default' ? model : undefined,
+      effort: effort !== 'default' ? effort : undefined,
+      mode,
+    })
       .then((/** @type {{ id: any; }} */ created) => {
         if (created?.id) {
-          window.desk?.spawnCoordinator?.({ conversationId: created.id })?.catch(() => {});
+          window.desk?.spawnCoordinator?.({
+            conversationId: created.id,
+            engine,
+            bin: engine,
+            model: model !== 'default' ? model : undefined,
+            effort: effort !== 'default' ? effort : undefined,
+            mode,
+          })?.catch(() => {});
         }
         return window.desk.conversations();
       })
@@ -798,6 +826,7 @@ app.addEventListener('input', (ev) => {
   if (el.dataset.act === 'flowQuery') { state.flowQuery = el.value; render(); }
   if (el.dataset.act === 'newConvTitle') { state.newConvTitle = el.value; }
   if (el.dataset.act === 'newConvTopic') { state.newConvTopic = el.value; }
+  if (el.dataset.act === 'newConvModel') { state.newConvModel = el.value; }
   if (el.dataset.act === 'queueTask') { state.queueTask = el.value; }
   if (el.dataset.act === 'queueModel') { state.queueModel = el.value; }
   if (el.dataset.act === 'scanPath') { state.scanPath = el.value; state.scanError = null; }
@@ -826,6 +855,15 @@ app.addEventListener('change', (ev) => {
     state.editConfig.currentValue = el.value;
     state.editConfig.error = null;
   }
+  if (el.dataset.act === 'newConvEngine') {
+    state.newConvEngine = el.value;
+    state.newConvModel = 'default';
+    state.newConvEffort = 'default';
+    render();
+  }
+  if (el.dataset.act === 'newConvEffort') { state.newConvEffort = el.value; }
+  if (el.dataset.act === 'newConvMode') { state.newConvMode = el.value; }
+  if (el.dataset.act === 'newConvModel') { state.newConvModel = el.value; }
   if (el.dataset.act === 'queueEngine') {
     state.queueEngine = el.value;
     if (state.queueEngine === 'agy') {
