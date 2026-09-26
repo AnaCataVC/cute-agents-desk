@@ -27,8 +27,8 @@ const { pathToFileURL, URL } = require('node:url');
 const { Registry } = require('./events.js');
 const { spawn, engineFor, validateAndSanitizeParams } = require('./agent.js');
 const { toyRepo } = require('./toy-repo.js');
-const { mayDelegate } = require('./read-mode.js');
-const { Scheduler } = require('./scheduler.js');
+const { delegationRefusal, normalizeMode } = require('./read-mode.js');
+const { Scheduler, sanitizeTaskId } = require('./scheduler.js');
 const {
   readAccountsConfig,
   buildAccounts,
@@ -38,7 +38,7 @@ const {
   removeAccountFolder,
 } = require('./accounts.js');
 const { gitAsync } = require('./git.js');
-const { scanRepos, findRepoDocsAsync } = require('./discovery.js');
+const { scanRepos, findRepoDocsAsync, samePath } = require('./discovery.js');
 const conv = require('./conversations.js');
 const coordinator = require('./coordinator.js');
 const paths = require('./paths.js');
@@ -53,6 +53,12 @@ const { getQuotas } = require('./quotas.js');
 const Response = globalThis.Response || class Response {};
 
 const ROOT = path.join(__dirname, '..');
+
+/** Files `desk:openPath` may hand to their default app; anything else is only revealed. */
+const SAFE_OPEN_EXTENSIONS = new Set([
+  '.md', '.txt', '.log', '.json', '.csv', '.tsv', '.yaml', '.yml', '.toml', '.xml',
+  '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+]);
 
 /** Live agents, by id. The registry holds their state; this holds the terminals. */
 const running = new Map();
@@ -135,16 +141,31 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 /**
+ * The page's own CSP, also sent as a response header: a meta tag only applies once the parser
+ * reaches it, while the header covers every response from the first byte. Read from index.html
+ * so the two can never disagree.
+ */
+const CONTENT_SECURITY_POLICY = (() => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const match = html.match(/http-equiv="Content-Security-Policy"\s+content="([^"]+)"/i);
+  if (!match) throw new Error('index.html no declara su Content-Security-Policy');
+  return match[1];
+})();
+
+/**
  * Map an `app://desk/<path>` request onto a file under the project root, refusing anything
  * that climbs out of it — the renderer is trusted today, but a path check is two lines and a
  * traversal bug here would read the whole disk.
  */
-function serveFromRoot(request) {
+async function serveFromRoot(request) {
   const url = new URL(request.url);
   const rel = decodeURIComponent(url.pathname) === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   const target = path.join(ROOT, rel);
   if (!target.startsWith(ROOT + path.sep)) return new Response('forbidden', { status: 403 });
-  return net.fetch(pathToFileURL(target).toString());
+  const response = await net.fetch(pathToFileURL(target).toString());
+  const headers = new Headers(response.headers);
+  headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 /**
@@ -309,8 +330,16 @@ function wireAgents(win) {
     if (!repoPath || !accountEmail) {
       return { ok: false, error: 'Faltan parámetros de repositorio o correo de cuenta' };
     }
+    if (typeof repoPath !== 'string' || typeof accountEmail !== 'string' || (accountName && typeof accountName !== 'string')) {
+      return { ok: false, error: 'Parámetros inválidos' };
+    }
     if (!fs.existsSync(repoPath)) {
       return { ok: false, error: `Ruta inexistente: ${repoPath}` };
+    }
+    // Only a repo this app itself discovered may have its git config rewritten from the renderer.
+    const registered = await scanRepos(readAccountsConfig());
+    if (!registered.some((r) => samePath(r.path, repoPath))) {
+      return { ok: false, error: `"${repoPath}" no es uno de los repos registrados` };
     }
     try {
       await gitAsync(repoPath, ['config', 'user.email', accountEmail]);
@@ -470,10 +499,11 @@ function wireAgents(win) {
     // A coordinator cannot delegate what it is not allowed to do itself. See `mayDelegate` in
     // read-mode.js for why. Refused rather than silently downgraded to a read worker: a downgrade
     // reads as "the task ran" in the status line the coordinator plans against.
+    // Normalized once here so the gate and `spawn` see the very same value agent.js will validate.
+    mode = normalizeMode(mode);
     if (viaCoordinator && replyTo) {
-      const boss = registry.agents.get(replyTo);
-      if (boss && !mayDelegate(boss.mode, mode)) {
-        const reason = `el coordinador esta en modo ${boss.mode}: no puede delegar una tarea en modo ${mode || 'write'}`;
+      const reason = delegationRefusal(registry.agents.get(replyTo), mode);
+      if (reason) {
         registry.note(conversationId || 'scheduler', 'SpawnRefused', { reason, cwd, task });
         registry.notifyCoordinator(replyTo, 'scheduler', `pedido rechazado: ${reason}`);
         return { error: reason };
@@ -498,7 +528,7 @@ function wireAgents(win) {
     // before it can become a real process's cwd.
     if (cwd && cwd !== toyRepo()) {
       const { repos } = await getRepoData();
-      if (!repos.some((r) => r.path === cwd)) {
+      if (!repos.some((r) => samePath(r.path, cwd))) {
         const reason = `"${cwd}" no es uno de los repos registrados`;
         registry.note(conversationId || 'scheduler', 'SpawnRefused', { reason, cwd, task });
         if (replyTo) registry.notifyCoordinator(replyTo, 'scheduler', `pedido rechazado: ${reason}`);
@@ -521,12 +551,14 @@ function wireAgents(win) {
       return { error: gate.reason };
     }
     cwd = cwd || toyRepo();
-    const safeCustomId = (customId && typeof customId === 'string')
-      ? customId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
-      : null;
-    const id = (safeCustomId && !running.has(safeCustomId))
+    const safeCustomId = sanitizeTaskId(customId);
+    // Resolved against stale worktrees here, before the outbox path is written into the prompt,
+    // so spawn() keeps this id instead of picking another one the worker was never told about.
+    const requestedId = worktree.uniqueAgentId((safeCustomId && !running.has(safeCustomId))
       ? safeCustomId
-      : `a${Date.now().toString(36).slice(-5)}`;
+      : `a${Date.now().toString(36).slice(-5)}`);
+    // Every callback keys on `id`, reassigned to the handle's final id before any of them can fire.
+    let id = requestedId;
     // Only a worker with somewhere to send it gets told about the outbox — a bare desk:spawn
     // call has no coordinator, so the file would just sit there unread.
     const workerSystemPrompt = replyTo ? [
@@ -548,6 +580,7 @@ function wireAgents(win) {
       ...wireLifecycle(() => id),
       onNotice: (kind, detail) => registry.note(id, kind, detail),
     });
+    id = agent.id;
     running.set(id, agent);
     const engKey = effectiveBin.startsWith('agy') ? 'agy' : 'claude';
     const dynamicTokenCap = config.readConfig().engines?.[engKey]?.contextCap;
@@ -643,6 +676,9 @@ function wireAgents(win) {
     registry.register(agent, { conversationId, role: 'coordinator', model: agent.model, effort: agent.effort, mode: agent.mode });
 
     const watcher = coordinator.watchSpawnRequests(conversationId, (req) => {
+      // Sanitized before the scheduler keys anything, so its key and the agent id agree.
+      req.id = sanitizeTaskId(req.id) || undefined;
+      if (Array.isArray(req.dependsOn)) req.dependsOn = req.dependsOn.map(sanitizeTaskId).filter(Boolean);
       const enqueueRes = scheduler.enqueueTask(req, (taskReq) => spawnWorker({
         id: taskReq.id,
         cwd: taskReq.cwd,
@@ -669,6 +705,9 @@ function wireAgents(win) {
         return true;
       }
       return true;
+    }, (reason) => {
+      registry.notifyCoordinator(agent.id, 'scheduler', `pedido rechazado: ${reason}`);
+      registry.note(conversationId, 'SpawnRefused', { reason });
     });
     spawnRequestWatchers.set(agent.id, watcher);
 
@@ -728,19 +767,15 @@ function wireAgents(win) {
     try {
       if (!fs.existsSync(targetPath)) return { error: 'La ruta no existe en disco' };
 
-      // Prevent accidental execution of binary files; open their parent directory instead
+      // An allowlist, not a denylist: the set of extensions Windows will execute is open-ended,
+      // so any file not known to be a plain document is revealed in its folder instead.
       const stat = fs.statSync(targetPath);
-      let pathToOpen = targetPath;
-      if (stat.isFile()) {
-        const ext = path.extname(targetPath).toLowerCase();
-        const executableExts = ['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.msi'];
-        if (executableExts.includes(ext)) {
-          pathToOpen = path.dirname(targetPath);
-        }
+      if (stat.isFile() && !SAFE_OPEN_EXTENSIONS.has(path.extname(targetPath).toLowerCase())) {
+        shell.showItemInFolder(targetPath);
+        return { ok: true };
       }
-
-      await shell.openPath(pathToOpen);
-      return { ok: true };
+      const failure = await shell.openPath(targetPath);
+      return failure ? { error: failure } : { ok: true };
     } catch (err) {
       return { error: err && err.message ? err.message : String(err) };
     }

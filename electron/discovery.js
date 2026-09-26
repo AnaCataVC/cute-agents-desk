@@ -150,4 +150,16 @@ async function findRepoDocsAsync(repoPath, maxDepth = 3, maxFiles = 6) {
   return results;
 }
 
-module.exports = { findRepos, inspectRepo, scanRepos, findRepoDocsAsync };
+/**
+ * Whether two paths name the same location: resolved, and case-insensitive on Windows, where
+ * `C:\Repos\x` and `c:/repos/x/` are the same directory.
+ * @param {string} a @param {string} b @returns {boolean}
+ */
+function samePath(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
+  const ra = path.resolve(a);
+  const rb = path.resolve(b);
+  return process.platform === 'win32' ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
+}
+
+module.exports = { findRepos, inspectRepo, scanRepos, findRepoDocsAsync, samePath };

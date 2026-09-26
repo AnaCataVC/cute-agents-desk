@@ -9,6 +9,16 @@
 
 const DEFAULT_GLOBAL_CAP = 5;
 
+/**
+ * The one shape a task id may take once it leaves the coordinator's request: it becomes an agent
+ * id, a directory name and a scheduler key, so all three must agree on the same sanitized string.
+ * @param {unknown} rawId @returns {string | null}  null when nothing usable survives
+ */
+function sanitizeTaskId(rawId) {
+  if (typeof rawId !== 'string') return null;
+  return rawId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || null;
+}
+
 class Scheduler {
   /** @param {{ globalCap?: number }} [opts] */
   constructor({ globalCap = DEFAULT_GLOBAL_CAP } = {}) {
@@ -23,6 +33,44 @@ class Scheduler {
      * apart a task still waiting on a dependency (or cascade-failed before ever running) from one
      * that ran and has its own real agent record elsewhere. */
     this.spawnedIds = new Set();
+    /** @type {Map<string, string>} agent id -> task id, for a task whose spawn ended up under a
+     * different id than the one it was queued with (the requested id was already taken). */
+    this.agentToTask = new Map();
+  }
+
+  /** @param {string} id @returns {string} */
+  taskIdOf(id) {
+    return this.agentToTask.get(id) || id;
+  }
+
+  /**
+   * Run `spawnFn` for a task and track its outcome. `spawnFn` may be async and may report a
+   * refusal as `{ error }` instead of throwing; either way the task is marked failed so its
+   * dependents cascade instead of waiting forever. A string result is the real agent id, mapped
+   * back to the task id so the agent's exit reaches the right key.
+   * @param {string | undefined} taskId @param {any} req @param {(req: any) => any} spawnFn
+   * @returns {string | null}  the failure reason when spawnFn threw synchronously
+   */
+  launch(taskId, req, spawnFn) {
+    let result;
+    try {
+      result = spawnFn(req);
+    } catch (err) {
+      const reason = err && err.message ? err.message : String(err);
+      if (taskId) this.onTaskFailed(taskId, reason);
+      return reason;
+    }
+    Promise.resolve(result).then((outcome) => {
+      if (!taskId) return;
+      if (outcome && typeof outcome === 'object' && outcome.error) {
+        this.onTaskFailed(taskId, outcome.error);
+      } else if (typeof outcome === 'string' && outcome !== taskId) {
+        this.agentToTask.set(outcome, taskId);
+      }
+    }, (err) => {
+      if (taskId) this.onTaskFailed(taskId, err && err.message ? err.message : String(err));
+    });
+    return null;
   }
 
   /**
@@ -95,13 +143,19 @@ class Scheduler {
         this.taskStates.set(taskId, 'running');
         this.spawnedIds.add(taskId);
       }
-      spawnFn(req);
-      return { ok: true, queued: false };
+      const reason = this.launch(taskId, req, spawnFn);
+      return reason ? { ok: false, reason } : { ok: true, queued: false };
     }
 
     // Check for cycles
     if (taskId && this.hasCycle(taskId, deps)) {
       return { ok: false, reason: `Ciclo de dependencias detectado para tarea "${taskId}"` };
+    }
+
+    // A dependency nobody ever queued can never complete, so the task would wait forever.
+    const unknown = deps.filter((depId) => !this.taskStates.has(depId));
+    if (unknown.length > 0) {
+      return { ok: false, reason: `Dependencias desconocidas (nunca encoladas): ${unknown.join(', ')}` };
     }
 
     // Fail-fast: if any prerequisite has already failed, abort immediately
@@ -120,8 +174,8 @@ class Scheduler {
         this.taskStates.set(taskId, 'running');
         this.spawnedIds.add(taskId);
       }
-      spawnFn(req);
-      return { ok: true, queued: false };
+      const reason = this.launch(taskId, req, spawnFn);
+      return reason ? { ok: false, reason } : { ok: true, queued: false };
     }
 
     // Prerequisite pending or running: queue the task
@@ -136,11 +190,12 @@ class Scheduler {
   /**
    * Notify scheduler that a task completed successfully.
    * Evaluates pendingQueue and triggers any tasks whose dependencies are now all satisfied.
-   * @param {string} taskId
+   * @param {string} agentOrTaskId  an agent id is mapped back to the task it ran
    * @returns {string[]} ids of newly released and spawned tasks
    */
-  onTaskCompleted(taskId) {
-    if (!taskId) return [];
+  onTaskCompleted(agentOrTaskId) {
+    if (!agentOrTaskId) return [];
+    const taskId = this.taskIdOf(agentOrTaskId);
     this.taskStates.set(taskId, 'done');
 
     const released = [];
@@ -156,11 +211,7 @@ class Scheduler {
           this.taskStates.set(pendingId, 'running');
           this.spawnedIds.add(pendingId);
           released.push(pendingId);
-          try {
-            item.spawnFn(item.req);
-          } catch (err) {
-            this.onTaskFailed(pendingId, err && err.message ? err.message : String(err));
-          }
+          this.launch(pendingId, item.req, item.spawnFn);
           progress = true;
           break; // restart scan since states changed
         }
@@ -173,12 +224,13 @@ class Scheduler {
   /**
    * Notify scheduler that a task failed.
    * Triggers cascade failure on all pending tasks that directly or indirectly depend on it.
-   * @param {string} taskId
+   * @param {string} agentOrTaskId  an agent id is mapped back to the task it ran
    * @param {string} [_reason]
    * @returns {string[]} ids of cascading failed tasks
    */
-  onTaskFailed(taskId, _reason) {
-    if (!taskId) return [];
+  onTaskFailed(agentOrTaskId, _reason) {
+    if (!agentOrTaskId) return [];
+    const taskId = this.taskIdOf(agentOrTaskId);
     this.taskStates.set(taskId, 'failed');
 
     const cascadeFailed = [];
@@ -219,4 +271,4 @@ class Scheduler {
   }
 }
 
-module.exports = { Scheduler, DEFAULT_GLOBAL_CAP };
+module.exports = { Scheduler, DEFAULT_GLOBAL_CAP, sanitizeTaskId };

@@ -16,7 +16,42 @@ const conv = require('./conversations.js');
 const { toolNameOf, isVerificationCommand, exitCodeOf } = require('./tool-name.js');
 const { isDeniedInReadMode } = require('./read-mode.js');
 const { drainJsonQueue, watchJsonQueue } = require('./json-queue.js');
-const { readAccountsConfig, accountIdForCwd } = require('./accounts.js');
+const { readAccountsConfig, accountIdForCwd, getAccountsConfigPath } = require('./accounts.js');
+
+/** How much events.jsonl is allowed to grow before startup archives everything before today --
+ * past this, every rebuild would re-read the whole history just to answer "what happened today". */
+const ROTATE_THRESHOLD_BYTES = 5 * 1024 * 1024;
+
+let accountsConfigCache = { mtimeMs: -1, data: [] };
+
+/**
+ * Cached wrapper around `readAccountsConfig()` for the two hot paths that call it on every agent
+ * exit or every publish (`exited()`, `getUsage()`) -- invalidated by the config file's own mtime,
+ * so an edit made in the Configuracion tab is picked up on the very next read.
+ */
+function cachedAccountsConfig() {
+  let mtimeMs = -1;
+  try { mtimeMs = fs.statSync(getAccountsConfigPath()).mtimeMs; } catch { /* not written yet */ }
+  if (mtimeMs !== accountsConfigCache.mtimeMs) {
+    accountsConfigCache = { mtimeMs, data: readAccountsConfig() };
+  }
+  return accountsConfigCache.data;
+}
+
+/**
+ * Adds `tok`/`cost` to an account's running totals, keyed by account id, creating the record on
+ * first touch. The one helper behind the four places that used to hand-roll this same
+ * accumulation: `exited()`, `getUsage()`, and `loadTodayUsage()`'s today and all-time passes.
+ * @param {Record<string, {tokens: number, costUsd: number, claudeTokens: number, agyTokens: number}>} store
+ * @param {string} accId @param {'claude'|'agy'} eng @param {number} tok @param {number} cost
+ */
+function accumulateAccount(store, accId, eng, tok, cost) {
+  if (!store[accId]) store[accId] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
+  store[accId].tokens += tok;
+  store[accId].costUsd += cost;
+  if (eng === 'agy') store[accId].agyTokens += tok;
+  else store[accId].claudeTokens += tok;
+}
 
 /** Check if an ISO timestamp occurred on the same calendar day (in local time). */
 function isSameLocalDay(isoString, refDate = new Date()) {
@@ -178,6 +213,9 @@ class Registry {
       tool: 'arrancando',
       tokens: 0,
       costUsd: 0,
+      // How much of `tokens` has already been folded into completedHourlySeries -- lets each
+      // Status update add only its delta instead of the tool's whole cumulative count.
+      hourlyAttributedTokens: 0,
       startedAt: Date.now(),
       raw: null,
       tokenCap: opts.tokenCap,
@@ -192,7 +230,7 @@ class Registry {
     this.handles.set(agent.id, { write: agent.write, kill: agent.kill });
     this.watch(agent.id);
     this.watchOutbox(agent.id);
-    this.append({ event: 'AgentSpawned', at: new Date().toISOString(), agentId: agent.id, payload: { cwd: agent.cwd, task: agent.task, pid: agent.pid, tokenCap: opts.tokenCap, replyTo: opts.replyTo, role: opts.role, mode: agent.mode || opts.mode || 'write', model: agent.model || opts.model || null, effort: agent.effort || opts.effort || null } });
+    this.append({ event: 'AgentSpawned', at: new Date().toISOString(), agentId: agent.id, payload: { cwd: agent.cwd, task: agent.task, pid: agent.pid, engine: agent.engine, tokenCap: opts.tokenCap, replyTo: opts.replyTo, role: opts.role, mode: agent.mode || opts.mode || 'write', model: agent.model || opts.model || null, effort: agent.effort || opts.effort || null } });
     this.recordMessage(agent.id, 'sys', 'harness', `Sesión iniciada en ${path.basename(agent.cwd)}`);
     if (opts.replyTo) this.notifyCoordinator(opts.replyTo, agent.id, `arranco en ${path.basename(agent.cwd)}: ${agent.task}`);
     this.publish();
@@ -248,7 +286,7 @@ class Registry {
   drainOutbox(id) {
     const { outbox } = paths.agent(id);
     drainJsonQueue(outbox, (body) => {
-      if (!body || typeof body.message !== 'string') return false;
+      if (!body || typeof body.message !== 'string') return 'reject';
       const agent = this.agents.get(id);
       if (agent?.replyTo) {
         this.notifyCoordinator(agent.replyTo, id, `mensaje: ${body.message}`);
@@ -273,6 +311,7 @@ class Registry {
     if (report.event === 'Status') {
       Object.assign(agent, cleanUsage(readUsage(report.payload)));
       agent.raw = report.payload;
+      this.attributeHourlyTokens(agent);
       this.enforceTokenCap(id, agent);
       this.publish();
       return;
@@ -355,6 +394,25 @@ class Registry {
     }
   }
 
+  /**
+   * Adds this Status update's new tokens (since the agent's own last one) to the current hour's
+   * bucket in `completedHourlySeries`, the same delta-per-update approach `loadTodayUsage()` uses
+   * when rebuilding from the log. Doing it here, live, means `getUsage()` no longer has to add a
+   * running agent's whole cumulative total on every poll (which double-counted and, since
+   * `exited()` never wrote anything back, dropped the hour's bar the moment the agent finished).
+   * @param {Record<string, any>} agent
+   */
+  attributeHourlyTokens(agent) {
+    const tok = agent.tokens || 0;
+    const prev = agent.hourlyAttributedTokens || 0;
+    if (tok <= prev) return;
+    const hour = new Date().getHours();
+    if (hour >= 0 && hour < 24) {
+      this.completedHourlySeries[hour] = (this.completedHourlySeries[hour] || 0) + (tok - prev);
+    }
+    agent.hourlyAttributedTokens = tok;
+  }
+
   /** @param {string} id @param {number} code */
   exited(id, code) {
     const agent = this.agents.get(id);
@@ -368,24 +426,11 @@ class Registry {
       this.completedAllTime[eng].tokens += tok;
       this.completedAllTime[eng].costUsd += cost;
 
-      const accounts = readAccountsConfig();
+      const accounts = cachedAccountsConfig();
       const acc = accountIdForCwd(agent.cwd, accounts);
       if (acc) {
-        if (!this.completedByAccount[acc]) {
-          this.completedByAccount[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
-        }
-        this.completedByAccount[acc].tokens += tok;
-        this.completedByAccount[acc].costUsd += cost;
-        if (eng === 'agy') this.completedByAccount[acc].agyTokens += tok;
-        else this.completedByAccount[acc].claudeTokens += tok;
-
-        if (!this.completedByAccountAllTime[acc]) {
-          this.completedByAccountAllTime[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
-        }
-        this.completedByAccountAllTime[acc].tokens += tok;
-        this.completedByAccountAllTime[acc].costUsd += cost;
-        if (eng === 'agy') this.completedByAccountAllTime[acc].agyTokens += tok;
-        else this.completedByAccountAllTime[acc].claudeTokens += tok;
+        accumulateAccount(this.completedByAccount, acc, eng, tok, cost);
+        accumulateAccount(this.completedByAccountAllTime, acc, eng, tok, cost);
       }
     }
     if (agent.failReason === 'token-cap') {
@@ -411,6 +456,7 @@ class Registry {
     // is purely about not growing the map forever, not about the cap.
     setTimeout(() => {
       this.agents.delete(id);
+      this.threads.delete(id);
       this.publish();
     }, TERMINAL_RETENTION_MS).unref();
   }
@@ -451,7 +497,7 @@ class Registry {
     let allClaudeCost = (this.completedAllTime?.claude?.costUsd || 0);
     let allAgyCost = (this.completedAllTime?.agy?.costUsd || 0);
 
-    const accounts = readAccountsConfig();
+    const accounts = cachedAccountsConfig();
     const byAccount = {};
     for (const [k, v] of Object.entries(this.completedByAccount || {})) {
       byAccount[k] = { ...v };
@@ -461,8 +507,10 @@ class Registry {
       byAccountAllTime[k] = { ...v };
     }
 
-    const series = [...(this.completedHourlySeries || Array(24).fill(0))];
-    const currentHour = new Date().getHours();
+    // Raw token sums, one per hour -- rounded to the same "thousands" unit the UI bars show only
+    // here, at the edge, so live updates (attributeHourlyTokens) and the startup rebuild
+    // (loadTodayUsage) can both accumulate exact deltas without compounding rounding error.
+    const series = (this.completedHourlySeries || Array(24).fill(0)).map((t) => Math.round((t || 0) / 1000));
 
     for (const a of this.agents.values()) {
       if (a.state === 'done' || a.state === 'failed') continue;
@@ -481,23 +529,10 @@ class Registry {
         allClaudeCost += cost;
       }
 
-      if (tok > 0 && currentHour >= 0 && currentHour < 24) {
-        series[currentHour] = (series[currentHour] || 0) + Math.round(tok / 1000);
-      }
-
       const accId = accountIdForCwd(a.cwd, accounts);
       if (accId) {
-        if (!byAccount[accId]) byAccount[accId] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
-        byAccount[accId].tokens += tok;
-        byAccount[accId].costUsd += cost;
-        if (eng === 'agy') byAccount[accId].agyTokens += tok;
-        else byAccount[accId].claudeTokens += tok;
-
-        if (!byAccountAllTime[accId]) byAccountAllTime[accId] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
-        byAccountAllTime[accId].tokens += tok;
-        byAccountAllTime[accId].costUsd += cost;
-        if (eng === 'agy') byAccountAllTime[accId].agyTokens += tok;
-        else byAccountAllTime[accId].claudeTokens += tok;
+        accumulateAccount(byAccount, accId, eng, tok, cost);
+        accumulateAccount(byAccountAllTime, accId, eng, tok, cost);
       }
     }
 
@@ -518,9 +553,10 @@ class Registry {
 
   loadTodayUsage() {
     try {
+      this.rotateEventsLogIfNeeded();
       if (!fs.existsSync(paths.eventsLog)) return;
       const lines = fs.readFileSync(paths.eventsLog, 'utf8').split('\n');
-      const accounts = readAccountsConfig();
+      const accounts = cachedAccountsConfig();
       const latestAgentStatusToday = new Map();
       const latestAgentStatusAllTime = new Map();
       const agentEngines = new Map();
@@ -533,6 +569,7 @@ class Registry {
         try {
           const entry = JSON.parse(line);
           if (!entry.at) continue;
+          const isToday = isSameLocalDay(entry.at);
 
           if (entry.event === 'AgentSpawned' && entry.agentId) {
             const isAgy = (entry.payload?.bin || entry.payload?.engine || '').includes('agy');
@@ -543,7 +580,10 @@ class Registry {
             }
           }
 
-          if (entry.agentId) {
+          // Threads back a live UI need, not a permanent record -- an agent from a previous day
+          // is never shown again (register() starts every agent fresh), so rebuilding its chat
+          // history here would only grow `this.threads` for nothing.
+          if (entry.agentId && isToday) {
             if (entry.event === 'AgentSpawned') {
               this.recordMessage(entry.agentId, 'sys', 'harness', `Sesión iniciada (${entry.payload?.task || ''})`);
             } else if (entry.event === 'PreToolUse') {
@@ -558,7 +598,6 @@ class Registry {
 
           if (entry.event === 'Status' && entry.agentId && entry.payload) {
             const u = readUsage(entry.payload);
-            const isToday = isSameLocalDay(entry.at);
 
             if (!agentAccounts.has(entry.agentId)) {
               const dirs = [
@@ -593,7 +632,10 @@ class Registry {
         } catch { /* skip */ }
       }
 
-      this.completedHourlySeries = hourlyTokens.map((t) => Math.round(t / 1000));
+      // Stored as raw token sums, not "thousands" -- getUsage() rounds once at read time, the
+      // same place attributeHourlyTokens()'s live deltas get rounded, so a rebuild and a live
+      // session never disagree over compounded rounding.
+      this.completedHourlySeries = hourlyTokens;
 
       this.completedUsage = {
         claude: { tokens: 0, costUsd: 0 },
@@ -607,22 +649,15 @@ class Registry {
         this.completedUsage[eng].costUsd += (u.costUsd || 0);
 
         const acc = agentAccounts.get(agentId);
-        if (acc) {
-          if (!this.completedByAccount[acc]) {
-            this.completedByAccount[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
-          }
-          this.completedByAccount[acc].tokens += (u.tokens || 0);
-          this.completedByAccount[acc].costUsd += (u.costUsd || 0);
-          if (eng === 'agy') this.completedByAccount[acc].agyTokens += (u.tokens || 0);
-          else this.completedByAccount[acc].claudeTokens += (u.tokens || 0);
-        }
+        if (acc) accumulateAccount(this.completedByAccount, acc, eng, u.tokens || 0, u.costUsd || 0);
       }
 
-      this.completedAllTime = {
-        claude: { tokens: 0, costUsd: 0 },
-        agy: { tokens: 0, costUsd: 0 },
-      };
-      this.completedByAccountAllTime = {};
+      // All-time totals start from whatever rotation already archived out of the log (empty
+      // defaults when nothing has ever rotated), then add what the log still holds -- rotation
+      // never leaves an agent's contribution counted in both places at once.
+      const persisted = this.readAllTimeSummary();
+      this.completedAllTime = persisted.completedAllTime;
+      this.completedByAccountAllTime = persisted.completedByAccountAllTime;
 
       for (const [agentId, u] of latestAgentStatusAllTime) {
         const eng = agentEngines.get(agentId) || 'claude';
@@ -630,17 +665,101 @@ class Registry {
         this.completedAllTime[eng].costUsd += (u.costUsd || 0);
 
         const acc = agentAccounts.get(agentId);
-        if (acc) {
-          if (!this.completedByAccountAllTime[acc]) {
-            this.completedByAccountAllTime[acc] = { tokens: 0, costUsd: 0, claudeTokens: 0, agyTokens: 0 };
-          }
-          this.completedByAccountAllTime[acc].tokens += (u.tokens || 0);
-          this.completedByAccountAllTime[acc].costUsd += (u.costUsd || 0);
-          if (eng === 'agy') this.completedByAccountAllTime[acc].agyTokens += (u.tokens || 0);
-          else this.completedByAccountAllTime[acc].claudeTokens += (u.tokens || 0);
-        }
+        if (acc) accumulateAccount(this.completedByAccountAllTime, acc, eng, u.tokens || 0, u.costUsd || 0);
       }
     } catch { /* convenience only */ }
+  }
+
+  /** @returns {string} */
+  allTimeSummaryPath() {
+    return path.join(paths.home, 'all-time-summary.json');
+  }
+
+  /** @returns {{completedAllTime: object, completedByAccountAllTime: object}} */
+  readAllTimeSummary() {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.allTimeSummaryPath(), 'utf8'));
+      return {
+        completedAllTime: parsed.completedAllTime || { claude: { tokens: 0, costUsd: 0 }, agy: { tokens: 0, costUsd: 0 } },
+        completedByAccountAllTime: parsed.completedByAccountAllTime || {},
+      };
+    } catch {
+      return {
+        completedAllTime: { claude: { tokens: 0, costUsd: 0 }, agy: { tokens: 0, costUsd: 0 } },
+        completedByAccountAllTime: {},
+      };
+    }
+  }
+
+  /**
+   * Folds the all-time contribution of the lines rotation is about to archive into the persisted
+   * summary, so `loadTodayUsage()` can keep computing correct all-time totals from a log that no
+   * longer holds that history.
+   * @param {string[]} lines
+   */
+  foldIntoAllTimeSummary(lines) {
+    const accounts = cachedAccountsConfig();
+    const agentEngines = new Map();
+    const agentAccounts = new Map();
+    const latestStatus = new Map();
+
+    for (const line of lines) {
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+
+      if (entry.event === 'AgentSpawned' && entry.agentId) {
+        const isAgy = (entry.payload?.bin || entry.payload?.engine || '').includes('agy');
+        agentEngines.set(entry.agentId, isAgy ? 'agy' : 'claude');
+        if (entry.payload?.cwd) {
+          const accId = accountIdForCwd(entry.payload.cwd, accounts);
+          if (accId) agentAccounts.set(entry.agentId, accId);
+        }
+      }
+      if (entry.event === 'Status' && entry.agentId && entry.payload) {
+        latestStatus.set(entry.agentId, readUsage(entry.payload));
+      }
+    }
+
+    const summary = this.readAllTimeSummary();
+    for (const [agentId, u] of latestStatus) {
+      const eng = agentEngines.get(agentId) || 'claude';
+      summary.completedAllTime[eng].tokens += (u.tokens || 0);
+      summary.completedAllTime[eng].costUsd += (u.costUsd || 0);
+      const acc = agentAccounts.get(agentId);
+      if (acc) accumulateAccount(summary.completedByAccountAllTime, acc, eng, u.tokens || 0, u.costUsd || 0);
+    }
+    try { paths.writeJsonAtomic(this.allTimeSummaryPath(), summary); } catch { /* best-effort housekeeping */ }
+  }
+
+  /**
+   * Keeps `events.jsonl` from growing forever: once it holds enough history to matter, everything
+   * before today is folded into the persisted all-time summary (see `foldIntoAllTimeSummary`),
+   * moved out to a dated archive file, and dropped from the live log -- which then only ever holds
+   * today's lines, so every future startup rebuild reads a small, bounded file.
+   */
+  rotateEventsLogIfNeeded() {
+    let raw;
+    try { raw = fs.readFileSync(paths.eventsLog, 'utf8'); } catch { return; }
+    if (Buffer.byteLength(raw, 'utf8') < ROTATE_THRESHOLD_BYTES) return;
+
+    const todayLines = [];
+    const olderLines = [];
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      (isSameLocalDay(entry.at) ? todayLines : olderLines).push(line);
+    }
+    if (!olderLines.length) return;
+
+    this.foldIntoAllTimeSummary(olderLines);
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    const archivePath = path.join(paths.home, `events-${stamp}.jsonl`);
+    try {
+      fs.appendFileSync(archivePath, `${olderLines.join('\n')}\n`);
+      fs.writeFileSync(paths.eventsLog, todayLines.length ? `${todayLines.join('\n')}\n` : '');
+    } catch { /* rotation is housekeeping; never a reason to lose events already applied in memory */ }
   }
 
   publish() {

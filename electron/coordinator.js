@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const conv = require('./conversations.js');
 const { drainJsonQueue, watchJsonQueue } = require('./json-queue.js');
-const { findRepos } = require('./discovery.js');
+const { findRepos, samePath } = require('./discovery.js');
 
 /**
  * The system prompt appended to the coordinator's own, per the plan's "cuatro cosas": the repo
@@ -39,7 +39,7 @@ function buildCoordinatorPrompt(conversation, repos, opts = {}) {
     repoLines,
   ];
 
-  // Inyectar contexto de carpeta contenedora multi-repo si la conversación lo tiene habilitado
+  // Inject the multi-repo umbrella folder context when the conversation has it enabled.
   if (conversation && conversation.multiRepoWorkspace) {
     const workspaceRoot = opts.effectiveCwd || conversation.cwd;
     if (workspaceRoot && fs.existsSync(workspaceRoot)) {
@@ -49,12 +49,15 @@ function buildCoordinatorPrompt(conversation, repos, opts = {}) {
       } catch {
         subRepos = [];
       }
+      // Only registered repos pass the spawn guard, so listing any other sub-repo would invite
+      // requests that are bound to be refused.
+      subRepos = subRepos.filter((sub) => repos.some((r) => samePath(r.path, sub)));
       promptParts.push(
         '',
         'MODO WORKSPACE MULTI-REPO ACTIVADO:',
         `Te encuentras operando sobre la carpeta contenedora/paraguas: ${workspaceRoot}`,
         'Puedes inspeccionar este directorio para entender la arquitectura global de los proyectos.',
-        'Sub-repositorios Git detectados dentro de esta carpeta contenedora:'
+        'Sub-repositorios Git registrados dentro de esta carpeta contenedora:'
       );
       if (subRepos.length > 0) {
         for (const sub of subRepos) {
@@ -66,7 +69,10 @@ function buildCoordinatorPrompt(conversation, repos, opts = {}) {
           'de tu spawn-request para que el worker cree su rama aislada por git worktree sin colisiones.'
         );
       } else {
-        promptParts.push('(No se detectaron sub-repositorios con .git inmediatamente en este workspace).');
+        promptParts.push(
+          '(Ningun sub-repositorio de esta carpeta esta registrado en la configuracion, asi que no puedes',
+          'delegarle tareas: un pedido con un "cwd" fuera de la lista de repos disponibles se rechaza.)'
+        );
       }
     }
   }
@@ -109,8 +115,11 @@ function buildCoordinatorPrompt(conversation, repos, opts = {}) {
     '',
     'Para delegar una tarea, escribe un archivo JSON en:',
     `  ${path.join(p.dir, 'spawn-requests')}\\<nombre-unico>.json`,
-    'con esta forma exacta:',
+    'Escribelo primero con un nombre que empiece con punto (por ejemplo ".<nombre-unico>.json.tmp")',
+    'en esa misma carpeta y despues renombralo al nombre final: un archivo a medio escribir no se lee.',
+    'El JSON tiene esta forma exacta:',
     '  { "id": "<id-opcional>", "objective": "que debe lograr", "cwd": "<ruta absoluta del repo>", "dependsOn": ["<id-previo>"], "mode": "write"|"plan"|"auto"|"read", "engine": "claude"|"agy", "model": "<modelo>", "effort": "low"|"medium"|"high" }',
+    '"objective" y "cwd" son obligatorios: un pedido sin ellos se rechaza y se mueve a rejected/.',
     '"cwd" tiene que ser la ruta absoluta de uno de los repos de la lista de arriba. "mode",',
     '"engine", "model", "effort", "id" y "dependsOn" son opcionales (por defecto escribe con el motor predeterminado).',
     'Si defines "dependsOn", la tarea esperara en cola hasta que sus prerrequisitos finalicen con exito.',
@@ -166,6 +175,10 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, mod
   const effectiveCwd = (cwd && fs.existsSync(cwd)) ? cwd
     : (conversation && conversation.cwd && fs.existsSync(conversation.cwd)) ? conversation.cwd
     : dir;
+  // Standing in a real repo (or an umbrella of repos) with worktree:false, write mode would let
+  // the coordinator edit the root checkout directly. It only needs to read and write its mailbox,
+  // which lives outside the repo, so plan mode is forced here -- for the coordinator only.
+  const effectiveMode = effectiveCwd === dir ? mode : 'plan';
   const agent = spawn({
     id,
     cwd: effectiveCwd,
@@ -173,10 +186,10 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, mod
     bin,
     model,
     effort,
-    mode,
+    mode: effectiveMode,
     systemPrompt: buildCoordinatorPrompt(conversation, repos, { skills, repoDocs, effectiveCwd }),
-    // The conversation folder is never a git repo, so a worktree here would always fail to
-    // create — skip the doomed `git rev-parse` call and the spurious error log entirely.
+    // The coordinator never edits code: in its conversation folder a worktree would fail to
+    // create, and in a repo cwd it runs in plan mode, so a worktree would only add churn.
     worktree: false,
     onOutput,
     onExit,
@@ -193,15 +206,21 @@ function spawnCoordinator({ conversationId, conversation, repos, spawn, bin, mod
  * spawned/blocked/done reports, plus its own free-form messages) is `Registry.notifyCoordinator`
  * and `watchOutbox` in `events.js`, typed straight into this coordinator's own live terminal
  * rather than routed through a file here.
+ * A parsed request missing `objective` or `cwd` is malformed, not half-written: it is moved to
+ * `rejected/` and reported through `onReject` instead of being retried on every drain.
  * @param {string} conversationId
  * @param {(req: {id?: string, dependsOn?: string[], objective: string, cwd: string, mode?: 'read'|'write'|'plan'|'auto', bin?: string, engine?: string, model?: string, effort?: string}) => (boolean|void|Promise<any>)} onRequest
  *   a `false` return leaves the request file in place for the next drain instead of consuming it
+ * @param {(reason: string) => void} [onReject] told why a malformed request was rejected
  * @returns {{ close: () => void }}
  */
-function watchSpawnRequests(conversationId, onRequest) {
+function watchSpawnRequests(conversationId, onRequest, onReject) {
   const dir = path.join(conv.conversationPaths(conversationId).dir, 'spawn-requests');
   return watchJsonQueue(dir, () => drainJsonQueue(dir, (req) => {
-    if (!req || !req.objective || !req.cwd) return false;
+    if (!req || typeof req !== 'object' || !req.objective || !req.cwd) {
+      onReject?.('el pedido no tiene "objective" y "cwd"; se movio a spawn-requests/rejected/');
+      return 'reject';
+    }
     const item = { objective: req.objective, cwd: req.cwd, mode: req.mode };
     if (req.id) item.id = req.id;
     if (Array.isArray(req.dependsOn)) item.dependsOn = req.dependsOn;

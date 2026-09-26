@@ -29,6 +29,20 @@ function worktreeDirFor(agentId) {
   return path.join(WT_ROOT, agentId);
 }
 
+/**
+ * Returns `agentId` unchanged when its worktree dir is free, or the id with a random suffix
+ * otherwise. Worktrees are never auto-removed, so a reused id (a custom name, or a short
+ * time-based one) would otherwise make `git worktree add` fail on the stale directory.
+ * @param {string} agentId
+ */
+function uniqueAgentId(agentId) {
+  let candidate = agentId;
+  while (fs.existsSync(worktreeDirFor(candidate))) {
+    candidate = `${agentId}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+  return candidate;
+}
+
 /** @param {string} task */
 function slugifyTask(task) {
   return (task || '')
@@ -184,12 +198,18 @@ function listWorktrees() {
       hasUncommittedChanges = hasRealChanges(await gitAsync(worktreeDir, ['status', '--porcelain']));
     } catch { /* keep the conservative default */ }
 
-    let hasUnpushedCommits = true; // same: an unresolvable base branch reads as "assume unpushed"
-    if (manifest && manifest.baseBranch) {
-      try {
-        const count = await gitAsync(worktreeDir, ['rev-list', `${manifest.baseBranch}..HEAD`, '--count']);
-        hasUnpushedCommits = Number(count) > 0;
-      } catch { /* keep the conservative default */ }
+    // Commits not on the branch's upstream; without an upstream, commits beyond the base branch.
+    let hasUnpushedCommits = true; // an unresolvable comparison reads as "assume unpushed"
+    try {
+      const count = await gitAsync(worktreeDir, ['rev-list', '@{upstream}..HEAD', '--count']);
+      hasUnpushedCommits = Number(count) > 0;
+    } catch {
+      if (manifest && manifest.baseBranch) {
+        try {
+          const count = await gitAsync(worktreeDir, ['rev-list', `${manifest.baseBranch}..HEAD`, '--count']);
+          hasUnpushedCommits = Number(count) > 0;
+        } catch { /* keep the conservative default */ }
+      }
     }
 
     return {
@@ -204,11 +224,13 @@ function listWorktrees() {
 }
 
 /**
- * Safely batch-prunes clean or delivered inactive worktrees.
+ * Safely batch-prunes clean inactive worktrees.
  * Strict invariants:
  * 1. Never removes a worktree if its agent is in runningAgentIds (running).
  * 2. Never removes a worktree if hasUncommittedChanges is true (dirty).
- * 3. Removes clean or delivered inactive worktrees via removeWorktree.
+ * 3. Never removes a worktree whose branch has unpushed commits (see listWorktrees) unless its
+ *    id is in deliveredIds.
+ * 4. Removes every other inactive worktree via removeWorktree.
  * @param {object} [opts]
  * @param {string[]|Set<string>} [opts.runningAgentIds]
  * @param {string[]|Set<string>} [opts.deliveredIds]
@@ -216,6 +238,7 @@ function listWorktrees() {
  */
 async function reapCleanWorktrees(opts = {}) {
   const runningSet = new Set(opts.runningAgentIds || []);
+  const deliveredSet = new Set(opts.deliveredIds || []);
   const all = await listWorktrees();
 
   const reaped = [];
@@ -228,6 +251,10 @@ async function reapCleanWorktrees(opts = {}) {
     }
     if (wt.hasUncommittedChanges) {
       skipped.push({ agentId: wt.agentId, reason: 'dirty' });
+      continue;
+    }
+    if (wt.hasUnpushedCommits && !deliveredSet.has(wt.agentId)) {
+      skipped.push({ agentId: wt.agentId, reason: 'unpushed' });
       continue;
     }
     try {
@@ -251,5 +278,7 @@ module.exports = {
   reapCleanWorktrees,
   listWorktrees,
   worktreeDirFor,
+  uniqueAgentId,
   readManifest,
+  WT_ROOT,
 };

@@ -14,6 +14,8 @@ const paths = require('./paths.js');
 const { agentEnv } = require('./pty-env.js');
 const worktree = require('./worktree.js');
 
+const MAX_PTY_LOG_BYTES = 5 * 1024 * 1024;
+
 /** Events Claude Code reports. `Status` is the status line, which is where tokens and cost come from. */
 const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
   'Notification', 'Stop', 'SubagentStop', 'PreCompact'];
@@ -207,15 +209,17 @@ function validateAndSanitizeParams({ engine, mode = 'write', model, effort }) {
  * @param {(code: number) => void} [o.onExit]
  * @param {(kind: string, detail: object) => void} [o.onNotice]  things the harness did on its own
  */
-function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, systemPrompt, worktree: useWorktree = true, onOutput, onExit, onNotice }) {
+function spawn({ id: requestedId, cwd, task, mode = 'write', bin = 'claude', model, effort, systemPrompt, worktree: useWorktree = true, onOutput, onExit, onNotice }) {
   // Required lazily so the rest of the app (and the smoke check) still runs if the native
   // module is missing — a broken node-pty should not mean a blank window.
   const pty = require('node-pty');
-  const dirs = paths.agent(id);
-  fs.mkdirSync(dirs.inbox, { recursive: true });
-
   const engine = engineFor(bin);
   const { normMode, normModel, normEffort } = validateAndSanitizeParams({ engine, mode, model, effort });
+  // Resolved before anything keys on the id, so harness dirs, worktree, branch and the returned
+  // handle all agree; callers must use the returned `id`.
+  const id = normMode === 'write' && useWorktree ? worktree.uniqueAgentId(requestedId) : requestedId;
+  const dirs = paths.agent(id);
+  fs.mkdirSync(dirs.inbox, { recursive: true });
 
   let effectiveCwd = cwd;
   let worktreeCwd = cwd;
@@ -293,22 +297,37 @@ function spawn({ id, cwd, task, mode = 'write', bin = 'claude', model, effort, s
     model: normModel, effort: normEffort, startedAt: new Date().toISOString(),
   }, null, 2));
 
-  const term = pty.spawn(resolveBin(bin), args, {
-    name: 'xterm-256color',
-    cols: 120,
-    rows: 30,
-    cwd: effectiveCwd,
-    env: agentEnv({ agentId: id, mode: normMode }),
-    useConpty: true,
-  });
+  let term;
+  try {
+    term = pty.spawn(resolveBin(bin), args, {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 30,
+      cwd: effectiveCwd,
+      env: agentEnv({ agentId: id, mode: normMode }),
+      useConpty: true,
+    });
+  } catch (err) {
+    // Nothing will ever run in a worktree made for a process that never started.
+    if (worktreeCwd !== cwd) {
+      try { worktree.removeWorktree(id); } catch { /* best effort; the spawn error matters more */ }
+    }
+    throw err;
+  }
 
   const log = fs.createWriteStream(dirs.ptyLog, { flags: 'a' });
+  let logBytes = 0;
+  try { logBytes = fs.statSync(dirs.ptyLog).size; } catch { /* new log */ }
 
   let answeredTrust = false;
   let head = '';
 
   term.onData((chunk) => {
-    log.write(chunk);
+    // Capped so a chatty or long-lived session cannot fill the disk; later output is dropped.
+    if (logBytes < MAX_PTY_LOG_BYTES) {
+      log.write(chunk);
+      logBytes += Buffer.byteLength(chunk);
+    }
 
     if (!answeredTrust) {
       // A bounded window: the prompt is the first thing on screen, and this must not grow into

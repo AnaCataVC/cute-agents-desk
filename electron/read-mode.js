@@ -22,9 +22,19 @@ const AGY_READONLY_TOOLS = /^(view_file|list_dir|grep_search|search_web|find|fin
 // An absent mode is `write`, matching agent.js's own default.
 const WRITING_MODES = /^(write|auto)$/;
 
-/** @param {string} [mode] @returns {boolean} */
+/**
+ * The canonical spelling of a mode: agent.js lowercases before it validates, so any check that
+ * compares raw strings must compare this form or "Write" slips past a gate that knows "write".
+ * @param {unknown} mode @returns {string | undefined}  undefined for an absent/blank mode
+ */
+function normalizeMode(mode) {
+  if (mode === undefined || mode === null) return undefined;
+  return String(mode).trim().toLowerCase() || undefined;
+}
+
+/** @param {unknown} [mode] @returns {boolean} */
 function isWritingMode(mode) {
-  return WRITING_MODES.test(String(mode || 'write'));
+  return WRITING_MODES.test(normalizeMode(mode) || 'write');
 }
 
 /**
@@ -34,10 +44,22 @@ function isWritingMode(mode) {
  * and a coordinator is the one agent that can hand work to a process the promise never covered.
  * Delegation therefore inherits the ceiling: a non-writing coordinator can only spawn non-writing
  * workers. Enforced at the one spawn path in `main.js`, never by trusting the request.
- * @param {string} [bossMode] @param {string} [taskMode] @returns {boolean}
+ * @param {unknown} [bossMode] @param {unknown} [taskMode] @returns {boolean}
  */
 function mayDelegate(bossMode, taskMode) {
   return isWritingMode(bossMode) || !isWritingMode(taskMode);
+}
+
+/**
+ * Why a coordinator's spawn-request must be refused, or null when it may proceed. `boss` is the
+ * coordinator's registry record; a missing one fails closed, since its mode cannot be checked.
+ * @param {{ mode?: unknown } | null | undefined} boss @param {unknown} [taskMode]
+ * @returns {string | null}
+ */
+function delegationRefusal(boss, taskMode) {
+  if (!boss) return 'coordinador desconocido: no se puede verificar su modo';
+  if (mayDelegate(boss.mode, taskMode)) return null;
+  return `el coordinador esta en modo ${normalizeMode(boss.mode)}: no puede delegar una tarea en modo ${normalizeMode(taskMode) || 'write'}`;
 }
 
 /** @param {object|null} payload @returns {boolean} */
@@ -49,4 +71,4 @@ function isDeniedInReadMode(payload) {
   return payload?.toolCall ? !AGY_READONLY_TOOLS.test(name) : CLAUDE_WRITE_TOOLS.test(name);
 }
 
-module.exports = { isDeniedInReadMode, isWritingMode, mayDelegate };
+module.exports = { isDeniedInReadMode, isWritingMode, mayDelegate, normalizeMode, delegationRefusal };

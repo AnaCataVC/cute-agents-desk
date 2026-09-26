@@ -13,7 +13,7 @@ const { execFileSync } = require('node:child_process');
 const paths = require('./paths.js');
 const { git } = require('./git.js');
 const { readAccountsConfig, listGhAccounts } = require('./accounts.js');
-const { worktreeDirFor, readManifest: readWorktreeManifest } = require('./worktree.js');
+const { worktreeDirFor, readManifest: readWorktreeManifest, WT_ROOT } = require('./worktree.js');
 
 /**
  * @returns {Array<Record<string, any>>}
@@ -163,19 +163,22 @@ async function deliverAgent(opts) {
     agentManifest = JSON.parse(fs.readFileSync(paths.agent(agentId).manifest, 'utf8'));
   } catch { /* agent.json may not exist if spawned without manifest */ }
 
-  const worktreeDir = agentManifest?.worktreeCwd || worktreeDirFor(agentId);
-  if (!fs.existsSync(worktreeDir)) {
-    return { ok: false, error: `El worktree para el agente "${agentId}" no existe en disco` };
+  // Only a harness-made worktree may be delivered: read/plan agents and coordinators run in the
+  // user's own checkout, where add -A + commit + push would land on their real branch.
+  const worktreeDir = path.resolve(worktreeDirFor(agentId));
+  const insideWtRoot = worktreeDir.toLowerCase().startsWith(path.resolve(WT_ROOT).toLowerCase() + path.sep);
+  const wtManifest = insideWtRoot ? readWorktreeManifest(agentId) : null;
+  if (!wtManifest || !fs.existsSync(worktreeDir)) {
+    return { ok: false, error: `El agente "${agentId}" no tiene un worktree aislado; solo se pueden entregar agentes de escritura con worktree` };
   }
 
-  const wtManifest = readWorktreeManifest(agentId);
-  const repoPath = wtManifest?.repoPath || agentManifest?.cwd;
+  const repoPath = wtManifest.repoPath;
   if (!repoPath) {
     return { ok: false, error: `No se pudo determinar el repositorio base para "${agentId}"` };
   }
 
-  const baseBranch = wtManifest?.baseBranch || 'main';
-  let branch = wtManifest?.branch;
+  const baseBranch = wtManifest.baseBranch || 'main';
+  let branch = wtManifest.branch;
   if (!branch) {
     try {
       branch = git(worktreeDir, ['rev-parse', '--abbrev-ref', 'HEAD']);
