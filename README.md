@@ -154,10 +154,6 @@ puerto ni token que cuidar. Las tipografías están en `ui/fonts/`: no se pide n
 | `scheduled-tasks-view.js` | Pestaña «Tareas programadas»: lo que Claude Desktop y Antigravity tienen agendado, con inspección interactiva de logs |
 | `config.js`, `dialogs.js`, `chat.js` | Pestaña «Configuración» e inspectores modales (`SKILL.md`, logs de cron, apertura en Explorer) y panel Ficha/Hilo/Diff |
 
-### Vitrina Web (`website/`)
-
-El proyecto incluye una landing page independiente en `website/index.html` con estética Pastel-Tech y una demostración interactiva de los autómatas y estados de los agentes en SVG puro.
-
 Dos convenciones que conviene respetar al editar:
 
 - **Ningún color literal en JavaScript.** Todo color sale de una propiedad personalizada de CSS. Si

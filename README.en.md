@@ -154,10 +154,6 @@ to guard either. Fonts live in `ui/fonts/`: nothing is fetched over the network.
 | `scheduled-tasks-view.js` | "Scheduled Tasks" tab: what Claude Desktop and Antigravity have scheduled, with interactive log inspector |
 | `config.js`, `dialogs.js`, `chat.js` | "Settings" tab, modal inspectors (`SKILL.md`, cron logs, Explorer reveal), and agent Card/Thread/Diff panel |
 
-### Web Showcase (`website/`)
-
-The repository includes a standalone landing page in `website/index.html` featuring the Pastel-Tech design language and an interactive SVG automata simulation of agent state machines.
-
 Two conventions worth respecting when editing:
 
 - **No literal colors in JavaScript.** Every color comes from a CSS custom property. A new value
