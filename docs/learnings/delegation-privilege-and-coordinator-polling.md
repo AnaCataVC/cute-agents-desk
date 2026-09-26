@@ -68,8 +68,8 @@ status when a notice arrives or before making a decision, not while waiting.
 
 ## 4. Verification
 
-`tools/verify-delegation-privilege.js` (registered in `tools/verify-all.js`, suite now
-**29/29 verify scripts OK**) covers the full `mayDelegate` truth table including the absent-mode
+`tools/verify-delegation-privilege.js` (registered in `tools/verify-all.js`, where
+**all verify scripts in `npm test` pass**) covers the full `mayDelegate` truth table including the absent-mode
 case, plus the `isWritingMode` classification of all four modes.
 
 Because `spawnWorker` lives in Electron's main process and is out of reach of a plain-node test,

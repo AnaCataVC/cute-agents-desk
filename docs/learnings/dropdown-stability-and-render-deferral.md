@@ -84,4 +84,4 @@ A dedicated hermetic test suite was added in `tools/verify-dropdown-stability.js
 - Confirms that `focusout` cleanly flushes deferred repaints.
 - Confirms that `modalOpen` suppresses periodic ticks.
 
-The test runs in ~140ms and is integrated into `tools/verify-all.js`, preserving the **100% test pass rate (30/30 verify scripts OK)**.
+The test runs in ~140ms and is integrated into `tools/verify-all.js`, preserving the **100% test pass rate — all verify scripts in `npm test` pass**.

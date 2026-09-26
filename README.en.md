@@ -83,11 +83,11 @@ isolation, read-only mode, the full `agy` engine), and pure `node:assert` unit t
 state-machine logic (token cap, scheduler, conversations, mailbox draining).
 
 ```bash
-npm test        # runs the 32 fast scripts that need no real CLI and no window, in one shot
+npm test        # runs the 33 fast scripts that need no real CLI and no window, in one shot
 npm run smoke   # the whole window, no agents: 6 tabs, 0 errors
 ```
 
-`npm test` (`tools/verify-all.js`) runs the 32 `verify-*.js` scripts MEASURED to finish in
+`npm test` (`tools/verify-all.js`) runs the 33 `verify-*.js` scripts MEASURED to finish in
 seconds under plain `node`. The rest need a real CLI turn, an Electron window, or packaged
 binary verification (`verify-dist-binary.js` after `npm run dist`). Those stay manual, run one at a time:
 

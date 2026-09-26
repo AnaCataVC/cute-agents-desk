@@ -72,4 +72,4 @@ The architectural solution was twofold:
 
 1. **Avoid the Pseudo-IDE Trap:** Desktop tools for AI agent supervision should not attempt to replicate full IDE functionality. Providing a clean, instant bridge to the user's primary IDE preserves simplicity, agility, and performance.
 2. **Terminology Drives Expectations:** Naming an inspection view "Editor" confuses users who expect interactive cursor editing. Renaming it to "Visualizador" accurately communicates its purpose as a diff approval customhouse.
-3. **Hermetic Testing Invariant:** All 28 automated tests continue to pass in under 3 seconds on plain Node.js (`28/28 verify scripts OK`) without requiring live Electron windows or external network access.
+3. **Hermetic Testing Invariant:** All automated tests continue to pass in under 3 seconds on plain Node.js (every verify script in `npm test` passes) without requiring live Electron windows or external network access.

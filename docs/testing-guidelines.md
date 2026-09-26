@@ -20,7 +20,7 @@ The testing framework is split into two primary tiers:
 
 ## 2. Test Inventory
 
-### Fast Tier (`npm test` / `tools/verify-all.js` - 30 Scripts)
+### Fast Tier (`npm test` / `tools/verify-all.js`)
 | Script | Scope & Verification Target |
 | :--- | :--- |
 | `verify-pure-units.js` | Pure unit tests: `toolNameOf`, `frontmatter.js` (UTF-8 BOM handling, DoS safety bounds) and JSON mailboxes (`json-queue.js`). |
@@ -53,8 +53,18 @@ The testing framework is split into two primary tiers:
 | `verify-syntax-highlight.js` | Lightweight diff tokenization, language auto-detection, XSS prevention, and high-volume performance. |
 | `verify-dropdown-stability.js` | Dropdown interaction detection, UI render deferral, and flush lifecycle. |
 | `verify-multi-repo-workspace.js` | Multi-repo parent workspace opt-in detection, coordinator prompt injection, and conversation persistence. |
+| `verify-repo-mismatch-fix.js` | Repo/account email mismatch detection and the `fixMismatch`/`ignoreMismatch` flow. |
+| `verify-ui-escaping.js` | Static scan of `ui/*.js` template literals for `${...}` interpolations not wrapped in `esc(...)`. |
+
+The exact script list lives in `FAST` in `tools/verify-all.js` — read it there instead of trusting a count here, which goes stale the moment a script is added.
 
 ### Isolation & Packaged Binary Tier (`MANUAL`)
+These are deliberately excluded from `npm test` (the `FAST` array) because each either spawns a real
+`claude`/`agy` CLI turn (live API cost), needs a graphical `BrowserWindow` that never resolves
+`app.whenReady()` in a headless shell, or validates a compiled `dist/` binary that only exists after
+`npm run dist`. None of that is "slow" by accident — it's what the FAST tier's 100%-hermetic rule
+exists to keep out of `npm test`.
+
 | Script | Execution Command | When to Run |
 | :--- | :--- | :--- |
 | `verify-dist-binary.js` | `node tools/verify-dist-binary.js` | Run after `npm run dist` to verify that the packaged desktop binary in `dist/win-unpacked/` launches cleanly. |
@@ -132,4 +142,4 @@ Before submitting or committing changes, execute:
 ```powershell
 npm test
 ```
-The test suite must report `30/30 verify scripts OK` (or higher) with zero failures.
+All verify scripts in `npm test` must pass, with zero failures.

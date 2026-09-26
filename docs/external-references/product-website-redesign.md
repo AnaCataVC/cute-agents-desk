@@ -59,7 +59,7 @@ The website must integrate a dedicated, unmistakable warning banner and status i
    * Visual style: Translucent glass card with an amber/purple gradient border and soft warning glow.
    * Message points:
      * **Estado Actual:** Cute Agents Desk es un prototipo funcional y banco de pruebas de arquitectura local en desarrollo activo.
-     * **Sin instaladores empaquetados:** Actualmente no se distribuyen binarios ejecutables cerrados; la aplicación se corre directamente desde el código fuente sobre Windows 10/11.
+     * **Sin binarios publicados:** `npm run dist` puede compilar un instalador NSIS de Windows (ver `package.json`), pero el repositorio no publica ni distribuye ninguno; hoy la aplicación se corre desde el código fuente sobre Windows 10/11.
      * **Evolución Continua:** Las interfaces IPC, protocolos de hooks (`claude` / `agy`), y el formato del buzón de coordinación están sujetos a iteración y cambios frecuentes.
      * **Canal de retroalimentación:** Invitación a reportar problemas, ideas y contribuciones en el repositorio de GitHub.
 

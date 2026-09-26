@@ -84,11 +84,11 @@ puras de `node:assert` para lógica de máquina de estados (tope de tokens, sche
 conversaciones, el drenado del buzón).
 
 ```bash
-npm test        # corre de un tiro los 32 que son rápidos y no necesitan un CLI real ni ventana
+npm test        # corre de un tiro los 33 que son rápidos y no necesitan un CLI real ni ventana
 npm run smoke   # la ventana entera, sin agentes: 6 pestañas, 0 errores
 ```
 
-`npm test` (`tools/verify-all.js`) corre los 32 `verify-*.js` que MEDIDO tardan segundos bajo
+`npm test` (`tools/verify-all.js`) corre los 33 `verify-*.js` que MEDIDO tardan segundos bajo
 `node` puro. Los que quedan afuera necesitan un turno real de CLI, una ventana de Electron o validación
 del binario empaquetado (`verify-dist-binary.js` tras `npm run dist`). Esos se corren aparte, uno a la vez:
 
