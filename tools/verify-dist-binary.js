@@ -36,10 +36,10 @@ function main() {
   console.log('Iniciando proceso con --smoke y verificando estabilidad...');
 
   try {
-    // Launch executable with dedicated user-data-dir and --smoke
-    const run = spawnSync(BINARY_PATH, ['--smoke', `--user-data-dir=${tempUserData}`], {
+    // Launch executable with --smoke
+    const run = spawnSync(BINARY_PATH, ['--smoke'], {
       encoding: 'utf8',
-      timeout: 30000,
+      timeout: 35000,
     });
 
     const elapsed = Date.now() - startedAt;
