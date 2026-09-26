@@ -3,13 +3,16 @@
  * Verification test for interactive configuration editing, modal dialogs, and metadata bounds.
  *
  * Validates:
- * 1. settingsRow markup renders interactive edit buttons with data-act="editConfigValue" for non-boolean values.
- * 2. settingsRow markup renders toggle-tracks with data-act="toggleConfig" for booleans.
- * 3. Dialog schema generation, modal wiring, and button state in dialogs.js.
+ * 1. settingsRow (ui/config.js) renders an editable value-pill for non-booleans and a toggle
+ *    for booleans, and a plain non-interactive pill when there is no section/key to write to.
+ * 2. mismatchPanel and scanSummaryCard (ui/config.js) wire fixMismatch/ignoreMismatch/rescanRepos
+ *    from real rendered output, not a guess at the template's shape.
+ * 3. editConfigDialog (ui/dialogs.js) disables its controls and shows a saving state while a
+ *    save is in flight, and offers to save when idle.
  * 4. CONFIG_META and getConfigRawValue exports and completeness across all non-boolean settings.
  * 5. Bounds and typing invariants between CONFIG_META and electron/config.js.
  * 6. Defensive zero-crash fallback for unregistered keys.
- * 7. Asset and icon integrity.
+ * 7. Asset, CSS and dispatch-table wiring that has no pure-function equivalent to call instead.
  *
  * Run with: node tools/verify-config-ui.js
  */
@@ -19,26 +22,70 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 async function main() {
-  // 1. Inspect config.js content directly to ensure settingsRow generates the edit action
-  const configJs = fs.readFileSync(path.join(__dirname, '..', 'ui', 'config.js'), 'utf8');
-  assert.ok(configJs.includes('data-act="editConfigValue"'), 'settingsRow must render data-act="editConfigValue" for non-booleans');
-  assert.ok(configJs.includes('data-act="toggleConfig"'), 'settingsRow must render data-act="toggleConfig" for booleans');
-  assert.ok(configJs.includes('data-act="rescanRepos"'), 'scanSummaryCard must render data-act="rescanRepos"');
-  assert.ok(configJs.includes('data-act="fixMismatch"'), 'mismatchPanel must render data-act="fixMismatch"');
-  assert.ok(configJs.includes('data-act="ignoreMismatch"'), 'mismatchPanel must render data-act="ignoreMismatch"');
+  // @ts-ignore
+  global.document = {
+    getElementById: () => ({ addEventListener: () => {} }),
+    addEventListener: () => {},
+  };
+  // @ts-ignore
+  global.window = { desk: {} };
 
-  // 2. Inspect dialogs.js content to ensure editConfigDialog is present and wired in renderDialogs
-  const dialogsJs = fs.readFileSync(path.join(__dirname, '..', 'ui', 'dialogs.js'), 'utf8');
-  assert.ok(dialogsJs.includes('function editConfigDialog'), 'dialogs.js must define editConfigDialog');
-  assert.ok(dialogsJs.includes('state.editConfig'), 'dialogs.js must check state.editConfig in renderDialogs');
-  assert.ok(dialogsJs.includes('data-act="submitEditConfig"'), 'dialogs.js must support submitEditConfig');
-  assert.ok(dialogsJs.includes('data-act="browseEditConfigPath"'), 'dialogs.js must support browseEditConfigPath');
-  assert.ok(dialogsJs.includes('cfg.saving'), 'dialogs.js must support saving state to prevent double submit');
+  const appModule = await import('../ui/app.js');
+  const dataModule = await import('../ui/data.js');
+  const configModule = await import('../ui/config.js');
+  const dialogsModule = await import('../ui/dialogs.js');
 
-  // 3. Inspect app.js content to ensure actions and toast are properly defined and wired
+  const { CONFIG_META, getConfigRawValue } = appModule;
+  const { settingsRow, mismatchPanel, scanSummaryCard } = configModule;
+  const { editConfigDialog } = dialogsModule;
+
+  // 1. settingsRow renders the control that matches the value's shape and writability.
+  const boolRow = settingsRow(['Preguntar antes de abrir sesiones', true, 'coordinators', 'askBeforeSpawning']);
+  assert.ok(boolRow.includes('data-act="toggleConfig"'), 'a boolean row must render the toggle control');
+  assert.ok(boolRow.includes('data-arg="coordinators|askBeforeSpawning"'), 'the toggle must carry section|key as its arg');
+
+  const editableRow = settingsRow(['Sesiones que puede abrir', 3, 'coordinators', 'maxSessionsPerCoordinator']);
+  assert.ok(editableRow.includes('data-act="editConfigValue"'), 'a non-boolean row with section/key must render the edit control');
+  assert.ok(editableRow.includes('data-arg="coordinators|maxSessionsPerCoordinator"'), 'the edit control must carry section|key as its arg');
+
+  const readonlyRow = settingsRow(['Repos', 5, '', '']);
+  assert.ok(!readonlyRow.includes('data-act='), 'a row with no section/key must render a plain, non-interactive pill');
+
+  // 2. mismatchPanel and scanSummaryCard, exercised with real sample data instead of grepped source.
+  const mismatchHtml = mismatchPanel([{
+    repo: 'cute-agents-desk',
+    path: 'C:/repos/cute-agents-desk',
+    detail: 'C:/repos/cute-agents-desk -> otra@cuenta.com',
+    fix: 'AnaCataVC',
+    accountName: 'AnaCataVC',
+    targetEmail: 'anacatalina@outlook.cl',
+  }], { fixingRepo: null });
+  assert.ok(mismatchHtml.includes('data-act="fixMismatch"'), 'a detected mismatch must render fixMismatch');
+  assert.ok(mismatchHtml.includes('data-act="ignoreMismatch"'), 'a detected mismatch must render ignoreMismatch');
+  assert.ok(mismatchPanel([], {}).includes('Sin desajustes detectados'), 'an empty mismatch list must render the clean-state panel');
+
+  const scanHtml = scanSummaryCard(dataModule, { rescanning: false });
+  assert.ok(scanHtml.includes('data-act="rescanRepos"'), 'scanSummaryCard must render rescanRepos');
+  assert.ok(scanSummaryCard(dataModule, { rescanning: true }).includes('disabled'), 'scanSummaryCard must disable the button while a scan is in flight');
+
+  // 3. editConfigDialog: real behaviour while saving vs. idle, not a text search for the word "saving".
+  const cfgBase = {
+    section: 'advanced', key: 'harnessDir', label: 'Directorio del harness',
+    currentValue: '~/x', type: 'text', isPath: true, error: null,
+  };
+  const savingDialog = editConfigDialog({ editConfig: { ...cfgBase, saving: true } }, {});
+  assert.ok(savingDialog.includes('data-act="submitEditConfig"'), 'editConfigDialog must wire submitEditConfig');
+  assert.ok(savingDialog.includes('data-act="browseEditConfigPath"'), 'a path field must wire browseEditConfigPath');
+  assert.ok(savingDialog.includes('Guardando'), 'a dialog mid-save must show the saving label');
+  assert.ok(savingDialog.includes('data-act="closeEditConfig" disabled'), 'the cancel/close controls must be disabled while saving');
+
+  const idleDialog = editConfigDialog({ editConfig: { ...cfgBase, saving: false } }, {});
+  assert.ok(idleDialog.includes('Guardar cambios'), 'an idle dialog must offer to save');
+  assert.ok(!idleDialog.includes('disabled'), 'an idle dialog must not disable its controls');
+
+  // 4. Source checks limited to what has no pure-function equivalent: the ACTIONS dispatch table
+  //    (an inline object literal, never exported) and static asset/CSS integrity.
   const appJs = fs.readFileSync(path.join(__dirname, '..', 'ui', 'app.js'), 'utf8');
-  assert.ok(appJs.includes('export const CONFIG_META ='), 'app.js must export CONFIG_META');
-  assert.ok(appJs.includes('export function getConfigRawValue('), 'app.js must export getConfigRawValue');
   assert.ok(appJs.includes('editConfigValue:'), 'app.js must handle editConfigValue');
   assert.ok(appJs.includes('submitEditConfig:'), 'app.js must handle submitEditConfig');
   assert.ok(appJs.includes('closeEditConfig:'), 'app.js must handle closeEditConfig');
@@ -50,7 +97,6 @@ async function main() {
   assert.ok(appJs.includes('${toastContainer()}'), 'app.js must render toastContainer');
   assert.ok(appJs.includes('assets/icon.png'), 'app.js loading screen must use official app icon');
 
-  // 4. Inspect index.html and package.json for asset and icon integrity
   const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(indexHtml.includes('assets/icon.png'), 'index.html loading markup must use official app icon');
 
@@ -60,25 +106,12 @@ async function main() {
     'package.json must bundle assets/** to include app icons in distributions'
   );
 
-  // 5. Inspect app.css for toast and value-pill interactive styling
   const appCss = fs.readFileSync(path.join(__dirname, '..', 'ui', 'app.css'), 'utf8');
   assert.ok(appCss.includes('.toast-container'), 'app.css must define .toast-container');
   assert.ok(appCss.includes('.toast-msg'), 'app.css must define .toast-msg');
   assert.ok(appCss.includes('.value-pill[data-act="editConfigValue"]'), 'app.css must style editable value-pill');
 
-  // 6. Dynamic schema validation & functional test of CONFIG_META and getConfigRawValue
-  // @ts-ignore
-  global.document = {
-    getElementById: () => ({ addEventListener: () => {} }),
-    addEventListener: () => {},
-  };
-  // @ts-ignore
-  global.window = { desk: {} };
-
-  const appModule = await import('../ui/app.js');
-  const dataModule = await import('../ui/data.js');
-
-  const { CONFIG_META, getConfigRawValue } = appModule;
+  // 5. Dynamic schema validation & functional test of CONFIG_META and getConfigRawValue
   assert.ok(CONFIG_META && typeof CONFIG_META === 'object', 'CONFIG_META must be exported as an object');
   assert.ok(typeof getConfigRawValue === 'function', 'getConfigRawValue must be exported as a function');
 
@@ -111,7 +144,7 @@ async function main() {
     }
   }
 
-  // 7. Defensive zero-crash fallback test for unregistered keys
+  // 6. Defensive zero-crash fallback test for unregistered keys
   const fallbackMeta = (CONFIG_META && CONFIG_META['unknownSection.unknownKey']) || {};
   assert.strictEqual(fallbackMeta.label, undefined, 'Unregistered key should safely produce empty object');
   const fallbackVal = getConfigRawValue('unknownSection', 'unknownKey');

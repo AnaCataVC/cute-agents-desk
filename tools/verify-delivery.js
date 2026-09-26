@@ -81,6 +81,11 @@ function cleanup() {
   fs.writeFileSync(path.join(wtDir, 'src_routes.js'), 'export function route() { return 42; }\n');
   assert.strictEqual(git(wtDir, ['status', '--porcelain']).trim().length > 0, true, 'el worktree debe tener cambios');
 
+  // An agent without a harness worktree (read/plan, coordinator) must be refused, never delivered
+  // from the user's own checkout.
+  const refused = await delivery.deliverAgent({ agentId: `${AGENT_ID}-sin-worktree` });
+  assert.strictEqual(refused.ok, false, 'un agente sin worktree no debe poder entregarse');
+
   // Execute delivery
   const res = await delivery.deliverAgent({ agentId: AGENT_ID });
   assert.strictEqual(res.ok, true, `deliverAgent fallo: ${res.error}`);

@@ -140,7 +140,7 @@ function unified(file) {
   return file.rows.map((r) => {
     const sign = r.kind === 'add' ? '+' : r.kind === 'del' ? '−' : ' ';
     const text = r.kind === 'del' ? r.ltext : r.rtext || r.ltext;
-    return `<div class="diff-row mono" data-kind="${r.kind === 'ctx' ? 'ctx' : r.kind}">
+    return `<div class="diff-row mono" data-kind="${r.kind === 'ctx' ? 'ctx' : esc(r.kind)}">
       <span class="ln">${r.kind === 'add' ? r.rno : r.lno}</span>
       <span class="lt">${sign} ${highlightLine(text, file.path)}</span></div>`;
   }).join('');

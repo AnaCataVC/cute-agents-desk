@@ -155,13 +155,13 @@ function filterBlock(state, data, visibleCount) {
 
   const accChips = [{ id: 'all', label: 'todas' }, ...data.getAccounts().map((a) => ({ id: a.id, label: a.name }))]
     .map((f) => `<button class="chip" aria-pressed="${state.accFilter === f.id}"
-      data-act="accFilter" data-arg="${f.id}">${f.label}</button>`).join('');
+      data-act="accFilter" data-arg="${esc(f.id)}">${esc(f.label)}</button>`).join('');
 
   const stChips = [
     { id: 'any', label: 'cualquiera' }, { id: 'dirty', label: 'árbol sucio' },
     { id: 'agent', label: 'con agente' }, { id: 'clean', label: 'limpio' },
   ].map((f) => `<button class="chip" aria-pressed="${state.stFilter === f.id}"
-      data-act="stFilter" data-arg="${f.id}">${f.label}</button>`).join('');
+      data-act="stFilter" data-arg="${esc(f.id)}">${esc(f.label)}</button>`).join('');
 
   const label = 'font:600 9.5px var(--font-body);color:var(--color-dark-text-3);'
     + 'letter-spacing:.07em;text-transform:uppercase;margin:12px 0 6px';
@@ -208,10 +208,10 @@ export function renderRepoTree(state, data) {
     const open = !!state.open[acc.id];
 
     rows.push(`
-    <div data-act="toggleNode" data-arg="${acc.id}" title="${esc(acc.email)}"
+    <div data-act="toggleNode" data-arg="${esc(acc.id)}" title="${esc(acc.email)}"
       style="display:flex;align-items:center;gap:7px;padding:7px 9px;cursor:pointer;
              background:var(--app-surface-tree);border-radius:var(--radius-sm);
-             border-left:3px solid ${acc.color};margin-top:5px">
+             border-left:3px solid ${esc(acc.color)};margin-top:5px">
       <span style="font:400 9px var(--font-body);color:var(--color-dark-text-3);width:9px">${open ? '▾' : '▸'}</span>
       <span class="mono" style="font-size:11px;font-weight:600;flex:1;min-width:0;overflow:hidden;
             text-overflow:ellipsis;white-space:nowrap">${esc(acc.name)}</span>

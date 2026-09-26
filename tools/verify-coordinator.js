@@ -34,7 +34,9 @@ async function checkWatchSpawnRequests() {
 
   /** @type {object[]} */
   const seen = [];
-  const watcher = watchSpawnRequests(conversation.id, (req) => seen.push(req));
+  /** @type {string[]} */
+  const rejections = [];
+  const watcher = watchSpawnRequests(conversation.id, (req) => seen.push(req), (reason) => rejections.push(reason));
 
   assert.ok(fs.existsSync(requestsDir), 'deberia crear la carpeta de spawn-requests si no existia');
 
@@ -51,6 +53,18 @@ async function checkWatchSpawnRequests() {
   assert.strictEqual(seen.length, 1, 'deberia haber drenado exactamente un pedido');
   assert.deepStrictEqual(seen[0], written, 'el pedido entregado debe tener la forma exacta escrita');
   assert.ok(!fs.existsSync(requestFile), 'el archivo de pedido debe borrarse una vez actuado');
+
+  // Valid JSON without the required fields is malformed, not half-written: rejected once, not retried.
+  const malformedFile = path.join(requestsDir, 'req-2.json');
+  fs.writeFileSync(malformedFile, JSON.stringify({ objective: 'sin cwd' }));
+  const rejectDeadline = Date.now() + 3000;
+  while (rejections.length === 0 && Date.now() < rejectDeadline) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.strictEqual(rejections.length, 1, 'un pedido sin cwd debe rechazarse y avisarse');
+  assert.strictEqual(seen.length, 1, 'un pedido rechazado no llega al handler');
+  assert.ok(!fs.existsSync(malformedFile), 'el pedido rechazado sale de la cola');
+  assert.ok(fs.existsSync(path.join(requestsDir, 'rejected', 'req-2.json')), 'el pedido rechazado queda en rejected/');
 
   watcher.close();
   fs.rmSync(dir, { recursive: true, force: true });
@@ -202,6 +216,15 @@ function checkSpawnCoordinatorParameters() {
   assert.strictEqual(capturedOpts.effort, 'low');
   assert.strictEqual(capturedOpts.mode, 'plan');
   assert.strictEqual(capturedOpts.worktree, false, 'nunca crea worktree en la carpeta de conversacion');
+
+  // Standing in a real repo, the coordinator must not run write mode on the root checkout.
+  const repoCwd = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cute-coord-cwd-'));
+  spawnCoordinator({ conversationId: 'c000test', conversation, repos, spawn: fakeSpawn, mode: 'write', cwd: repoCwd });
+  assert.strictEqual(capturedOpts.cwd, repoCwd);
+  assert.strictEqual(capturedOpts.mode, 'plan', 'en un repo el coordinador corre en modo plan');
+  spawnCoordinator({ conversationId: 'c000test', conversation, repos, spawn: fakeSpawn, mode: 'write' });
+  assert.strictEqual(capturedOpts.mode, 'write', 'en su carpeta de conversacion conserva el modo pedido');
+  fs.rmSync(repoCwd, { recursive: true, force: true });
 
   console.log('spawnCoordinator parameters OK: propaga bin, model, effort y mode');
 }

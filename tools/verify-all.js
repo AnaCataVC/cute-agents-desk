@@ -49,6 +49,7 @@ const FAST = [
   'verify-dropdown-stability.js',
   'verify-repo-mismatch-fix.js',
   'verify-multi-repo-workspace.js',
+  'verify-ui-escaping.js',
 ];
 
 const MANUAL = [

@@ -5,7 +5,8 @@
  * 2. Conversations persistence: multiRepoWorkspace flag is saved and reloaded.
  * 3. Coordinator prompt generation:
  *    - With multiRepoWorkspace = false, umbrella prompt is NOT included.
- *    - With multiRepoWorkspace = true, umbrella prompt identifies sub-repositories and delegation directives.
+ *    - With multiRepoWorkspace = true, umbrella prompt lists only the sub-repositories that are
+ *      registered repos (the only ones the spawn guard accepts) plus delegation directives.
  *
  * Run with: node tools/verify-multi-repo-workspace.js
  */
@@ -69,11 +70,21 @@ try {
   assert.strictEqual(reloadedMulti.multiRepoWorkspace, true, 'persisted conversation must keep multiRepoWorkspace = true');
 
   // Verify coordinator prompt with multiRepoWorkspace = true
-  const promptMulti = coordinator.buildCoordinatorPrompt(multiConv, [], { effectiveCwd: umbrellaDir });
+  const registered = [subRepoA, subRepoB].map((p) => ({ name: path.basename(p), accountGh: 'test', branch: 'main', path: p }));
+  const promptMulti = coordinator.buildCoordinatorPrompt(multiConv, registered, { effectiveCwd: umbrellaDir });
   assert.ok(promptMulti.includes('MODO WORKSPACE MULTI-REPO ACTIVADO:'), 'Prompt must include umbrella workspace header when enabled');
   assert.ok(promptMulti.includes('service-auth'), 'Prompt must list detected sub-repo service-auth');
   assert.ok(promptMulti.includes('service-payments'), 'Prompt must list detected sub-repo service-payments');
   assert.ok(promptMulti.includes('especifica el sub-repo correspondiente en el campo "cwd"'), 'Prompt must instruct coordinator to target child repos for write tasks');
+
+  // An unregistered sub-repo would be refused by the spawn guard, so it must not be listed.
+  const promptPartial = coordinator.buildCoordinatorPrompt(multiConv, [registered[0]], { effectiveCwd: umbrellaDir });
+  assert.ok(promptPartial.includes('Sub-repo: "service-auth"'), 'Registered sub-repo must be listed');
+  assert.ok(!promptPartial.includes('Sub-repo: "service-payments"'), 'Unregistered sub-repo must not be listed');
+
+  const promptNone = coordinator.buildCoordinatorPrompt(multiConv, [], { effectiveCwd: umbrellaDir });
+  assert.ok(!promptNone.includes('Sub-repo: '), 'No sub-repo is listed when none is registered');
+  assert.ok(promptNone.includes('Ningun sub-repositorio de esta carpeta esta registrado'), 'Prompt must say no sub-repo is usable');
 
   console.log('verify-multi-repo-workspace: all assertions passed OK');
 } finally {

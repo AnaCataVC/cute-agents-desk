@@ -1,6 +1,8 @@
 // @ts-check
 /** The token meter: an SVG arc, no library. Used on the agent card and the compact coordinator. */
 
+import { esc } from './esc.js';
+
 /**
  * @param {object} o
  * @param {number} o.used
@@ -19,7 +21,7 @@ export function ring({ used, cap, color, size = 56, stroke = 4 }) {
     <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
       style="stroke:var(--state-idle)" stroke-width="${stroke}"></circle>
     <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
-      style="stroke:${color}" stroke-width="${stroke}" stroke-linecap="round"
+      style="stroke:${esc(color)}" stroke-width="${stroke}" stroke-linecap="round"
       stroke-dasharray="${(c * pct).toFixed(2)} ${c.toFixed(2)}"></circle>
   </svg>`;
 }
@@ -51,7 +53,7 @@ export function ringByState({ agents, states, size = 66, stroke = 5 }) {
   const arcs = agents.map((a) => {
     const len = c / total;
     const seg = `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
-      style="stroke:${(states[a.state] || states.idle).color}" stroke-width="${stroke}"
+      style="stroke:${esc((states[a.state] || states.idle).color)}" stroke-width="${stroke}"
       stroke-dasharray="${(len - 1.5).toFixed(2)} ${(c - len + 1.5).toFixed(2)}"
       stroke-dashoffset="${(-offset).toFixed(2)}"></circle>`;
     offset += len;

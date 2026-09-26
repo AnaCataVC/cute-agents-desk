@@ -46,7 +46,7 @@ function hourlyChart(series, usage) {
     const claudeH = h * claudeShare;
     const seg = (height, color) => `<div style="height:${height.toFixed(1)}%;background:${color}"></div>`;
     return `
-    <div title="${future ? 'sin datos aún' : `${v}k tokens`}"
+    <div title="${future ? 'sin datos aún' : `${esc(v)}k tokens`}"
       style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;height:100%">
       ${future
     ? seg(h, 'var(--state-idle)')
@@ -161,12 +161,12 @@ function budgetRow(b) {
   return `
   <div>
     <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-      <span style="font:500 11px var(--font-body);color:${b.color}">${esc(b.engine)}</span>
+      <span style="font:500 11px var(--font-body);color:${esc(b.color)}">${esc(b.engine)}</span>
       <span class="mono" style="margin-left:auto;font-size:10.5px;color:var(--color-dark-text-2)">
         ${pct}% de ${esc(b.cap)}</span>
     </div>
     <div style="height:7px;border-radius:var(--radius-full);background:var(--color-dark-bg);overflow:hidden">
-      <div style="width:${pct}%;height:100%;background:${b.color}"></div>
+      <div style="width:${pct}%;height:100%;background:${esc(b.color)}"></div>
     </div>
   </div>`;
 }

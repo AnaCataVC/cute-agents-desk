@@ -48,7 +48,10 @@ function actionRow(agent, isDelivered = false) {
   // A live agent is a real process: what you need is its screen and a way to end it.
   if (agent.live) {
     const ended = agent.state === 'done' || agent.state === 'failed';
-    const deliverButton = agent.state === 'done'
+    // Only write agents own a worktree; delivery.js refuses the rest, this just hides the button.
+    const hasWorktree = agent.mode !== 'read' && agent.mode !== 'plan'
+      && !(agent.worktreeCwd && agent.worktreeCwd === agent.cwd);
+    const deliverButton = agent.state === 'done' && hasWorktree
       ? (isDelivered
         ? '<span style="font:600 11px var(--font-body);color:var(--color-emerald-400);margin-left:4px">✓ Entregado</span>'
         : `<button class="btn-primary" data-act="deliverAgent" data-arg="${esc(agent.id)}"
@@ -108,7 +111,7 @@ function card(agent, account, states, isDelivered = false) {
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding-bottom:6px;
              border-bottom:1px solid var(--color-dark-border)">
-          <span class="mono" style="font-size:10px;font-weight:600;color:${account.color}">${esc(account.name)}</span>
+          <span class="mono" style="font-size:10px;font-weight:600;color:${esc(account.color)}">${esc(account.name)}</span>
           <span class="mono" style="font-size:10px;color:var(--color-dark-text-3);overflow:hidden;
                 text-overflow:ellipsis;white-space:nowrap">${esc(account.email)}</span>
         </div>

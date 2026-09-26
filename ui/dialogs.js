@@ -123,9 +123,9 @@ function queueDialog(state, data) {
       </div>`, modeHint)}
       ${account ? `
       <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;background:var(--color-dark-bg);
-           border-left:3px solid ${account.color};border-radius:var(--radius-sm)">
+           border-left:3px solid ${esc(account.color)};border-radius:var(--radius-sm)">
         <span style="font:400 10.5px var(--font-body);color:var(--color-dark-text-3)">firmará</span>
-        <span class="mono" style="font-size:11px;font-weight:600;color:${account.color}">${esc(account.name)}</span>
+        <span class="mono" style="font-size:11px;font-weight:600;color:${esc(account.color)}">${esc(account.name)}</span>
         <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(account.email)}</span>
       </div>` : ''}
     </div>
@@ -155,7 +155,7 @@ function scanDialog(state, data) {
       <div class="font-display" style="font:600 14px var(--font-display)">Añadir carpeta</div>
       <div style="font:400 11px var(--font-body);color:var(--color-dark-text-3);margin-top:3px">
         Todo repo bajo esta carpeta heredará
-        <span class="mono" style="color:${account.color}">${esc(account.name)}</span>.
+        <span class="mono" style="color:${esc(account.color)}">${esc(account.name)}</span>.
       </div>
     </div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
@@ -301,7 +301,7 @@ function taskLogDialog(state, _data) {
  * @param {any} _data
  * @returns {string}
  */
-function editConfigDialog(state, _data) {
+export function editConfigDialog(state, _data) {
   const cfg = state.editConfig;
   if (!cfg) return '';
 

@@ -14,7 +14,7 @@ const SWATCHES = ['var(--color-mint)', 'var(--color-lilac)', 'var(--color-blue)'
   'var(--color-pink)', 'var(--state-approval)'];
 
 /** A settings row: label on the left, an editable mono value pill or a toggle on the right. */
-function settingsRow([label, value, section, key]) {
+export function settingsRow([label, value, section, key]) {
   const isBool = typeof value === 'boolean';
   let control = '';
   if (isBool) {
@@ -61,7 +61,7 @@ function panel(title, blurb, body, columns = 1) {
 function swatchButton(ac, color) {
   const selected = ac.color === color;
   return `<button data-act="setAccountColor" data-arg="${esc(ac.id)}|${esc(color)}" data-selected="${selected}" title="${esc(color)}"
-    style="width:18px;height:18px;border-radius:5px;background:${color};cursor:pointer;padding:0;
+    style="width:18px;height:18px;border-radius:5px;background:${esc(color)};cursor:pointer;padding:0;
     border:${selected ? '2px solid var(--color-dark-text-1)' : '1px solid var(--color-dark-border)'}"></button>`;
 }
 
@@ -90,9 +90,9 @@ function folderRow(f, data, accountId) {
 function accountCard(ac, data) {
   const repoCount = data.getRepos().filter((r) => r.accountId === ac.id).length;
   return `
-  <div class="panel" style="padding:16px;border-left:4px solid ${ac.color}">
+  <div class="panel" style="padding:16px;border-left:4px solid ${esc(ac.color)}">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:11px;height:11px;border-radius:3px;background:${ac.color};flex:none"></span>
+      <span style="width:11px;height:11px;border-radius:3px;background:${esc(ac.color)};flex:none"></span>
       <span class="mono" style="font-weight:600;font-size:13.5px">${esc(ac.name)}</span>
       <span class="mono" style="font-size:11px;color:var(--color-dark-text-3)">${esc(ac.email)}</span>
       <span class="mono" style="margin-left:auto;font-size:10.5px;color:var(--color-dark-text-3)">
@@ -113,12 +113,12 @@ function accountCard(ac, data) {
     <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
       ${(ac.folders || []).map((f) => folderRow(f, data, ac.id)).join('')}
       <button class="btn-ghost" style="align-self:flex-start;margin-top:2px;border-style:dashed"
-        data-act="openScan" data-arg="${ac.id}">Añadir carpeta…</button>
+        data-act="openScan" data-arg="${esc(ac.id)}">Añadir carpeta…</button>
     </div>
   </div>`;
 }
 
-function mismatchPanel(mismatches, state) {
+export function mismatchPanel(mismatches, state) {
   if (!mismatches.length) {
     return `
     <div class="panel" style="margin-top:18px;padding:16px;border-left:4px solid var(--color-mint)">
@@ -238,7 +238,7 @@ function skillTable(group) {
       return `
       <div class="settings-row" style="cursor:pointer" data-act="inspectSkill"
            data-name="${esc(name)}" data-desc="${esc(desc)}" data-version="${esc(version)}"
-           data-load="${esc(load)}" data-tokens="${tokenEstimate || 0}"
+           data-load="${esc(load)}" data-tokens="${esc(tokenEstimate || 0)}"
            data-file="${esc(filePath || '')}" data-folder="${esc(folderPath || '')}"
            data-engine="${esc(group.engine)}"
            title="Clic para inspeccionar SKILL.md e impacto en contexto">
@@ -258,7 +258,7 @@ function skillTable(group) {
   return `
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px">
-      <span style="font:500 11px var(--font-body);color:${group.color}">${esc(group.engine)}</span>
+      <span style="font:500 11px var(--font-body);color:${esc(group.color)}">${esc(group.engine)}</span>
       <span class="mono" style="font-size:10px;color:var(--color-dark-text-3)">${esc(group.path)}</span>
       <span class="mono" style="margin-left:auto;font-size:10px;color:var(--color-dark-text-3)">
         ${group.rows.length} skills</span>
@@ -314,11 +314,11 @@ function bossesPanel(data) {
 
 /* ---- sidebar ---- */
 
-function scanSummaryCard(data, state) {
+export function scanSummaryCard(data, state) {
   const s = data.getScanSummary();
   const row = (label, value, color) => `
     <div style="display:flex;justify-content:space-between;${color ? `color:${color}` : ''}">
-      <span>${label}</span><span class="mono">${value}</span></div>`;
+      <span>${label}</span><span class="mono">${esc(value)}</span></div>`;
 
   const isScanning = Boolean(state?.rescanning);
 

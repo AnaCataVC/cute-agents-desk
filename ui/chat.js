@@ -65,6 +65,11 @@ function skillsPanel(rows, skillStates, title = 'Skills de esta sesión') {
   </div>`;
 }
 
+/**
+ * `label` is always plain text and gets escaped here; `valueHtml` is a pre-rendered fragment by
+ * contract (its callers build it themselves, e.g. via `mono()` below, which escapes its own
+ * input) — the "Html" suffix is the signal that a value is trusted, not raw display data.
+ */
 function infoBox(rows) {
   return `
   <div style="display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--color-dark-surface);
@@ -72,7 +77,7 @@ function infoBox(rows) {
        font:400 11px var(--font-body);color:var(--color-dark-text-2)">
     ${rows.map(([label, valueHtml]) => `
       <div style="display:flex;align-items:center;gap:10px">
-        <span>${label}</span><span style="margin-left:auto">${valueHtml}</span>
+        <span>${esc(label)}</span><span style="margin-left:auto">${valueHtml}</span>
       </div>`).join('')}
   </div>`;
 }

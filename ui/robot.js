@@ -10,6 +10,8 @@
  * actually working. A still robot is a stopped agent.
  */
 
+import { esc } from './esc.js';
+
 /** @typedef {'working'|'coordinator'|'idle'|'done'} RobotVariant */
 
 /**
@@ -25,10 +27,11 @@
  */
 export function robot({ x, y, scale, color, variant = 'working', opacity = 1, simple = false }) {
   const animated = variant === 'working' || variant === 'coordinator';
-  const stroke = (w) => `style="stroke:${color};fill:none" stroke-width="${w}" stroke-linecap="round"`;
-  const shell = `style="fill:var(--color-dark-bg);stroke:${color}"`;
-  const visor = `style="fill:var(--app-surface-tree);stroke:${color}"`;
-  const solid = `style="fill:${color}"`;
+  const safeColor = esc(color);
+  const stroke = (w) => `style="stroke:${safeColor};fill:none" stroke-width="${w}" stroke-linecap="round"`;
+  const shell = `style="fill:var(--color-dark-bg);stroke:${safeColor}"`;
+  const visor = `style="fill:var(--app-surface-tree);stroke:${safeColor}"`;
+  const solid = `style="fill:${safeColor}"`;
 
   const crest = variant === 'coordinator'
     // A crown instead of an antenna: the coordinator reads as the one in charge.

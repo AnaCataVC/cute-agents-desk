@@ -9,7 +9,7 @@
 
 require('./test-home.js');
 const assert = require('node:assert');
-const { Scheduler } = require('../electron/scheduler.js');
+const { Scheduler, sanitizeTaskId } = require('../electron/scheduler.js');
 
 async function testSchedulerDAG() {
   const scheduler = new Scheduler({ globalCap: 10 });
@@ -68,7 +68,10 @@ async function testSchedulerDAG() {
   const resSelf = cycleScheduler.enqueueTask({ id: 'task-X', dependsOn: ['task-X'] }, () => {});
   assert.strictEqual(resSelf.ok, false, 'Enqueueing self-cycle must be refused');
 
-  // Direct 2-node cycle: 1 -> 2 and 2 -> 1
+  // Direct 2-node cycle: 1 -> 2, then 2 re-requested depending on 1. Every dependency must already
+  // be known, so the only way to close a loop is re-enqueueing an existing id.
+  cycleScheduler.enqueueTask({ id: 'seed' }, () => {});
+  cycleScheduler.enqueueTask({ id: 'node-2', dependsOn: ['seed'] }, () => {});
   cycleScheduler.enqueueTask({ id: 'node-1', dependsOn: ['node-2'] }, () => {});
   assert.strictEqual(cycleScheduler.hasCycle('node-2', ['node-1']), true, 'Direct circular dependency must be detected');
   const resCycle2 = cycleScheduler.enqueueTask({ id: 'node-2', dependsOn: ['node-1'] }, () => {});
@@ -77,8 +80,10 @@ async function testSchedulerDAG() {
 
   // Transitive 3-node cycle: alpha -> beta -> gamma -> alpha
   const transScheduler = new Scheduler();
-  transScheduler.enqueueTask({ id: 'alpha', dependsOn: ['beta'] }, () => {});
+  transScheduler.enqueueTask({ id: 'seed' }, () => {});
+  transScheduler.enqueueTask({ id: 'gamma', dependsOn: ['seed'] }, () => {});
   transScheduler.enqueueTask({ id: 'beta', dependsOn: ['gamma'] }, () => {});
+  transScheduler.enqueueTask({ id: 'alpha', dependsOn: ['beta'] }, () => {});
   assert.strictEqual(transScheduler.hasCycle('gamma', ['alpha']), true, 'Transitive cycle must be detected');
   const resTrans = transScheduler.enqueueTask({ id: 'gamma', dependsOn: ['alpha'] }, () => {});
   assert.strictEqual(resTrans.ok, false);
@@ -155,10 +160,39 @@ async function testSchedulerDAG() {
   assert.ok(ghostChild, 'A cascade-failed task that never spawned must still appear');
   assert.strictEqual(ghostChild.state, 'failed');
   console.log('Snapshot OK: solo expone tareas que nunca llegaron a spawnearse (en cola o abortadas en cascada)');
+
+  // --- 6. Unknown dependencies are refused instead of waiting forever ---
+  const unknownScheduler = new Scheduler();
+  const resUnknown = unknownScheduler.enqueueTask({ id: 'orphan', dependsOn: ['never-queued'] }, () => {});
+  assert.strictEqual(resUnknown.ok, false);
+  assert.ok(/never-queued/.test(resUnknown.reason), 'The refusal must name the unknown dependency');
+  assert.strictEqual(unknownScheduler.taskStates.has('orphan'), false);
+
+  // --- 7. Async spawnFn: {error}, rejection and a renamed agent id all reach the right key ---
+  const asyncScheduler = new Scheduler();
+  asyncScheduler.enqueueTask({ id: 'refused' }, async () => ({ error: 'cupo lleno' }));
+  asyncScheduler.enqueueTask({ id: 'refused-child', dependsOn: ['refused'] }, () => {});
+  asyncScheduler.enqueueTask({ id: 'rejected' }, async () => { throw new Error('boom'); });
+  asyncScheduler.enqueueTask({ id: 'renamed' }, async () => 'a12345');
+  const renamedRuns = [];
+  asyncScheduler.enqueueTask({ id: 'renamed-child', dependsOn: ['renamed'] }, (req) => renamedRuns.push(req.id));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(asyncScheduler.taskStates.get('refused'), 'failed', 'A spawn refused with {error} must fail the task');
+  assert.strictEqual(asyncScheduler.taskStates.get('refused-child'), 'failed', 'and cascade to its dependents');
+  assert.strictEqual(asyncScheduler.taskStates.get('rejected'), 'failed', 'A rejected spawn must fail the task');
+  asyncScheduler.onTaskCompleted('a12345');
+  assert.strictEqual(asyncScheduler.taskStates.get('renamed'), 'done', 'The agent id must map back to its task id');
+  assert.deepStrictEqual(renamedRuns, ['renamed-child']);
+
+  assert.strictEqual(sanitizeTaskId('task A/../x'), 'taskAx');
+  assert.strictEqual(sanitizeTaskId('***'), null);
+  assert.strictEqual(sanitizeTaskId(42), null);
+  assert.strictEqual(sanitizeTaskId('x'.repeat(40)).length, 32);
+  console.log('Async spawn OK: rechazos y errores fallan la tarea, un id renombrado se mapea, dependencias desconocidas se rechazan');
 }
 
 testSchedulerDAG().then(() => {
-  console.log('\nverify-scheduler-dag OK: 5/5 checks passing');
+  console.log('\nverify-scheduler-dag OK: 7/7 checks passing');
 }).catch((err) => {
   console.error('verify-scheduler-dag FAILED:', err);
   process.exit(1);

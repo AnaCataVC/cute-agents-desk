@@ -16,6 +16,15 @@ import { LIVE } from './data.js';
 import { esc } from './esc.js';
 
 /**
+ * Sanitizes a value for use as (part of) an SVG element id or an `href="#id"` fragment
+ * reference -- these must stay in a restricted charset on both ends, so HTML-escaping (which
+ * would turn e.g. `&` into `&amp;`) is the wrong tool here.
+ */
+function safeId(id) {
+  return String(id).replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+/**
  * Node positions: evenly spaced on a circle starting at 12 o'clock.
  * With hub (232,176) and r=132 this reproduces the artboard's five positions
  * (232,44 / 357.5,135.2 / 309.6,282.8 / 154.4,282.8 / 106.5,135.2).
@@ -49,7 +58,7 @@ function graph({ flow, agents, width, height, scale, labels = true, simple = fal
     const p = pos[i];
     const color = (STATE_ROBOT[agent.state] || STATE_ROBOT.idle).color;
     // Unique per coordinator: <mpath href> resolves document-wide and several graphs share a page.
-    const id = `edge-${flow.id}-${i}`;
+    const id = `edge-${safeId(flow.id)}-${i}`;
     if (agent.state === 'blocked') {
       return `<path d="M${cx},${cy} L${p.x},${p.y}" fill="none" style="stroke:${color}"
         stroke-width="1.1" stroke-dasharray="3 5" opacity="0.5"></path>`;
@@ -66,7 +75,7 @@ function graph({ flow, agents, width, height, scale, labels = true, simple = fal
     const a = at(from);
     const b = at(to);
     if (!a || !b) return '';
-    const id = `link-${flow.id}-${i}`;
+    const id = `link-${safeId(flow.id)}-${i}`;
     const qx = (a.x + b.x + cx) / 3;
     const qy = (a.y + b.y + cy) / 3;
     const color = (STATE_ROBOT[agents.find((x) => x.id === to)?.state] || STATE_ROBOT.idle).color;
@@ -97,7 +106,7 @@ function graph({ flow, agents, width, height, scale, labels = true, simple = fal
         : '';
     // The hit area is a transparent circle, not the glyph: the robot has holes.
     const hit = `<circle cx="${p.x}" cy="${p.y}" r="26" fill="transparent" style="cursor:pointer"
-      data-act="tip" data-arg="${esc(`${flow.id}|${agent.id}`)}"></circle>`;
+      data-act="tip" data-arg="${esc(flow.id)}|${esc(agent.id)}"></circle>`;
     return robot({ x: p.x, y: p.y, scale, color: skin.color, variant: skin.variant, opacity: dim, simple })
       + label + modeBadge + verifyBadge + hit;
   }).join('');
@@ -107,7 +116,7 @@ function graph({ flow, agents, width, height, scale, labels = true, simple = fal
   const coordColor = coord ? coordSkin.color : 'var(--color-dark-accent)';
   const coordDim = coord && coord.state === 'blocked' ? 0.6 : 1;
   const coordHit = coord ? `<circle cx="${cx}" cy="${cy}" r="32" fill="transparent" style="cursor:pointer"
-    data-act="tip" data-arg="${esc(`${flow.id}|${coord.id}`)}"></circle>` : '';
+    data-act="tip" data-arg="${esc(flow.id)}|${esc(coord.id)}"></circle>` : '';
 
   const hub = `
     <circle cx="${cx}" cy="${cy}" r="${(r * 0.36).toFixed(1)}" fill="none"
@@ -191,9 +200,9 @@ function metaRow(flow) {
   const item = (label, value, color = 'var(--color-dark-text-2)') => `
     <div style="min-width:0">
       <div style="font:400 8.5px var(--font-body);color:var(--color-dark-text-3);
-           letter-spacing:.05em;text-transform:uppercase">${label}</div>
-      <div class="mono" style="font-size:10.5px;color:${color};overflow:hidden;
-           text-overflow:ellipsis;white-space:nowrap">${value}</div>
+           letter-spacing:.05em;text-transform:uppercase">${esc(label)}</div>
+      <div class="mono" style="font-size:10.5px;color:${esc(color)};overflow:hidden;
+           text-overflow:ellipsis;white-space:nowrap">${esc(value)}</div>
     </div>`;
 
   const blocked = flow.blocked || 0;
@@ -202,11 +211,11 @@ function metaRow(flow) {
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:9px;
        padding:9px 11px;background:var(--color-dark-bg);border-radius:10px;margin-bottom:10px">
     ${item('sesiones', `${roster.length} de ${flow.defined ?? 3}`)}
-    ${item('turnos', esc(flow.turns || `${roster.length} turnos`))}
+    ${item('turnos', flow.turns || `${roster.length} turnos`)}
     ${item('costo', `$${(flow.cost || 0).toFixed(2)}`)}
     ${item('ritmo', flow.rate ? `${flow.rate} tok/min` : '—')}
     ${item('bloqueados', String(blocked), blocked > 0 ? 'var(--state-blocked)' : undefined)}
-    ${item('bucles', (flow.loops || []).length ? esc(flow.loops.join(', ')) : '—')}
+    ${item('bucles', (flow.loops || []).length ? flow.loops.join(', ') : '—')}
   </div>`;
 }
 
@@ -302,7 +311,7 @@ function legend() {
 function toolbar(state, flows, total, accounts = []) {
   const compact = state.flowView === 'compact';
   const accChip = (id, label) => `<button class="chip" aria-pressed="${state.accFlow === id}"
-    data-act="accFlow" data-arg="${id}">${label}</button>`;
+    data-act="accFlow" data-arg="${esc(id)}">${esc(label)}</button>`;
 
   const accountChips = accounts.map((a) => accChip(a.id, a.name || a.id)).join('');
 

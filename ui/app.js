@@ -18,6 +18,7 @@ import { renderScheduledTasks } from './scheduled-tasks-view.js';
 import { renderConfig } from './config.js';
 import { renderDialogs } from './dialogs.js';
 import { esc } from './esc.js';
+import { isInteractingWithDropdown as isDropdownActive, shouldTickRepaint } from './render-guards.js';
 
 /** @type {Record<string, any>} */
 const state = {
@@ -286,6 +287,9 @@ const ACTIONS = {
     if (window.desk?.sendInput) {
       const res = await window.desk.sendInput({ agentId, text });
       if (res?.error) {
+        // The optimistic clear above assumed delivery; a failed send must not lose what the
+        // user typed, so it goes back into the input instead of vanishing with the request.
+        state.chatInput = text;
         state.error = res.error;
         render();
       }
@@ -869,14 +873,16 @@ const ACTIONS = {
 
     if (filePath && window.desk?.readSkill) {
       window.desk.readSkill(filePath).then((/** @type {{ error: any; content: string; }} */ res) => {
-        if (state.inspectedSkill && state.inspectedSkill.name === name) {
+        // Matched on filePath, not name: two skills across engines/folders can share a name,
+        // and a stale response for a since-closed or since-reopened inspector must not land.
+        if (state.inspectedSkill && state.inspectedSkill.filePath === filePath) {
           state.inspectedSkill.loading = false;
           if (res?.error) state.inspectedSkill.error = res.error;
           else state.inspectedSkill.content = res?.content || '';
           render();
         }
       }).catch((err) => {
-        if (state.inspectedSkill && state.inspectedSkill.name === name) {
+        if (state.inspectedSkill && state.inspectedSkill.filePath === filePath) {
           state.inspectedSkill.loading = false;
           state.inspectedSkill.error = err?.message || String(err);
           render();
@@ -1048,8 +1054,8 @@ function header() {
   const u = data.getUsage();
   const accounts = data.getAccounts().map((a) => `
     <div style="display:flex;align-items:center;gap:7px">
-      <span style="width:9px;height:9px;border-radius:2px;background:${a.color}"></span>
-      <span style="font:500 11px var(--font-body,Inter);color:var(--color-dark-text-2)">${a.name} · ${a.folders?.[0]?.path || '(sin carpetas)'}</span>
+      <span style="width:9px;height:9px;border-radius:2px;background:${esc(a.color)}"></span>
+      <span style="font:500 11px var(--font-body,Inter);color:var(--color-dark-text-2)">${esc(a.name)} · ${esc(a.folders?.[0]?.path || '(sin carpetas)')}</span>
     </div>`).join('');
 
   return `
@@ -1065,7 +1071,7 @@ function header() {
     <div class="mono" style="font-size:11px;color:var(--color-dark-text-3);min-width:0;flex:1 1 auto">
       ${s.repos} repos · ${s.accounts} cuentas · ${s.coordinators} coordinadores ·
       ${s.running} de ${s.maxParallel} sesiones · ${s.blocked} bloqueada · ${s.queued} en cola ·
-      <span style="color:var(--color-dark-text-2)">${u.today.total} tokens · ${u.cost.total}</span>
+      <span style="color:var(--color-dark-text-2)">${esc(u.today.total)} tokens · ${esc(u.cost.total)}</span>
     </div>
     <div style="display:flex;align-items:center;gap:14px;margin-left:auto;flex:none">${accounts}</div>
   </div>`;
@@ -1126,12 +1132,7 @@ function keepFocus(paint) {
  * @returns {boolean}
  */
 export function isInteractingWithDropdown() {
-  const active = /** @type {HTMLElement|null} */ (document.activeElement);
-  if (!active) return false;
-  const tag = active.tagName;
-  if (tag === 'SELECT') return true;
-  if (tag === 'INPUT' && active.hasAttribute('list')) return true;
-  return false;
+  return isDropdownActive(/** @type {HTMLElement|null} */ (document.activeElement));
 }
 
 let deferredRender = false;
@@ -1280,10 +1281,14 @@ if (window.desk?.isDesk) {
   // Unlike repos/worktrees/conversations, this reflects files Claude Desktop and Antigravity
   // write in the background -- fetch-once-on-load would go stale the moment either reschedules,
   // so it gets its own poll, cheap fs reads only, and only while the tab is actually open.
+  let scheduledTasksPollInFlight = false;
   setInterval(() => {
-    if (state.view === 'scheduled') {
-      window.desk.scheduledTasks().then((/** @type {object[]} */ tasks) => { data.setLiveScheduledTasks(tasks); render(); }).catch(() => {});
-    }
+    if (state.view !== 'scheduled' || scheduledTasksPollInFlight) return;
+    scheduledTasksPollInFlight = true;
+    window.desk.scheduledTasks()
+      .then((/** @type {object[]} */ tasks) => { data.setLiveScheduledTasks(tasks); render(); })
+      .catch(() => {})
+      .finally(() => { scheduledTasksPollInFlight = false; });
   }, 5000);
 }
 
@@ -1292,10 +1297,7 @@ setInterval(() => {
   state.tick++;
   if (state.loading) return;
   // Don't repaint the whole artboard on every second if a modal dialog is actively open
-  const modalOpen = state.queue !== null || state.editConfig !== null || state.scan !== null
-    || state.inspectedSkill !== null || state.inspectedTask !== null || state.newConvOpen;
-  if (modalOpen) return;
-  if (state.view === 'dispatch' || state.view === 'usage') render();
+  if (shouldTickRepaint(state)) render();
 }, 1000);
 
 render();
